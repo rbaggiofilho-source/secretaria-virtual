@@ -1,0 +1,23 @@
+# Dependencies
+node_modules
+
+# Env / secrets — NUNCA commitar
+.env
+.env.local
+.env.*.local
+*.pem
+google-service-account*.json
+
+# Vercel
+.vercel
+
+# Build / logs
+dist
+.output
+*.log
+
+# Editor / OS
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
