@@ -19,7 +19,7 @@ export interface OwnerContext {
 export async function loadOwnerContext(userWa: string): Promise<OwnerContext> {
   const supabase = getSupabase();
   const { data, error } = await supabase
-    .from("memories")
+    .from("secretaria_memories")
     .select("*")
     .eq("user_wa", userWa)
     .order("created_at", { ascending: false });
@@ -49,7 +49,7 @@ export async function saveMemory(
 ): Promise<MemoryRow> {
   const supabase = getSupabase();
   const { data, error } = await supabase
-    .from("memories")
+    .from("secretaria_memories")
     .insert({ user_wa: userWa, kind, content, obra: obra ?? null })
     .select("*")
     .single();
@@ -67,7 +67,7 @@ export async function getPending(
 ): Promise<MemoryRow[]> {
   const supabase = getSupabase();
   let query = supabase
-    .from("memories")
+    .from("secretaria_memories")
     .select("*")
     .eq("user_wa", userWa)
     .eq("kind", "pendencia")
@@ -91,7 +91,7 @@ export async function loadRecentHistory(
 ): Promise<Array<{ role: "user" | "assistant"; content: string }>> {
   const supabase = getSupabase();
   const { data, error } = await supabase
-    .from("conversations")
+    .from("secretaria_conversations")
     .select("role, content, created_at")
     .eq("user_wa", userWa)
     .order("created_at", { ascending: false })
@@ -114,7 +114,7 @@ export async function appendConversation(
 ): Promise<void> {
   const supabase = getSupabase();
   const { error } = await supabase
-    .from("conversations")
+    .from("secretaria_conversations")
     .insert({ user_wa: userWa, role, content });
   if (error) {
     // Não derruba o fluxo por falha de log de histórico, mas registra.
