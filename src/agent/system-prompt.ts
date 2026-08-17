@@ -1,5 +1,5 @@
-import type { OwnerContext } from "../memory/context.ts";
-import { nowInTimezone, nowIso, timezone } from "../util/datetime.ts";
+import type { OwnerContext } from "../memory/context";
+import { nowInTimezone, nowIso, timezone } from "../util/datetime";
 
 /**
  * System prompt da secretária virtual (PT-BR). Injeta o contexto do dono

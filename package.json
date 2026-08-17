@@ -3,7 +3,6 @@
   "version": "0.1.0",
   "private": true,
   "description": "Secretária virtual pessoal via WhatsApp — backend serverless (Node + TypeScript)",
-  "type": "module",
   "engines": {
     "node": ">=20"
   },

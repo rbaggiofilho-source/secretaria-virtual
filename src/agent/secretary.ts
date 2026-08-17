@@ -1,8 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { getEnv } from "../config/env.ts";
-import type { OwnerContext } from "../memory/context.ts";
-import { buildSystemPrompt } from "./system-prompt.ts";
-import { runTool, TOOLS } from "./tools.ts";
+import { getEnv } from "../config/env";
+import type { OwnerContext } from "../memory/context";
+import { buildSystemPrompt } from "./system-prompt";
+import { runTool, TOOLS } from "./tools";
 
 /**
  * Loop de tool use com o Claude (Haiku mais recente por padrão).

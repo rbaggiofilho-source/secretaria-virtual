@@ -1,6 +1,6 @@
 import { google, type calendar_v3 } from "googleapis";
-import { getEnv } from "../config/env.ts";
-import { timezone } from "../util/datetime.ts";
+import { getEnv } from "../config/env";
+import { timezone } from "../util/datetime";
 
 /**
  * Integração com o Google Calendar via Service Account.

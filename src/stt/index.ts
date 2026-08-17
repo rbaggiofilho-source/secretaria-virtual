@@ -1,6 +1,6 @@
-import { getEnv } from "../config/env.ts";
-import { transcribeWithGroq } from "./groq.ts";
-import { transcribeWithOpenAI } from "./openai.ts";
+import { getEnv } from "../config/env";
+import { transcribeWithGroq } from "./groq";
+import { transcribeWithOpenAI } from "./openai";
 
 /**
  * Interface única de transcrição. Troque de provedor pela env STT_PROVIDER
