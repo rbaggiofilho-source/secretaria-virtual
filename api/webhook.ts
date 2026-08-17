@@ -36,7 +36,17 @@ export default async function handler(
 
 /** GET /webhook — verificação inicial exigida pela Meta. */
 function handleVerification(req: VercelRequest, res: VercelResponse): void {
-  const env = getEnv();
+  let env: ReturnType<typeof getEnv>;
+  try {
+    env = getEnv();
+  } catch (err) {
+    // Erro de configuração: mostra só o nome da variável (nunca valores/segredos)
+    // para diagnóstico direto no navegador.
+    res
+      .status(500)
+      .send(`Erro de configuração: ${err instanceof Error ? err.message : String(err)}`);
+    return;
+  }
   const mode = req.query["hub.mode"];
   const token = req.query["hub.verify_token"];
   const challenge = req.query["hub.challenge"];
