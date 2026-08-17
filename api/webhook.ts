@@ -86,11 +86,40 @@ async function handlePost(request: Request): Promise<Response> {
 
   const extracted = extractFirstMessage(payload);
   if (!extracted) {
-    // Provavelmente um evento de status (entregue/lido) — só reconhece.
+    // Sem mensagem de usuário: provavelmente um evento de status (a Meta avisa
+    // se a NOSSA resposta foi sent/delivered/read/failed). Logamos para
+    // diagnosticar entrega — um "failed" aqui explica resposta que some sem
+    // erro de API. Nunca loga conteúdo, só o status e o código de erro.
+    logStatuses(payload);
     return new Response("EVENT_RECEIVED", { status: 200 });
   }
 
   // Processa a mensagem e só então confirma. maxDuration=60s cobre STT+Claude.
   await handleIncomingMessage(extracted.message);
   return new Response("EVENT_RECEIVED", { status: 200 });
+}
+
+/** Loga eventos de status de entrega (sent/delivered/read/failed) das nossas respostas. */
+function logStatuses(payload: WhatsAppWebhookPayload): void {
+  for (const entry of payload.entry ?? []) {
+    for (const change of entry.changes ?? []) {
+      const statuses = (change.value as { statuses?: Array<Record<string, unknown>> })
+        ?.statuses;
+      if (!statuses) continue;
+      for (const st of statuses) {
+        const status = st["status"];
+        const recipient = st["recipient_id"];
+        const errors = st["errors"] as Array<{ code?: unknown; title?: unknown }> | undefined;
+        if (errors && errors.length > 0) {
+          const e = errors[0]!;
+          console.warn(
+            `[whatsapp] Status "${String(status)}" para ${String(recipient)} — ` +
+              `erro ${String(e.code)}: ${String(e.title)}`,
+          );
+        } else {
+          console.log(`[whatsapp] Status "${String(status)}" para ${String(recipient)}.`);
+        }
+      }
+    }
+  }
 }

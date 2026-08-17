@@ -21,7 +21,11 @@ export async function sendTextMessage(to: string, body: string): Promise<void> {
     body: JSON.stringify({
       messaging_product: "whatsapp",
       recipient_type: "individual",
-      to: normalizeRecipient(to),
+      // Responde ao wa_id EXATAMENTE como a Meta entregou. Para celulares
+      // brasileiros o wa_id vem sem o 9 (ex.: 554888088057); a Meta resolve a
+      // conta internamente. Inserir o 9 manualmente leva a API a aceitar o
+      // envio (200) mas nao entregar — a mensagem some em silencio.
+      to,
       type: "text",
       text: { preview_url: false, body },
     }),
@@ -31,30 +35,14 @@ export async function sendTextMessage(to: string, body: string): Promise<void> {
     const detail = await safeErrorText(res);
     throw new Error(`Falha ao enviar mensagem no WhatsApp (${res.status}): ${detail}`);
   }
-}
 
-/**
- * Ajusta o "nono dígito" dos celulares brasileiros antes de enviar.
- *
- * O `wa_id` que a Meta entrega no webhook vem SEM o 9 inicial do celular
- * (ex.: 554888088057), mas a lista de destinatários permitidos do modo de
- * desenvolvimento guarda o número COM o 9 (5548988088057). A comparação é
- * literal, então responder ao wa_id cru resulta em
- * "(#131030) Recipient phone number not in allowed list".
- *
- * Regra: 55 + DDD (2) + 8 dígitos começando em 6-9 é celular antigo — insere
- * o 9. Fixos (2-5) e números já com 9 dígitos ficam intactos, assim como
- * qualquer número de outro país.
- */
-function normalizeRecipient(to: string): string {
-  const digits = to.replace(/\D/g, "");
-  if (!digits.startsWith("55") || digits.length !== 12) return digits || to;
-
-  const ddd = digits.slice(2, 4);
-  const local = digits.slice(4);
-  if (!/^[6-9]/.test(local)) return digits;
-
-  return `55${ddd}9${local}`;
+  // Confirma o envio com o id da mensagem devolvido pela Graph API. A entrega
+  // efetiva chega depois, como evento de status no webhook (ver api/webhook.ts).
+  const data = (await res.json().catch(() => null)) as
+    | { messages?: Array<{ id?: string }> }
+    | null;
+  const wamid = data?.messages?.[0]?.id;
+  console.log(`[whatsapp] Mensagem aceita pela Graph API para ${to} (id=${wamid ?? "?"}).`);
 }
 
 /**
