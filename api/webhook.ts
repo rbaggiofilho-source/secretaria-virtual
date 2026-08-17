@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { getEnv } from "../src/config/env";
-import { handleIncomingMessage } from "../src/pipeline";
-import { isValidSignature } from "../src/whatsapp/signature";
-import { extractFirstMessage, type WhatsAppWebhookPayload } from "../src/whatsapp/types";
+import { getEnv } from "../src/config/env.js";
+import { handleIncomingMessage } from "../src/pipeline.js";
+import { isValidSignature } from "../src/whatsapp/signature.js";
+import { extractFirstMessage, type WhatsAppWebhookPayload } from "../src/whatsapp/types.js";
 
 /**
  * Webhook único da WhatsApp Cloud API.

@@ -4,7 +4,7 @@
  * que a secretária sempre raciocine no fuso certo.
  */
 
-import { getEnv } from "../config/env";
+import { getEnv } from "../config/env.js";
 
 export function timezone(): string {
   return getEnv().TIMEZONE;

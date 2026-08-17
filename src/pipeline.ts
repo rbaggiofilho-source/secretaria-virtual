@@ -1,13 +1,13 @@
-import { runSecretary } from "./agent/secretary";
-import { getEnv } from "./config/env";
+import { runSecretary } from "./agent/secretary.js";
+import { getEnv } from "./config/env.js";
 import {
   appendConversation,
   loadOwnerContext,
   loadRecentHistory,
-} from "./memory/context";
-import { transcribe } from "./stt/index";
-import { downloadMedia, sendTextMessage } from "./whatsapp/client";
-import type { WhatsAppMessage } from "./whatsapp/types";
+} from "./memory/context.js";
+import { transcribe } from "./stt/index.js";
+import { downloadMedia, sendTextMessage } from "./whatsapp/client.js";
+import type { WhatsAppMessage } from "./whatsapp/types.js";
 
 /**
  * Orquestra o fluxo ponta a ponta de UMA mensagem recebida:

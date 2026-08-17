@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { getEnv } from "../config/env";
+import { getEnv } from "../config/env.js";
 
 /**
  * Cliente Supabase único (service role). Só roda no backend — a service key

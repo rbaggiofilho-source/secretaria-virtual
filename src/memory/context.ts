@@ -1,4 +1,4 @@
-import { getSupabase, type MemoryKind, type MemoryRow } from "./supabase";
+import { getSupabase, type MemoryKind, type MemoryRow } from "./supabase.js";
 
 /**
  * Camada de acesso à memória. Todas as funções são escopadas por user_wa

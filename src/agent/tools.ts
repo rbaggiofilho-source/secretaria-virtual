@@ -3,9 +3,9 @@ import {
   createCalendarEvent,
   searchCalendarEvents,
   updateCalendarEvent,
-} from "../calendar/google";
-import { getPending, saveMemory } from "../memory/context";
-import type { MemoryKind } from "../memory/supabase";
+} from "../calendar/google.js";
+import { getPending, saveMemory } from "../memory/context.js";
+import type { MemoryKind } from "../memory/supabase.js";
 
 /**
  * Definição das tools que o Claude pode chamar (function calling) e o

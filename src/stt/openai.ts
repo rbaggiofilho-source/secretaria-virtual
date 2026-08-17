@@ -1,5 +1,5 @@
-import { getEnv } from "../config/env";
-import { fileNameForMime, type TranscribeInput } from "./index";
+import { getEnv } from "../config/env.js";
+import { fileNameForMime, type TranscribeInput } from "./index.js";
 
 /**
  * Transcrição via OpenAI Whisper. Modelo padrão: whisper-1.

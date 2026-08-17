@@ -1,5 +1,5 @@
-import { getEnv } from "../config/env";
-import { fileNameForMime, type TranscribeInput } from "./index";
+import { getEnv } from "../config/env.js";
+import { fileNameForMime, type TranscribeInput } from "./index.js";
 
 /**
  * Transcrição via Groq (API compatível com o endpoint de áudio da OpenAI).

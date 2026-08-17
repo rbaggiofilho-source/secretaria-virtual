@@ -1,4 +1,4 @@
-import { getEnv } from "../config/env";
+import { getEnv } from "../config/env.js";
 
 const GRAPH_VERSION = "v21.0";
 const GRAPH_BASE = `https://graph.facebook.com/${GRAPH_VERSION}`;
