@@ -23,8 +23,13 @@ const EnvSchema = z
     ANTHROPIC_API_KEY: z.string().min(1, "ANTHROPIC_API_KEY é obrigatório"),
     ANTHROPIC_MODEL: z.string().default("claude-haiku-4-5"),
 
-    // STT
-    STT_PROVIDER: z.enum(["groq", "openai"]).default("groq"),
+    // STT (tolerante a maiúsculas/minúsculas, ex.: "Groq" -> "groq")
+    STT_PROVIDER: z
+      .preprocess(
+        (v) => (typeof v === "string" ? v.toLowerCase() : v),
+        z.enum(["groq", "openai"]),
+      )
+      .default("groq"),
     GROQ_API_KEY: z.string().optional(),
     OPENAI_API_KEY: z.string().optional(),
     GROQ_STT_MODEL: z.string().default("whisper-large-v3"),
@@ -68,7 +73,14 @@ let cached: Env | null = null;
 export function getEnv(): Env {
   if (cached) return cached;
 
-  const parsed = EnvSchema.safeParse(process.env);
+  // Normaliza os valores: remove espaços/quebras de linha acidentais nas pontas
+  // (evita que um espaço colado por engano invalide enum ou quebre um token).
+  const normalized: Record<string, string> = {};
+  for (const [key, value] of Object.entries(process.env)) {
+    if (typeof value === "string") normalized[key] = value.trim();
+  }
+
+  const parsed = EnvSchema.safeParse(normalized);
   if (!parsed.success) {
     // Lista só os NOMES das variáveis com problema — nunca os valores.
     const problems = parsed.error.issues
