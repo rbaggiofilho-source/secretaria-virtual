@@ -1,4 +1,5 @@
 import { getEnv } from "../src/config/env.js";
+import { claimMessageOnce } from "../src/memory/context.js";
 import { handleIncomingMessage } from "../src/pipeline.js";
 import { isValidSignature } from "../src/whatsapp/signature.js";
 import { extractFirstMessage, type WhatsAppWebhookPayload } from "../src/whatsapp/types.js";
@@ -91,6 +92,15 @@ async function handlePost(request: Request): Promise<Response> {
     // diagnosticar entrega — um "failed" aqui explica resposta que some sem
     // erro de API. Nunca loga conteúdo, só o status e o código de erro.
     logStatuses(payload);
+    return new Response("EVENT_RECEIVED", { status: 200 });
+  }
+
+  // Dedup: a Meta reenvia o mesmo evento se não recebe o 200 a tempo. Só o
+  // primeiro a "reivindicar" o id processa; reentregas são reconhecidas e
+  // ignoradas, evitando eventos duplicados no calendário.
+  const isFirst = await claimMessageOnce(extracted.message.id);
+  if (!isFirst) {
+    console.log(`[webhook] Mensagem ${extracted.message.id} já processada — reentrega ignorada.`);
     return new Response("EVENT_RECEIVED", { status: 200 });
   }
 

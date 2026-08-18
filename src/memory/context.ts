@@ -106,6 +106,31 @@ export async function loadRecentHistory(
   return rows.reverse().map((r) => ({ role: r.role, content: r.content }));
 }
 
+/**
+ * Marca uma mensagem do WhatsApp como processada, de forma atômica.
+ *
+ * A Meta reenvia o mesmo evento (mesmo `wa_message_id`) quando não recebe o
+ * 200 a tempo. Inserimos o id numa tabela com PRIMARY KEY: se a inserção
+ * vencer, somos o primeiro a tratar essa mensagem (retorna true); se colidir
+ * (código 23505 = unique_violation), é uma reentrega e deve ser ignorada
+ * (retorna false). Isso impede que uma retentativa crie um evento duplicado.
+ *
+ * Em erro inesperado do banco, retornamos true (fail-open): melhor arriscar um
+ * raro duplicado do que engolir uma mensagem legítima do dono.
+ */
+export async function claimMessageOnce(messageId: string): Promise<boolean> {
+  const supabase = getSupabase();
+  const { error } = await supabase
+    .from("secretaria_processed_messages")
+    .insert({ wa_message_id: messageId });
+
+  if (!error) return true;
+  if (error.code === "23505") return false; // já processada (reentrega)
+
+  console.error(`Falha ao registrar dedup da mensagem ${messageId}: ${error.message}`);
+  return true; // fail-open
+}
+
 /** Registra uma mensagem no histórico de conversa. */
 export async function appendConversation(
   userWa: string,

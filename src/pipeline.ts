@@ -60,6 +60,7 @@ export async function handleIncomingMessage(message: WhatsAppMessage): Promise<v
       userText,
       history,
       context,
+      wasAudio: message.type === "audio",
     });
 
     // Persiste histórico (não crítico) e responde (crítico).
@@ -83,8 +84,15 @@ async function resolveUserText(message: WhatsAppMessage): Promise<string> {
 
   if (message.type === "audio") {
     const audioId = (message as { audio: { id: string } }).audio.id;
+    console.log(`[audio] Baixando mídia ${audioId}...`);
     const { buffer, mimeType } = await downloadMedia(audioId);
-    return transcribe({ buffer, mimeType });
+    console.log(
+      `[audio] Mídia baixada: ${buffer.length} bytes (${mimeType}). Transcrevendo...`,
+    );
+    const text = await transcribe({ buffer, mimeType });
+    // Nunca logamos o conteúdo transcrito (é dado do dono) — só o tamanho.
+    console.log(`[audio] Transcrição concluída (${text.length} caracteres).`);
+    return text;
   }
 
   // Tipos não suportados (imagem, documento, etc.)

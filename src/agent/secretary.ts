@@ -23,10 +23,21 @@ export async function runSecretary(params: {
   userText: string;
   history: Array<{ role: "user" | "assistant"; content: string }>;
   context: OwnerContext;
+  /** A mensagem atual veio de um áudio (foi transcrita antes de chegar aqui). */
+  wasAudio?: boolean;
 }): Promise<string> {
   const env = getEnv();
   const client = getClient();
-  const system = buildSystemPrompt(params.context);
+  // Quando a entrada veio de áudio, pedimos que a resposta comece confirmando
+  // o que foi entendido — o dono quer conferir a transcrição do que falou.
+  const audioHint = params.wasAudio
+    ? "\n\nA mensagem atual do usuário foi TRANSCRITA de um áudio enviado por " +
+      "ele. Comece sua resposta confirmando de forma breve e natural o que você " +
+      "entendeu do áudio (ex.: 'Entendi do seu áudio: \"...\"') e só então " +
+      "prossiga com a ação. Se a transcrição parecer confusa ou incompleta, " +
+      "diga isso e peça para ele repetir."
+    : "";
+  const system = buildSystemPrompt(params.context) + audioHint;
 
   const messages: Anthropic.MessageParam[] = [
     ...params.history.map((m) => ({ role: m.role, content: m.content })),
