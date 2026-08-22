@@ -232,3 +232,84 @@ export async function relatorioCustos(
   }
   return { total, porCategoria, itens };
 }
+
+/** Um item do efetivo (mão de obra presente no dia). */
+export interface EfetivoItem {
+  funcao: string;
+  qtd: number;
+}
+
+export interface RdoRow {
+  id: number;
+  user_wa: string;
+  obra: string;
+  data: string;
+  clima: string | null;
+  efetivo: EfetivoItem[];
+  atividades: string | null;
+  ocorrencias: string | null;
+  materiais: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Registra (ou atualiza) o RDO de uma obra num dia. Upsert por
+ * (user_wa, obra, data): reenviar o mesmo dia SUBSTITUI o registro, então o
+ * agente deve mandar o conteúdo completo do dia a cada chamada.
+ */
+export async function registrarRDO(
+  userWa: string,
+  params: {
+    obra: string;
+    data?: string | null;
+    clima?: string | null;
+    efetivo?: EfetivoItem[] | null;
+    atividades?: string | null;
+    ocorrencias?: string | null;
+    materiais?: string | null;
+  },
+): Promise<RdoRow> {
+  const supabase = getSupabase();
+  const row: Record<string, unknown> = {
+    user_wa: userWa,
+    obra: params.obra,
+    clima: params.clima ?? null,
+    efetivo: params.efetivo ?? [],
+    atividades: params.atividades ?? null,
+    ocorrencias: params.ocorrencias ?? null,
+    materiais: params.materiais ?? null,
+    updated_at: new Date().toISOString(),
+  };
+  if (params.data) row.data = params.data;
+
+  const { data, error } = await supabase
+    .from("secretaria_rdo")
+    .upsert(row, { onConflict: "user_wa,obra,data" })
+    .select("*")
+    .single();
+
+  if (error) throw new Error(`Falha ao registrar RDO: ${error.message}`);
+  return data as RdoRow;
+}
+
+/** Consulta RDOs por obra e/ou intervalo (YYYY-MM-DD), mais recentes primeiro. */
+export async function consultarRDO(
+  userWa: string,
+  filtros: { obra?: string | null; desde?: string | null; ate?: string | null } = {},
+): Promise<RdoRow[]> {
+  const supabase = getSupabase();
+  let query = supabase
+    .from("secretaria_rdo")
+    .select("*")
+    .eq("user_wa", userWa)
+    .order("data", { ascending: false });
+
+  if (filtros.obra) query = query.ilike("obra", `%${filtros.obra}%`);
+  if (filtros.desde) query = query.gte("data", filtros.desde);
+  if (filtros.ate) query = query.lte("data", filtros.ate);
+
+  const { data, error } = await query;
+  if (error) throw new Error(`Falha ao consultar RDO: ${error.message}`);
+  return (data ?? []) as RdoRow[];
+}

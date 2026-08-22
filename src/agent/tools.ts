@@ -5,11 +5,14 @@ import {
   updateCalendarEvent,
 } from "../calendar/google.js";
 import {
+  consultarRDO,
   getPending,
   registrarCusto,
+  registrarRDO,
   relatorioCustos,
   saveMemory,
   type CategoriaCusto,
+  type EfetivoItem,
 } from "../memory/context.js";
 import type { MemoryKind } from "../memory/supabase.js";
 
@@ -133,6 +136,52 @@ export const TOOLS: Anthropic.Tool[] = [
     name: "relatorio_custos",
     description:
       "Gera o total de custos e a divisão por categoria, opcionalmente por obra e intervalo de datas. Use quando o Ricardo perguntar quanto gastou (ex.: 'quanto já gastei na CCC esse mês?'). Datas em YYYY-MM-DD.",
+    input_schema: {
+      type: "object",
+      properties: {
+        obra: { type: "string", description: "Filtrar por obra (opcional)" },
+        desde: { type: "string", description: "Data inicial YYYY-MM-DD (opcional)" },
+        ate: { type: "string", description: "Data final YYYY-MM-DD (opcional)" },
+      },
+      required: [],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "registrar_rdo",
+    description:
+      "Registra o Relatório Diário de Obra (RDO) de uma obra num dia, a partir do relato do Ricardo (geralmente um áudio no fim do dia). Extraia clima, efetivo (mão de obra por função), atividades executadas, ocorrências e materiais recebidos. Envie SEMPRE o conteúdo completo do dia — reenviar substitui o RDO daquele dia. data em YYYY-MM-DD só se ele mencionar outro dia que não hoje. Se a obra não estiver clara, pergunte antes.",
+    input_schema: {
+      type: "object",
+      properties: {
+        obra: { type: "string", description: "Obra do relatório (use o apelido se houver)" },
+        data: { type: "string", description: "Data do RDO em YYYY-MM-DD (opcional, padrão hoje)" },
+        clima: { type: "string", description: "Condições do tempo (opcional)" },
+        efetivo: {
+          type: "array",
+          description: "Mão de obra presente por função",
+          items: {
+            type: "object",
+            properties: {
+              funcao: { type: "string", description: "Ex.: pedreiro, servente, carpinteiro" },
+              qtd: { type: "integer", description: "Quantidade de pessoas nessa função" },
+            },
+            required: ["funcao", "qtd"],
+            additionalProperties: false,
+          },
+        },
+        atividades: { type: "string", description: "Atividades/serviços executados no dia" },
+        ocorrencias: { type: "string", description: "Ocorrências, atrasos, problemas (opcional)" },
+        materiais: { type: "string", description: "Materiais recebidos/entregas (opcional)" },
+      },
+      required: ["obra"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "consultar_rdo",
+    description:
+      "Consulta os RDOs registrados, por obra e/ou intervalo de datas. Use quando o Ricardo pedir o diário de uma obra ou um resumo do período. Datas em YYYY-MM-DD.",
     input_schema: {
       type: "object",
       properties: {
@@ -271,6 +320,58 @@ export async function runTool(
           ate: input.ate ? String(input.ate) : null,
         });
         return { isError: false, text: JSON.stringify({ ok: true, ...rel }) };
+      }
+
+      case "registrar_rdo": {
+        const efetivo = Array.isArray(input.efetivo)
+          ? (input.efetivo as unknown[]).map((e) => {
+              const o = (e ?? {}) as Record<string, unknown>;
+              return { funcao: String(o.funcao ?? ""), qtd: Number(o.qtd ?? 0) } as EfetivoItem;
+            })
+          : undefined;
+        const row = await registrarRDO(userWa, {
+          obra: String(input.obra),
+          data: input.data ? String(input.data) : null,
+          clima: input.clima ? String(input.clima) : null,
+          efetivo,
+          atividades: input.atividades ? String(input.atividades) : null,
+          ocorrencias: input.ocorrencias ? String(input.ocorrencias) : null,
+          materiais: input.materiais ? String(input.materiais) : null,
+        });
+        const totalEfetivo = row.efetivo.reduce((s, e) => s + (Number(e.qtd) || 0), 0);
+        return {
+          isError: false,
+          text: JSON.stringify({
+            ok: true,
+            id: row.id,
+            obra: row.obra,
+            data: row.data,
+            efetivo_total: totalEfetivo,
+          }),
+        };
+      }
+
+      case "consultar_rdo": {
+        const rows = await consultarRDO(userWa, {
+          obra: input.obra ? String(input.obra) : null,
+          desde: input.desde ? String(input.desde) : null,
+          ate: input.ate ? String(input.ate) : null,
+        });
+        return {
+          isError: false,
+          text: JSON.stringify({
+            ok: true,
+            rdos: rows.map((r) => ({
+              data: r.data,
+              obra: r.obra,
+              clima: r.clima,
+              efetivo: r.efetivo,
+              atividades: r.atividades,
+              ocorrencias: r.ocorrencias,
+              materiais: r.materiais,
+            })),
+          }),
+        };
       }
 
       default:
