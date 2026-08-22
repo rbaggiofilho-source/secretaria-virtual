@@ -20,6 +20,14 @@ export interface WhatsAppAudioMessage {
   audio: { id: string; mime_type?: string; voice?: boolean };
 }
 
+export interface WhatsAppImageMessage {
+  from: string;
+  id: string;
+  timestamp: string;
+  type: "image";
+  image: { id: string; mime_type?: string; caption?: string; sha256?: string };
+}
+
 export interface WhatsAppOtherMessage {
   from: string;
   id: string;
@@ -31,6 +39,7 @@ export interface WhatsAppOtherMessage {
 export type WhatsAppMessage =
   | WhatsAppTextMessage
   | WhatsAppAudioMessage
+  | WhatsAppImageMessage
   | WhatsAppOtherMessage;
 
 export interface WhatsAppWebhookPayload {

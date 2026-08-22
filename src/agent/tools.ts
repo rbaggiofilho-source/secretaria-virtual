@@ -5,14 +5,17 @@ import {
   updateCalendarEvent,
 } from "../calendar/google.js";
 import {
+  consultarFotos,
   consultarRDO,
   getPending,
   registrarCusto,
+  registrarFoto,
   registrarRDO,
   relatorioCustos,
   saveMemory,
   type CategoriaCusto,
   type EfetivoItem,
+  type TipoFoto,
 } from "../memory/context.js";
 import type { MemoryKind } from "../memory/supabase.js";
 
@@ -186,6 +189,46 @@ export const TOOLS: Anthropic.Tool[] = [
       type: "object",
       properties: {
         obra: { type: "string", description: "Filtrar por obra (opcional)" },
+        desde: { type: "string", description: "Data inicial YYYY-MM-DD (opcional)" },
+        ate: { type: "string", description: "Data final YYYY-MM-DD (opcional)" },
+      },
+      required: [],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "registrar_foto",
+    description:
+      "Registra uma imagem que o Ricardo enviou (foto da obra ou nota fiscal). Você VÊ a imagem: gere uma descrição objetiva do que aparece. tipo: 'foto_obra' (andamento, serviço, problema) ou 'nota_fiscal'. Associe à obra (pergunte se não estiver claro). Se for NOTA FISCAL de um gasto de obra, ALÉM disso chame registrar_custo com o valor e itens lidos. data em YYYY-MM-DD só se diferente de hoje.",
+    input_schema: {
+      type: "object",
+      properties: {
+        obra: { type: "string", description: "Obra associada (use o apelido se houver)" },
+        tipo: {
+          type: "string",
+          enum: ["foto_obra", "nota_fiscal", "outro"],
+          description: "Tipo da imagem",
+        },
+        descricao: { type: "string", description: "Descrição objetiva do que aparece na imagem" },
+        data: { type: "string", description: "Data em YYYY-MM-DD (opcional)" },
+      },
+      required: ["descricao"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "consultar_fotos",
+    description:
+      "Lista o registro fotográfico (descrições), por obra, tipo e/ou intervalo de datas. Use quando o Ricardo perguntar o que foi fotografado/registrado numa obra. Datas em YYYY-MM-DD.",
+    input_schema: {
+      type: "object",
+      properties: {
+        obra: { type: "string", description: "Filtrar por obra (opcional)" },
+        tipo: {
+          type: "string",
+          enum: ["foto_obra", "nota_fiscal", "outro"],
+          description: "Filtrar por tipo (opcional)",
+        },
         desde: { type: "string", description: "Data inicial YYYY-MM-DD (opcional)" },
         ate: { type: "string", description: "Data final YYYY-MM-DD (opcional)" },
       },
@@ -369,6 +412,46 @@ export async function runTool(
               atividades: r.atividades,
               ocorrencias: r.ocorrencias,
               materiais: r.materiais,
+            })),
+          }),
+        };
+      }
+
+      case "registrar_foto": {
+        const row = await registrarFoto(userWa, {
+          obra: input.obra ? String(input.obra) : null,
+          tipo: input.tipo ? (String(input.tipo) as TipoFoto) : undefined,
+          descricao: input.descricao ? String(input.descricao) : null,
+          data: input.data ? String(input.data) : null,
+        });
+        return {
+          isError: false,
+          text: JSON.stringify({
+            ok: true,
+            id: row.id,
+            obra: row.obra,
+            tipo: row.tipo,
+            data: row.data,
+          }),
+        };
+      }
+
+      case "consultar_fotos": {
+        const rows = await consultarFotos(userWa, {
+          obra: input.obra ? String(input.obra) : null,
+          tipo: input.tipo ? (String(input.tipo) as TipoFoto) : null,
+          desde: input.desde ? String(input.desde) : null,
+          ate: input.ate ? String(input.ate) : null,
+        });
+        return {
+          isError: false,
+          text: JSON.stringify({
+            ok: true,
+            fotos: rows.map((r) => ({
+              data: r.data,
+              obra: r.obra,
+              tipo: r.tipo,
+              descricao: r.descricao,
             })),
           }),
         };

@@ -23,6 +23,8 @@ export async function runSecretary(params: {
   userText: string;
   history: Array<{ role: "user" | "assistant"; content: string }>;
   context: OwnerContext;
+  /** Imagens enviadas com a mensagem atual (foto de obra, nota fiscal, etc.). */
+  images?: Array<{ base64: string; mimeType: string }>;
   /** A mensagem atual veio de um áudio (foi transcrita antes de chegar aqui). */
   wasAudio?: boolean;
 }): Promise<string> {
@@ -39,9 +41,31 @@ export async function runSecretary(params: {
     : "";
   const system = buildSystemPrompt(params.context) + audioHint;
 
+  // Monta o conteúdo da mensagem atual. Com imagem, usa blocos (visão);
+  // sem imagem, mantém a string simples de sempre.
+  const imgs = params.images ?? [];
+  let currentContent: Anthropic.MessageParam["content"];
+  if (imgs.length > 0) {
+    const blocks: Anthropic.ContentBlockParam[] = imgs.map((img) => ({
+      type: "image",
+      source: {
+        type: "base64",
+        media_type: img.mimeType as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
+        data: img.base64,
+      },
+    }));
+    blocks.push({
+      type: "text",
+      text: params.userText?.trim() ? params.userText : "(imagem enviada sem legenda)",
+    });
+    currentContent = blocks;
+  } else {
+    currentContent = params.userText;
+  }
+
   const messages: Anthropic.MessageParam[] = [
     ...params.history.map((m) => ({ role: m.role, content: m.content })),
-    { role: "user", content: params.userText },
+    { role: "user", content: currentContent },
   ];
 
   for (let turn = 0; turn < MAX_TURNS; turn++) {

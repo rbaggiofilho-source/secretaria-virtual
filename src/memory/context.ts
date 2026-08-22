@@ -313,3 +313,74 @@ export async function consultarRDO(
   if (error) throw new Error(`Falha ao consultar RDO: ${error.message}`);
   return (data ?? []) as RdoRow[];
 }
+
+export type TipoFoto = "foto_obra" | "nota_fiscal" | "outro";
+
+export interface FotoRow {
+  id: number;
+  user_wa: string;
+  obra: string | null;
+  data: string;
+  tipo: TipoFoto;
+  descricao: string | null;
+  caminho: string | null;
+  created_at: string;
+}
+
+/** Registra uma foto/imagem (descrição gerada pela IA + metadados). */
+export async function registrarFoto(
+  userWa: string,
+  params: {
+    obra?: string | null;
+    tipo?: TipoFoto;
+    descricao?: string | null;
+    data?: string | null;
+    caminho?: string | null;
+  },
+): Promise<FotoRow> {
+  const supabase = getSupabase();
+  const row: Record<string, unknown> = {
+    user_wa: userWa,
+    obra: params.obra ?? null,
+    tipo: params.tipo ?? "foto_obra",
+    descricao: params.descricao ?? null,
+    caminho: params.caminho ?? null,
+  };
+  if (params.data) row.data = params.data;
+
+  const { data, error } = await supabase
+    .from("secretaria_fotos")
+    .insert(row)
+    .select("*")
+    .single();
+
+  if (error) throw new Error(`Falha ao registrar foto: ${error.message}`);
+  return data as FotoRow;
+}
+
+/** Consulta o registro fotográfico por obra, tipo e/ou intervalo (YYYY-MM-DD). */
+export async function consultarFotos(
+  userWa: string,
+  filtros: {
+    obra?: string | null;
+    tipo?: TipoFoto | null;
+    desde?: string | null;
+    ate?: string | null;
+  } = {},
+): Promise<FotoRow[]> {
+  const supabase = getSupabase();
+  let query = supabase
+    .from("secretaria_fotos")
+    .select("*")
+    .eq("user_wa", userWa)
+    .order("data", { ascending: false });
+
+  if (filtros.obra) query = query.ilike("obra", `%${filtros.obra}%`);
+  if (filtros.tipo) query = query.eq("tipo", filtros.tipo);
+  if (filtros.desde) query = query.gte("data", filtros.desde);
+  if (filtros.ate) query = query.lte("data", filtros.ate);
+
+  const { data, error } = await query;
+  if (error) throw new Error(`Falha ao consultar fotos: ${error.message}`);
+  return (data ?? []) as FotoRow[];
+}

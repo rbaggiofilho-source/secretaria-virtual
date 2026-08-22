@@ -32,19 +32,31 @@ export async function handleIncomingMessage(message: WhatsAppMessage): Promise<v
   }
 
   let userText: string;
+  let images: Array<{ base64: string; mimeType: string }> = [];
 
   try {
-    userText = await resolveUserText(message);
+    if (message.type === "image") {
+      // Imagem (foto de obra / nota fiscal): baixa os bytes e manda para o
+      // Claude com visão. A legenda da foto vira o texto do usuário.
+      const img = (message as { image: { id: string; caption?: string } }).image;
+      console.log(`[image] Baixando imagem ${img.id}...`);
+      const { buffer, mimeType } = await downloadMedia(img.id);
+      console.log(`[image] Imagem baixada: ${buffer.length} bytes (${mimeType}).`);
+      images = [{ base64: buffer.toString("base64"), mimeType }];
+      userText = img.caption ?? "";
+    } else {
+      userText = await resolveUserText(message);
+    }
   } catch (err) {
-    logError("resolver texto (STT/tipo)", err);
+    logError("resolver entrada (STT/imagem/tipo)", err);
     await safeReply(
       from,
-      "Não consegui entender sua mensagem (falha ao processar o áudio). Pode mandar de novo, por favor?",
+      "Não consegui entender sua mensagem (falha ao processar o áudio/imagem). Pode mandar de novo, por favor?",
     );
     return;
   }
 
-  if (!userText.trim()) {
+  if (!userText.trim() && images.length === 0) {
     await safeReply(from, "Recebi sua mensagem, mas veio vazia. Pode repetir?");
     return;
   }
@@ -58,13 +70,19 @@ export async function handleIncomingMessage(message: WhatsAppMessage): Promise<v
     const reply = await runSecretary({
       userWa: from,
       userText,
+      images,
       history,
       context,
       wasAudio: message.type === "audio",
     });
 
-    // Persiste histórico (não crítico) e responde (crítico).
-    await appendConversation(from, "user", userText);
+    // Persiste histórico (não crítico) e responde (crítico). Para imagem sem
+    // legenda, registra um marcador legível no histórico.
+    await appendConversation(
+      from,
+      "user",
+      userText.trim() || (images.length ? "[imagem enviada]" : userText),
+    );
     await appendConversation(from, "assistant", reply);
     await sendTextMessage(from, reply);
   } catch (err) {
