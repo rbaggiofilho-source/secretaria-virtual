@@ -30,14 +30,12 @@ export async function runSecretary(params: {
 }): Promise<string> {
   const env = getEnv();
   const client = getClient();
-  // Quando a entrada veio de áudio, pedimos que a resposta comece confirmando
-  // o que foi entendido — o dono quer conferir a transcrição do que falou.
+  // Quando a entrada veio de áudio, sinaliza para o modelo aplicar a seção
+  // "Áudio e transcrição" do system prompt (modo comando vs. modo transcrição).
   const audioHint = params.wasAudio
-    ? "\n\nA mensagem atual do usuário foi TRANSCRITA de um áudio enviado por " +
-      "ele. Comece sua resposta confirmando de forma breve e natural o que você " +
-      "entendeu do áudio (ex.: 'Entendi do seu áudio: \"...\"') e só então " +
-      "prossiga com a ação. Se a transcrição parecer confusa ou incompleta, " +
-      "diga isso e peça para ele repetir."
+    ? "\n\nA mensagem atual do usuário foi TRANSCRITA de um áudio. Aplique a " +
+      'seção "Áudio e transcrição" para decidir entre AGIR sobre o pedido ou ' +
+      "apenas devolver a transcrição."
     : "";
   const system = buildSystemPrompt(params.context) + audioHint;
 
