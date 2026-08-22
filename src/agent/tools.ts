@@ -4,6 +4,8 @@ import {
   searchCalendarEvents,
   updateCalendarEvent,
 } from "../calendar/google.js";
+import { buildRdoPdf } from "../pdf/rdo.js";
+import { sendDocumentMessage, uploadMedia } from "../whatsapp/client.js";
 import {
   consultarFotos,
   consultarRDO,
@@ -236,6 +238,21 @@ export const TOOLS: Anthropic.Tool[] = [
       additionalProperties: false,
     },
   },
+  {
+    name: "gerar_rdo_pdf",
+    description:
+      "Gera o PDF do Diário de Obra (RDO) de uma obra e ENVIA como documento no WhatsApp do Ricardo. Use quando ele pedir o PDF/relatório do diário (ex.: 'me manda o PDF do diário da CCC desse mês'). Informe obra e, se ele delimitar, o período (desde/ate em YYYY-MM-DD). Depois de chamar, confirme por texto que o PDF foi enviado.",
+    input_schema: {
+      type: "object",
+      properties: {
+        obra: { type: "string", description: "Obra do relatório (use o apelido se houver)" },
+        desde: { type: "string", description: "Data inicial YYYY-MM-DD (opcional)" },
+        ate: { type: "string", description: "Data final YYYY-MM-DD (opcional)" },
+      },
+      required: ["obra"],
+      additionalProperties: false,
+    },
+  },
 ];
 
 /**
@@ -454,6 +471,33 @@ export async function runTool(
               descricao: r.descricao,
             })),
           }),
+        };
+      }
+
+      case "gerar_rdo_pdf": {
+        const obra = String(input.obra);
+        const desde = input.desde ? String(input.desde) : null;
+        const ate = input.ate ? String(input.ate) : null;
+        const rdos = await consultarRDO(userWa, { obra, desde, ate });
+        if (rdos.length === 0) {
+          return {
+            isError: false,
+            text: JSON.stringify({
+              ok: false,
+              error: "Nenhum RDO encontrado para essa obra/período.",
+            }),
+          };
+        }
+        const periodoLabel =
+          desde || ate ? `${desde ?? "início"} a ${ate ?? "hoje"}` : undefined;
+        const bytes = await buildRdoPdf({ obra, rdos, periodoLabel });
+        const slug = obra.normalize("NFD").replace(/[^A-Za-z0-9]+/g, "_").slice(0, 40);
+        const filename = `RDO_${slug || "obra"}.pdf`;
+        const mediaId = await uploadMedia(bytes, "application/pdf", filename);
+        await sendDocumentMessage(userWa, mediaId, filename, `RDO — ${obra}`);
+        return {
+          isError: false,
+          text: JSON.stringify({ ok: true, enviado: true, dias: rdos.length }),
         };
       }
 
