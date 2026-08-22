@@ -146,3 +146,89 @@ export async function appendConversation(
     console.error("Falha ao gravar histórico de conversa:", error.message);
   }
 }
+
+/** Categorias de custo aceitas (espelham o CHECK da tabela secretaria_custos). */
+export type CategoriaCusto =
+  | "material"
+  | "mao_de_obra"
+  | "equipamento"
+  | "servico"
+  | "outro";
+
+export interface CustoRow {
+  id: number;
+  user_wa: string;
+  obra: string | null;
+  categoria: CategoriaCusto;
+  valor: number;
+  descricao: string | null;
+  data: string;
+  created_at: string;
+}
+
+/** Lança um custo numa obra (centro de custo). */
+export async function registrarCusto(
+  userWa: string,
+  params: {
+    valor: number;
+    obra?: string | null;
+    categoria?: CategoriaCusto;
+    descricao?: string | null;
+    data?: string | null;
+  },
+): Promise<CustoRow> {
+  const supabase = getSupabase();
+  const row: Record<string, unknown> = {
+    user_wa: userWa,
+    valor: params.valor,
+    obra: params.obra ?? null,
+    categoria: params.categoria ?? "outro",
+    descricao: params.descricao ?? null,
+  };
+  if (params.data) row.data = params.data; // senão usa o default (hoje, fuso BR)
+
+  const { data, error } = await supabase
+    .from("secretaria_custos")
+    .insert(row)
+    .select("*")
+    .single();
+
+  if (error) throw new Error(`Falha ao registrar custo: ${error.message}`);
+  return data as CustoRow;
+}
+
+export interface RelatorioCustos {
+  total: number;
+  porCategoria: Record<string, number>;
+  itens: Array<Pick<CustoRow, "id" | "obra" | "categoria" | "valor" | "descricao" | "data">>;
+}
+
+/** Relatório de custos, opcionalmente por obra e intervalo de datas (YYYY-MM-DD). */
+export async function relatorioCustos(
+  userWa: string,
+  filtros: { obra?: string | null; desde?: string | null; ate?: string | null } = {},
+): Promise<RelatorioCustos> {
+  const supabase = getSupabase();
+  let query = supabase
+    .from("secretaria_custos")
+    .select("id, obra, categoria, valor, descricao, data")
+    .eq("user_wa", userWa)
+    .order("data", { ascending: false });
+
+  if (filtros.obra) query = query.ilike("obra", `%${filtros.obra}%`);
+  if (filtros.desde) query = query.gte("data", filtros.desde);
+  if (filtros.ate) query = query.lte("data", filtros.ate);
+
+  const { data, error } = await query;
+  if (error) throw new Error(`Falha ao gerar relatório de custos: ${error.message}`);
+
+  const itens = (data ?? []) as RelatorioCustos["itens"];
+  let total = 0;
+  const porCategoria: Record<string, number> = {};
+  for (const it of itens) {
+    const v = Number(it.valor) || 0;
+    total += v;
+    porCategoria[it.categoria] = (porCategoria[it.categoria] ?? 0) + v;
+  }
+  return { total, porCategoria, itens };
+}

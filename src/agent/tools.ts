@@ -4,7 +4,13 @@ import {
   searchCalendarEvents,
   updateCalendarEvent,
 } from "../calendar/google.js";
-import { getPending, saveMemory } from "../memory/context.js";
+import {
+  getPending,
+  registrarCusto,
+  relatorioCustos,
+  saveMemory,
+  type CategoriaCusto,
+} from "../memory/context.js";
 import type { MemoryKind } from "../memory/supabase.js";
 
 /**
@@ -97,6 +103,42 @@ export const TOOLS: Anthropic.Tool[] = [
       type: "object",
       properties: {
         obra: { type: "string", description: "Filtrar por obra/local (opcional)" },
+      },
+      required: [],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "registrar_custo",
+    description:
+      "Lança um custo/gasto numa OBRA (centro de custo). Use quando o Ricardo disser que pagou/gastou algo numa obra (ex.: 'paguei 3000 de pedreiro na CCC'). Valor em reais (número). categoria: material, mao_de_obra, equipamento, servico ou outro. data em YYYY-MM-DD só se ele mencionar um dia diferente de hoje.",
+    input_schema: {
+      type: "object",
+      properties: {
+        valor: { type: "number", description: "Valor em reais (ex.: 3000.50)" },
+        obra: { type: "string", description: "Obra/centro de custo (use o apelido se houver)" },
+        categoria: {
+          type: "string",
+          enum: ["material", "mao_de_obra", "equipamento", "servico", "outro"],
+          description: "Categoria do gasto",
+        },
+        descricao: { type: "string", description: "Descrição curta (opcional)" },
+        data: { type: "string", description: "Data do gasto em YYYY-MM-DD (opcional)" },
+      },
+      required: ["valor"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "relatorio_custos",
+    description:
+      "Gera o total de custos e a divisão por categoria, opcionalmente por obra e intervalo de datas. Use quando o Ricardo perguntar quanto gastou (ex.: 'quanto já gastei na CCC esse mês?'). Datas em YYYY-MM-DD.",
+    input_schema: {
+      type: "object",
+      properties: {
+        obra: { type: "string", description: "Filtrar por obra (opcional)" },
+        desde: { type: "string", description: "Data inicial YYYY-MM-DD (opcional)" },
+        ate: { type: "string", description: "Data final YYYY-MM-DD (opcional)" },
       },
       required: [],
       additionalProperties: false,
@@ -197,6 +239,38 @@ export async function runTool(
             })),
           }),
         };
+      }
+
+      case "registrar_custo": {
+        const row = await registrarCusto(userWa, {
+          valor: Number(input.valor),
+          obra: input.obra ? String(input.obra) : null,
+          categoria: input.categoria
+            ? (String(input.categoria) as CategoriaCusto)
+            : undefined,
+          descricao: input.descricao ? String(input.descricao) : null,
+          data: input.data ? String(input.data) : null,
+        });
+        return {
+          isError: false,
+          text: JSON.stringify({
+            ok: true,
+            id: row.id,
+            obra: row.obra,
+            categoria: row.categoria,
+            valor: row.valor,
+            data: row.data,
+          }),
+        };
+      }
+
+      case "relatorio_custos": {
+        const rel = await relatorioCustos(userWa, {
+          obra: input.obra ? String(input.obra) : null,
+          desde: input.desde ? String(input.desde) : null,
+          ate: input.ate ? String(input.ate) : null,
+        });
+        return { isError: false, text: JSON.stringify({ ok: true, ...rel }) };
       }
 
       default:
