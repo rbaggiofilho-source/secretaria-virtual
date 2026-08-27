@@ -18,6 +18,7 @@ import {
   type CategoriaCusto,
   type EfetivoItem,
   type TipoFoto,
+  type UsuarioRow,
 } from "../memory/context.js";
 import type { MemoryKind } from "../memory/supabase.js";
 
@@ -33,7 +34,7 @@ export const TOOLS: Anthropic.Tool[] = [
   {
     name: "create_calendar_event",
     description:
-      "Cria um evento no calendário PESSOAL do Ricardo (sempre pessoal, nunca ENGETEC). Use datas em ISO 8601 com offset do fuso America/Sao_Paulo (ex.: 2026-08-15T09:00:00-03:00). Em caso de erro, avise o Ricardo.",
+      "Cria um evento no calendário PESSOAL do usuário (sempre o pessoal, nunca calendário de empresa). Use datas em ISO 8601 com offset do fuso America/Sao_Paulo (ex.: 2026-08-15T09:00:00-03:00). Em caso de erro, avise o usuário.",
     input_schema: {
       type: "object",
       properties: {
@@ -106,7 +107,7 @@ export const TOOLS: Anthropic.Tool[] = [
   {
     name: "get_pending",
     description:
-      "Lista as pendências abertas do Ricardo, opcionalmente filtradas por obra/local.",
+      "Lista as pendências abertas do usuário, opcionalmente filtradas por obra/local.",
     input_schema: {
       type: "object",
       properties: {
@@ -119,7 +120,7 @@ export const TOOLS: Anthropic.Tool[] = [
   {
     name: "registrar_custo",
     description:
-      "Lança um custo/gasto numa OBRA (centro de custo). Use quando o Ricardo disser que pagou/gastou algo numa obra (ex.: 'paguei 3000 de pedreiro na CCC'). Valor em reais (número). categoria: material, mao_de_obra, equipamento, servico ou outro. data em YYYY-MM-DD só se ele mencionar um dia diferente de hoje.",
+      "Lança um custo/gasto numa OBRA (centro de custo). Use quando o usuário disser que pagou/gastou algo numa obra (ex.: 'paguei 3000 de pedreiro na CCC'). Valor em reais (número). categoria: material, mao_de_obra, equipamento, servico ou outro. data em YYYY-MM-DD só se ele mencionar um dia diferente de hoje.",
     input_schema: {
       type: "object",
       properties: {
@@ -140,7 +141,7 @@ export const TOOLS: Anthropic.Tool[] = [
   {
     name: "relatorio_custos",
     description:
-      "Gera o total de custos e a divisão por categoria, opcionalmente por obra e intervalo de datas. Use quando o Ricardo perguntar quanto gastou (ex.: 'quanto já gastei na CCC esse mês?'). Datas em YYYY-MM-DD.",
+      "Gera o total de custos e a divisão por categoria, opcionalmente por obra e intervalo de datas. Use quando o usuário perguntar quanto gastou (ex.: 'quanto já gastei na CCC esse mês?'). Datas em YYYY-MM-DD.",
     input_schema: {
       type: "object",
       properties: {
@@ -155,7 +156,7 @@ export const TOOLS: Anthropic.Tool[] = [
   {
     name: "registrar_rdo",
     description:
-      "Registra o Relatório Diário de Obra (RDO) de uma obra num dia, a partir do relato do Ricardo (geralmente um áudio no fim do dia). Extraia clima, efetivo (mão de obra por função), atividades executadas, ocorrências e materiais recebidos. Envie SEMPRE o conteúdo completo do dia — reenviar substitui o RDO daquele dia. data em YYYY-MM-DD só se ele mencionar outro dia que não hoje. Se a obra não estiver clara, pergunte antes.",
+      "Registra o Relatório Diário de Obra (RDO) de uma obra num dia, a partir do relato do usuário (geralmente um áudio no fim do dia). Extraia clima, efetivo (mão de obra por função), atividades executadas, ocorrências e materiais recebidos. Envie SEMPRE o conteúdo completo do dia — reenviar substitui o RDO daquele dia. data em YYYY-MM-DD só se ele mencionar outro dia que não hoje. Se a obra não estiver clara, pergunte antes.",
     input_schema: {
       type: "object",
       properties: {
@@ -186,7 +187,7 @@ export const TOOLS: Anthropic.Tool[] = [
   {
     name: "consultar_rdo",
     description:
-      "Consulta os RDOs registrados, por obra e/ou intervalo de datas. Use quando o Ricardo pedir o diário de uma obra ou um resumo do período. Datas em YYYY-MM-DD.",
+      "Consulta os RDOs registrados, por obra e/ou intervalo de datas. Use quando o usuário pedir o diário de uma obra ou um resumo do período. Datas em YYYY-MM-DD.",
     input_schema: {
       type: "object",
       properties: {
@@ -201,7 +202,7 @@ export const TOOLS: Anthropic.Tool[] = [
   {
     name: "registrar_foto",
     description:
-      "Registra uma imagem que o Ricardo enviou (foto da obra ou nota fiscal). Você VÊ a imagem: gere uma descrição objetiva do que aparece. tipo: 'foto_obra' (andamento, serviço, problema) ou 'nota_fiscal'. Associe à obra (pergunte se não estiver claro). Se for NOTA FISCAL de um gasto de obra, ALÉM disso chame registrar_custo com o valor e itens lidos. data em YYYY-MM-DD só se diferente de hoje.",
+      "Registra uma imagem que o usuário enviou (foto da obra ou nota fiscal). Você VÊ a imagem: gere uma descrição objetiva do que aparece. tipo: 'foto_obra' (andamento, serviço, problema) ou 'nota_fiscal'. Associe à obra (pergunte se não estiver claro). Se for NOTA FISCAL de um gasto de obra, ALÉM disso chame registrar_custo com o valor e itens lidos. data em YYYY-MM-DD só se diferente de hoje.",
     input_schema: {
       type: "object",
       properties: {
@@ -221,7 +222,7 @@ export const TOOLS: Anthropic.Tool[] = [
   {
     name: "consultar_fotos",
     description:
-      "Lista o registro fotográfico (descrições), por obra, tipo e/ou intervalo de datas. Use quando o Ricardo perguntar o que foi fotografado/registrado numa obra. Datas em YYYY-MM-DD.",
+      "Lista o registro fotográfico (descrições), por obra, tipo e/ou intervalo de datas. Use quando o usuário perguntar o que foi fotografado/registrado numa obra. Datas em YYYY-MM-DD.",
     input_schema: {
       type: "object",
       properties: {
@@ -241,7 +242,7 @@ export const TOOLS: Anthropic.Tool[] = [
   {
     name: "gerar_rdo_pdf",
     description:
-      "Gera o PDF do Diário de Obra (RDO) de uma obra e ENVIA como documento no WhatsApp do Ricardo. Use quando ele pedir o PDF/relatório do diário (ex.: 'me manda o PDF do diário da CCC desse mês'). Informe obra e, se ele delimitar, o período (desde/ate em YYYY-MM-DD). Depois de chamar, confirme por texto que o PDF foi enviado.",
+      "Gera o PDF do Diário de Obra (RDO) de uma obra e ENVIA como documento no WhatsApp do usuário. Use quando ele(a) pedir o PDF/relatório do diário (ex.: 'me manda o PDF do diário da CCC desse mês'). Informe obra e, se ele delimitar, o período (desde/ate em YYYY-MM-DD). Depois de chamar, confirme por texto que o PDF foi enviado.",
     input_schema: {
       type: "object",
       properties: {
@@ -260,13 +261,29 @@ export const TOOLS: Anthropic.Tool[] = [
  * Nunca lança: erros viram tool_result com is_error para o modelo avisar o dono.
  */
 export async function runTool(
-  userWa: string,
+  usuario: UsuarioRow,
   name: string,
   input: Record<string, unknown>,
 ): Promise<{ text: string; isError: boolean }> {
+  const userWa = usuario.user_wa;
+  // Calendário do usuário, resolvido pelo SERVIDOR (nunca pelo modelo):
+  // - calendar_id da tabela, quando conectado;
+  // - dono=true sem calendar_id: null aqui -> fallback GOOGLE_CALENDAR_ID (Ricardo legado);
+  // - não-dono sem calendar_id: SEM calendário — as tools de agenda avisam
+  //   em vez de cair no calendário de outra pessoa.
+  const temCalendario = Boolean(usuario.calendar_id) || usuario.dono;
+  const userCalendarId = usuario.calendar_id ?? null;
+  const SEM_CALENDARIO = JSON.stringify({
+    ok: false,
+    error:
+      `O Google Agenda de ${usuario.nome} ainda não foi conectado. ` +
+      "Peça para compartilhar o calendário com a conta de serviço da Rosana e avisar o administrador.",
+  });
+
   try {
     switch (name) {
       case "create_calendar_event": {
+        if (!temCalendario) return { isError: true, text: SEM_CALENDARIO };
         const ev = await createCalendarEvent({
           title: String(input.title),
           startIso: String(input.start_iso),
@@ -277,7 +294,7 @@ export async function runTool(
             typeof input.reminder_minutes === "number"
               ? input.reminder_minutes
               : undefined,
-        });
+        }, userCalendarId);
         return {
           isError: false,
           text: JSON.stringify({
@@ -292,13 +309,14 @@ export async function runTool(
       }
 
       case "update_calendar_event": {
+        if (!temCalendario) return { isError: true, text: SEM_CALENDARIO };
         const ev = await updateCalendarEvent({
           eventId: String(input.event_id),
           startIso: input.start_iso ? String(input.start_iso) : undefined,
           endIso: input.end_iso ? String(input.end_iso) : undefined,
           title: input.title ? String(input.title) : undefined,
           location: input.location ? String(input.location) : undefined,
-        });
+        }, userCalendarId);
         return {
           isError: false,
           text: JSON.stringify({
@@ -312,9 +330,11 @@ export async function runTool(
       }
 
       case "search_calendar_events": {
+        if (!temCalendario) return { isError: true, text: SEM_CALENDARIO };
         const events = await searchCalendarEvents(
           String(input.start_iso),
           String(input.end_iso),
+          userCalendarId,
         );
         return { isError: false, text: JSON.stringify({ ok: true, events }) };
       }

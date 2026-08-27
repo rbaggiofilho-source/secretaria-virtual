@@ -384,3 +384,29 @@ export async function consultarFotos(
   if (error) throw new Error(`Falha ao consultar fotos: ${error.message}`);
   return (data ?? []) as FotoRow[];
 }
+
+/** Usuário autorizado da Rosana (linha em secretaria_usuarios). */
+export interface UsuarioRow {
+  user_wa: string;
+  nome: string;
+  calendar_id: string | null;
+  contextos: string | null;
+  dono: boolean;
+  ativo: boolean;
+}
+
+/** Busca o usuário pelo wa_id. Retorna null se não cadastrado. */
+export async function getUsuario(userWa: string): Promise<UsuarioRow | null> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from("secretaria_usuarios")
+    .select("user_wa, nome, calendar_id, contextos, dono, ativo")
+    .eq("user_wa", userWa)
+    .maybeSingle();
+
+  if (error) {
+    // Falha de infra não pode virar "acesso negado" silencioso: propaga.
+    throw new Error(`Falha ao buscar usuário: ${error.message}`);
+  }
+  return (data as UsuarioRow | null) ?? null;
+}

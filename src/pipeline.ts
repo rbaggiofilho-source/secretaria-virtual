@@ -2,8 +2,10 @@ import { runSecretary } from "./agent/secretary.js";
 import { getEnv } from "./config/env.js";
 import {
   appendConversation,
+  getUsuario,
   loadOwnerContext,
   loadRecentHistory,
+  type UsuarioRow,
 } from "./memory/context.js";
 import { transcribe } from "./stt/index.js";
 import { downloadMedia, sendTextMessage } from "./whatsapp/client.js";
@@ -24,11 +26,31 @@ import type { WhatsAppMessage } from "./whatsapp/types.js";
 export async function handleIncomingMessage(message: WhatsAppMessage): Promise<void> {
   const from = message.from;
 
-  // Filtro opcional: só atende o número do dono, se configurado.
-  const allowed = getEnv().ALLOWED_WHATSAPP_NUMBER;
-  if (allowed && from !== allowed) {
-    console.warn(`Mensagem ignorada de número não autorizado: ${from}`);
-    return;
+  // Autorização: a tabela secretaria_usuarios é a fonte da verdade (uma linha
+  // ativa = número autorizado). ALLOWED_WHATSAPP_NUMBER fica como rede de
+  // segurança legada: se a tabela não tiver a linha mas a env bater, atende
+  // como dono (evita lockout do Ricardo por falha de seed).
+  let usuario: UsuarioRow | null = null;
+  try {
+    usuario = await getUsuario(from);
+  } catch (err) {
+    logError("buscar usuário", err);
+  }
+  if (!usuario || !usuario.ativo) {
+    const allowed = getEnv().ALLOWED_WHATSAPP_NUMBER;
+    if (allowed && from === allowed) {
+      usuario = {
+        user_wa: from,
+        nome: "Ricardo",
+        calendar_id: null,
+        contextos: null,
+        dono: true,
+        ativo: true,
+      };
+    } else {
+      console.warn(`Mensagem ignorada de número não autorizado: ${from}`);
+      return;
+    }
   }
 
   let userText: string;
@@ -68,7 +90,7 @@ export async function handleIncomingMessage(message: WhatsAppMessage): Promise<v
     ]);
 
     const reply = await runSecretary({
-      userWa: from,
+      usuario,
       userText,
       images,
       history,

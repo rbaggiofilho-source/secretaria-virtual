@@ -5,10 +5,11 @@ import { timezone } from "../util/datetime.js";
 /**
  * Integração com o Google Calendar via Service Account.
  *
- * REGRA DE NEGÓCIO INEGOCIÁVEL: todo evento vai no calendário PESSOAL do dono,
- * cujo ID vem de GOOGLE_CALENDAR_ID. As funções de criação/atualização IGNORAM
- * qualquer calendarId vindo do modelo e usam sempre o do env — é impossível,
- * por construção, cair no calendário da ENGETEC.
+ * REGRA DE NEGÓCIO INEGOCIÁVEL: todo evento vai no calendário PESSOAL do
+ * usuário da conversa, resolvido PELO SERVIDOR (tabela secretaria_usuarios,
+ * com fallback no GOOGLE_CALENDAR_ID da env para o dono). O modelo NUNCA
+ * escolhe o calendarId — é impossível, por construção, cair no calendário
+ * de uma empresa.
  */
 
 let calendarClient: calendar_v3.Calendar | null = null;
@@ -38,9 +39,12 @@ function getCalendar(): calendar_v3.Calendar {
   return calendarClient;
 }
 
-/** Sempre o calendário PESSOAL do env. Nunca aceita override. */
-function personalCalendarId(): string {
-  return getEnv().GOOGLE_CALENDAR_ID;
+/**
+ * Resolve o calendário pessoal: o do usuário (vindo do servidor/tabela) ou,
+ * em fallback, o GOOGLE_CALENDAR_ID da env. Nunca aceita valor do modelo.
+ */
+function personalCalendarId(userCalendarId?: string | null): string {
+  return userCalendarId?.trim() || getEnv().GOOGLE_CALENDAR_ID;
 }
 
 export interface CreateEventInput {
@@ -63,6 +67,7 @@ export interface CalendarEventResult {
 /** Cria um evento SEMPRE no calendário pessoal. */
 export async function createCalendarEvent(
   input: CreateEventInput,
+  userCalendarId?: string | null,
 ): Promise<CalendarEventResult> {
   const calendar = getCalendar();
   const tz = timezone();
@@ -83,7 +88,7 @@ export async function createCalendarEvent(
   }
 
   const res = await calendar.events.insert({
-    calendarId: personalCalendarId(),
+    calendarId: personalCalendarId(userCalendarId),
     requestBody: event,
   });
 
@@ -104,6 +109,7 @@ export interface UpdateEventInput {
  */
 export async function updateCalendarEvent(
   input: UpdateEventInput,
+  userCalendarId?: string | null,
 ): Promise<CalendarEventResult> {
   const calendar = getCalendar();
   const tz = timezone();
@@ -115,7 +121,7 @@ export async function updateCalendarEvent(
   if (input.endIso !== undefined) patch.end = { dateTime: input.endIso, timeZone: tz };
 
   const res = await calendar.events.patch({
-    calendarId: personalCalendarId(),
+    calendarId: personalCalendarId(userCalendarId),
     eventId: input.eventId,
     requestBody: patch,
   });
@@ -127,10 +133,11 @@ export async function updateCalendarEvent(
 export async function searchCalendarEvents(
   startIso: string,
   endIso: string,
+  userCalendarId?: string | null,
 ): Promise<CalendarEventResult[]> {
   const calendar = getCalendar();
   const res = await calendar.events.list({
-    calendarId: personalCalendarId(),
+    calendarId: personalCalendarId(userCalendarId),
     timeMin: startIso,
     timeMax: endIso,
     singleEvents: true,

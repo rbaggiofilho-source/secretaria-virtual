@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { getEnv } from "../config/env.js";
-import type { OwnerContext } from "../memory/context.js";
+import type { OwnerContext, UsuarioRow } from "../memory/context.js";
 import { buildSystemPrompt } from "./system-prompt.js";
 import { runTool, TOOLS } from "./tools.js";
 
@@ -19,7 +19,7 @@ function getClient(): Anthropic {
 }
 
 export async function runSecretary(params: {
-  userWa: string;
+  usuario: UsuarioRow;
   userText: string;
   history: Array<{ role: "user" | "assistant"; content: string }>;
   context: OwnerContext;
@@ -37,7 +37,7 @@ export async function runSecretary(params: {
       'seção "Áudio e transcrição" para decidir entre AGIR sobre o pedido ou ' +
       "apenas devolver a transcrição."
     : "";
-  const system = buildSystemPrompt(params.context) + audioHint;
+  const system = buildSystemPrompt(params.context, params.usuario) + audioHint;
 
   // Monta o conteúdo da mensagem atual. Com imagem, usa blocos (visão);
   // sem imagem, mantém a string simples de sempre.
@@ -86,7 +86,7 @@ export async function runSecretary(params: {
       const toolResults: Anthropic.ToolResultBlockParam[] = [];
       for (const tu of toolUses) {
         const result = await runTool(
-          params.userWa,
+          params.usuario,
           tu.name,
           (tu.input ?? {}) as Record<string, unknown>,
         );

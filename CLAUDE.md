@@ -6,12 +6,25 @@
 > obra, transcrição). Última atualização deste doc: 22/08/2026.
 
 ## Regra sagrada
-Eventos SEMPRE no Google Agenda **pessoal** do Ricardo (`rbaggiofilho@gmail.com`),
-nunca em calendário de empresa. Já forçado no código.
+Eventos SEMPRE no Google Agenda **pessoal do usuário da conversa** (resolvido
+pelo servidor via `secretaria_usuarios`; dono usa `GOOGLE_CALENDAR_ID` da env),
+NUNCA em calendário de empresa e NUNCA no calendário de outro usuário. O modelo
+não escolhe calendarId — forçado no código.
 
-## Dono / usuário único (hoje)
-Ricardo Baggio — `rbaggiofilho@gmail.com`. App em **modo desenvolvimento** na
-Meta: só responde a números na lista de permitidos (hoje, só o Ricardo).
+## Usuários (multi-usuário desde 22/08/2026)
+- Autorização pela tabela **`secretaria_usuarios`** (linha ativa = número
+  autorizado; `ALLOWED_WHATSAPP_NUMBER` é só rede de segurança legada do dono).
+- **Ricardo Baggio** (dono) — wa `554888088057`; `dono=true` ⇒ calendário via
+  env `GOOGLE_CALENDAR_ID`; contextos "ENGETEC, Certive ou Pessoal".
+- **Malu** (esposa; obras próprias, independentes) — cadastrada nas DUAS formas
+  do wa_id (`554891470656` e `5548991470656`, nono dígito incerto);
+  `calendar_id` ainda NULL ⇒ tools de agenda avisam "calendário não conectado"
+  (nunca caem no calendário do Ricardo). Falta: ela compartilhar o Google
+  Agenda com a conta de serviço e preencher `calendar_id` com o email dela.
+- Prompt/persona parametrizados por usuário (nome + contextos da tabela);
+  dados totalmente isolados por `user_wa` em todas as tabelas.
+- App em **modo desenvolvimento** na Meta: além da tabela, o número precisa
+  estar na lista de destinatários do painel (Etapa 1 → Destinatário).
 
 ---
 
@@ -75,6 +88,8 @@ WhatsApp. Eventos de status (sent/delivered/read/failed) são logados.
 - `secretaria_custos` — custos por obra (categoria: material/mao_de_obra/equipamento/servico/outro; valor; descrição; data).
 - `secretaria_rdo` — Diário de Obra (unique por user_wa+obra+data; clima, efetivo jsonb, atividades, ocorrências, materiais).
 - `secretaria_fotos` — registro fotográfico (tipo: foto_obra/nota_fiscal/outro; descrição da IA; obra; data; caminho).
+- `secretaria_usuarios` — usuários autorizados (PK user_wa; nome, calendar_id,
+  contextos, dono, ativo). Fonte da verdade da autorização.
 
 ## Ferramentas do agente
 `create_calendar_event`, `update_calendar_event`, `search_calendar_events`,
