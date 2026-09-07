@@ -76,6 +76,30 @@ create table if not exists public.secretaria_documentos (
 
 alter table public.secretaria_documentos enable row level security;
 
+-- Materiais/compras por obra: cada item com seu ciclo (a_comprar -> cotando ->
+-- comprado -> entregue) e cotações de fornecedores em jsonb.
+create table if not exists public.secretaria_materiais (
+  id               bigint generated always as identity primary key,
+  user_wa          text        not null,
+  obra             text,
+  item             text        not null,
+  quantidade       numeric,
+  unidade          text,
+  status           text        not null default 'a_comprar'
+                   check (status in ('a_comprar','cotando','comprado','entregue','cancelado')),
+  fornecedor       text,
+  valor_unitario   numeric,
+  valor_total      numeric,
+  cotacoes         jsonb       not null default '[]'::jsonb,
+  previsao_entrega date,
+  data_compra      date,
+  observacoes      text,
+  created_at       timestamptz not null default now(),
+  updated_at       timestamptz not null default now()
+);
+
+alter table public.secretaria_materiais enable row level security;
+
 -- Storage: as imagens (fotos/notas fiscais) ficam no bucket PRIVADO
 -- 'secretaria-fotos' (não em tabela). Criar uma vez:
 --   insert into storage.buckets (id, name, public)

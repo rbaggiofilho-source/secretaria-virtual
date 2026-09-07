@@ -104,6 +104,10 @@ WhatsApp. Eventos de status (sent/delivered/read/failed) são logados.
 - `secretaria_documentos` — documentos/prazos da obra (alvará, ART/RRT, ASO,
   licença, seguro, contrato, certidão; vencimento; lembrete_event_id do evento
   na agenda). `registrar_documento` cria o lembrete (padrão 30 dias antes).
+- `secretaria_materiais` — materiais/compras por obra (item; ciclo a_comprar→
+  cotando→comprado→entregue; cotações jsonb [{fornecedor,valor_unitario,obs}];
+  fornecedor/valores; previsão/entrega). `registrar_material` faz find-or-create
+  por item+obra e pode lançar no custo (lancar_custo).
 
 ## Ferramentas do agente
 `create_calendar_event`, `update_calendar_event`, `search_calendar_events`,
@@ -111,7 +115,8 @@ WhatsApp. Eventos de status (sent/delivered/read/failed) são logados.
 `save_memory`, `get_pending`, `registrar_custo`, `relatorio_custos`,
 `registrar_rdo`, `consultar_rdo`, `registrar_foto`, `consultar_fotos`,
 `enviar_foto` (reenvia imagem arquivada), `gerar_rdo_pdf`,
-`registrar_documento`, `consultar_documentos`.
+`registrar_documento`, `consultar_documentos`,
+`registrar_material`, `consultar_materiais`.
 
 ## Onboarding do beta (site + OAuth) — desde 07/09/2026
 - **Site de cadastro:** `GET/POST /cadastro` (`api/cadastro.ts`, rewrite no
@@ -182,8 +187,8 @@ WhatsApp. Eventos de status (sent/delivered/read/failed) são logados.
 3. Configurar alertas de crédito baixo nos painéis Anthropic + Groq (não há API de
    saldo; a Rosana não consegue avisar sozinha).
 4. (Opcional) Verificação da empresa na Meta + número brasileiro próprio (produção).
-5. (Backlog) materiais/compras/cotações; DDS/EPI. (Feito: arquivo da foto no
-   Storage + reenvio; prazos de documentos alvará/ART/ASO com lembrete.)
+5. (Backlog) DDS/EPI. (Feito: arquivo da foto no Storage + reenvio; prazos de
+   documentos alvará/ART/ASO com lembrete; materiais/compras/cotações.)
 6. (Grande) Virada multi-inquilino para virar SaaS (contas, login, Google via
    OAuth por cliente, cobrança, onboarding self-service, roteamento multi-número).
 

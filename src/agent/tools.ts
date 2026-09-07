@@ -16,6 +16,7 @@ import {
 import {
   consultarDocumentos,
   consultarFotos,
+  consultarMateriais,
   consultarRDO,
   getFoto,
   getOAuthToken,
@@ -23,13 +24,17 @@ import {
   registrarCusto,
   registrarDocumento,
   registrarFoto,
+  registrarMaterial,
   registrarRDO,
   relatorioCustos,
   saveMemory,
   setDocumentoLembrete,
   type CategoriaCusto,
+  type Cotacao,
   type DocumentoRow,
   type EfetivoItem,
+  type MaterialRow,
+  type MaterialStatus,
   type TipoDocumento,
   type TipoFoto,
   type UsuarioRow,
@@ -334,6 +339,69 @@ export const TOOLS: Anthropic.Tool[] = [
           type: "string",
           enum: ["alvara", "art", "rrt", "aso", "licenca", "seguro", "contrato", "certidao", "outro"],
           description: "Filtrar por tipo (opcional)",
+        },
+      },
+      required: [],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "registrar_material",
+    description:
+      "Registra ou atualiza um MATERIAL/compra de uma obra e suas cotações. É a mesma tool para todo o ciclo — chame de novo para o MESMO item+obra que ela atualiza (não duplica): 1) necessidade ('preciso de 100 sacos de cimento na obra do centro' → item, quantidade, unidade, obra); 2) cotações ('cotei o cimento: Votorantim 32 o saco, Cauê 30' → cotacoes=[{fornecedor,valor_unitario}]); 3) compra ('comprei o cimento da Cauê, 100 sacos a 30' → fornecedor, valor_unitario, status='comprado'; se ele quiser já lançar no custo da obra, passe lancar_custo=true); 4) entrega ('chegou o cimento' → status='entregue'). Use o MESMO nome de item nas chamadas seguintes. Datas em YYYY-MM-DD.",
+    input_schema: {
+      type: "object",
+      properties: {
+        item: { type: "string", description: "Nome do material (ex.: 'cimento CP-II', 'vergalhão 10mm')" },
+        obra: { type: "string", description: "Obra associada (use o apelido se houver)" },
+        quantidade: { type: "number", description: "Quantidade (opcional)" },
+        unidade: { type: "string", description: "Unidade: saco, m³, kg, un, etc. (opcional)" },
+        status: {
+          type: "string",
+          enum: ["a_comprar", "cotando", "comprado", "entregue", "cancelado"],
+          description: "Situação do item (opcional; a tool infere quando não informado)",
+        },
+        fornecedor: { type: "string", description: "Fornecedor escolhido na compra (opcional)" },
+        valor_unitario: { type: "number", description: "Valor unitário da compra (opcional)" },
+        valor_total: { type: "number", description: "Valor total da compra (opcional; senão calcula qtd × unit)" },
+        cotacoes: {
+          type: "array",
+          description: "Cotações a ANEXAR (comparação de fornecedores)",
+          items: {
+            type: "object",
+            properties: {
+              fornecedor: { type: "string", description: "Nome do fornecedor" },
+              valor_unitario: { type: "number", description: "Preço unitário cotado" },
+              obs: { type: "string", description: "Observação (prazo, condição, etc.)" },
+            },
+            required: ["fornecedor"],
+            additionalProperties: false,
+          },
+        },
+        previsao_entrega: { type: "string", description: "Previsão de entrega YYYY-MM-DD (opcional)" },
+        data_compra: { type: "string", description: "Data da compra YYYY-MM-DD (opcional)" },
+        observacoes: { type: "string", description: "Observações (opcional)" },
+        lancar_custo: {
+          type: "boolean",
+          description: "Se true, também lança o valor no custo da obra (categoria material).",
+        },
+      },
+      required: ["item"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "consultar_materiais",
+    description:
+      "Lista os materiais/compras de uma obra com a situação de cada um (a comprar, cotando, comprado, entregue) e as cotações. Use quando o usuário perguntar o que falta comprar, o andamento das compras, as cotações de um item, ou o que já chegou. Pode filtrar por obra e por status.",
+    input_schema: {
+      type: "object",
+      properties: {
+        obra: { type: "string", description: "Filtrar por obra (opcional)" },
+        status: {
+          type: "string",
+          enum: ["a_comprar", "cotando", "comprado", "entregue", "cancelado"],
+          description: "Filtrar por situação (opcional)",
         },
       },
       required: [],
@@ -792,6 +860,114 @@ export async function runTool(
               numero: d.numero,
               vencimento: d.vencimento,
               situacao: situacao(d),
+            })),
+          }),
+        };
+      }
+
+      case "registrar_material": {
+        const novasCotacoes: Cotacao[] = Array.isArray(input.cotacoes)
+          ? (input.cotacoes as unknown[]).map((c) => {
+              const o = (c ?? {}) as Record<string, unknown>;
+              return {
+                fornecedor: String(o.fornecedor ?? ""),
+                valor_unitario:
+                  typeof o.valor_unitario === "number" ? o.valor_unitario : null,
+                obs: o.obs ? String(o.obs) : null,
+              } as Cotacao;
+            })
+          : [];
+
+        const fornecedor = input.fornecedor ? String(input.fornecedor) : null;
+        const valorUnitario =
+          typeof input.valor_unitario === "number" ? input.valor_unitario : null;
+        const valorTotal = typeof input.valor_total === "number" ? input.valor_total : null;
+        const dataCompra = input.data_compra ? String(input.data_compra) : null;
+
+        // Inferência simples de status (só avança): compra > cotação.
+        let status = input.status ? (String(input.status) as MaterialStatus) : null;
+        if (!status) {
+          if (fornecedor && (valorUnitario != null || valorTotal != null || dataCompra)) {
+            status = "comprado";
+          } else if (novasCotacoes.length > 0) {
+            status = "cotando";
+          }
+        }
+
+        const row = await registrarMaterial(userWa, {
+          item: String(input.item),
+          obra: input.obra ? String(input.obra) : null,
+          quantidade: typeof input.quantidade === "number" ? input.quantidade : null,
+          unidade: input.unidade ? String(input.unidade) : null,
+          status,
+          fornecedor,
+          valorUnitario,
+          valorTotal,
+          previsaoEntrega: input.previsao_entrega ? String(input.previsao_entrega) : null,
+          dataCompra,
+          observacoes: input.observacoes ? String(input.observacoes) : null,
+          novasCotacoes,
+        });
+
+        // Opcional: lançar no custo da obra (categoria material).
+        let custoLancado = false;
+        if (input.lancar_custo === true && row.valor_total != null) {
+          await registrarCusto(userWa, {
+            valor: Number(row.valor_total),
+            obra: row.obra,
+            categoria: "material",
+            descricao: [row.quantidade, row.unidade, row.item].filter(Boolean).join(" ").trim(),
+            data: row.data_compra,
+          });
+          custoLancado = true;
+        }
+
+        return {
+          isError: false,
+          text: JSON.stringify({
+            ok: true,
+            id: row.id,
+            item: row.item,
+            obra: row.obra,
+            status: row.status,
+            quantidade: row.quantidade,
+            unidade: row.unidade,
+            valor_total: row.valor_total,
+            cotacoes: row.cotacoes.length,
+            custo_lancado: custoLancado,
+          }),
+        };
+      }
+
+      case "consultar_materiais": {
+        const rows = await consultarMateriais(userWa, {
+          obra: input.obra ? String(input.obra) : null,
+          status: input.status ? (String(input.status) as MaterialStatus) : null,
+        });
+        const melhorCotacao = (m: MaterialRow) => {
+          const validas = m.cotacoes.filter((c) => typeof c.valor_unitario === "number");
+          if (validas.length === 0) return null;
+          return validas.reduce((a, b) =>
+            (a.valor_unitario ?? Infinity) <= (b.valor_unitario ?? Infinity) ? a : b,
+          );
+        };
+        return {
+          isError: false,
+          text: JSON.stringify({
+            ok: true,
+            materiais: rows.map((m) => ({
+              id: m.id,
+              item: m.item,
+              obra: m.obra,
+              status: m.status,
+              quantidade: m.quantidade,
+              unidade: m.unidade,
+              fornecedor: m.fornecedor,
+              valor_unitario: m.valor_unitario,
+              valor_total: m.valor_total,
+              previsao_entrega: m.previsao_entrega,
+              cotacoes: m.cotacoes,
+              melhor_cotacao: melhorCotacao(m),
             })),
           }),
         };

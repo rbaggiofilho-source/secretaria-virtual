@@ -585,6 +585,144 @@ export async function consultarDocumentos(
   return (data ?? []) as DocumentoRow[];
 }
 
+/* ---------- Materiais / compras / cotações ---------- */
+
+export type MaterialStatus =
+  | "a_comprar"
+  | "cotando"
+  | "comprado"
+  | "entregue"
+  | "cancelado";
+
+export interface Cotacao {
+  fornecedor: string;
+  valor_unitario: number | null;
+  obs?: string | null;
+}
+
+export interface MaterialRow {
+  id: number;
+  user_wa: string;
+  obra: string | null;
+  item: string;
+  quantidade: number | null;
+  unidade: string | null;
+  status: MaterialStatus;
+  fornecedor: string | null;
+  valor_unitario: number | null;
+  valor_total: number | null;
+  cotacoes: Cotacao[];
+  previsao_entrega: string | null;
+  data_compra: string | null;
+  observacoes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Cria ou atualiza um item de material da obra. Faz find-or-create pelo par
+ * (user_wa, obra, item, case-insensitive): assim "cotei mais um fornecedor do
+ * cimento" atualiza o mesmo item em vez de duplicar. Cotações são ANEXADAS.
+ */
+export async function registrarMaterial(
+  userWa: string,
+  params: {
+    item: string;
+    obra?: string | null;
+    quantidade?: number | null;
+    unidade?: string | null;
+    status?: MaterialStatus | null;
+    fornecedor?: string | null;
+    valorUnitario?: number | null;
+    valorTotal?: number | null;
+    previsaoEntrega?: string | null;
+    dataCompra?: string | null;
+    observacoes?: string | null;
+    novasCotacoes?: Cotacao[] | null;
+  },
+): Promise<MaterialRow> {
+  const supabase = getSupabase();
+
+  // Procura o mesmo item (mesma obra) para atualizar em vez de duplicar.
+  let find = supabase
+    .from("secretaria_materiais")
+    .select("*")
+    .eq("user_wa", userWa)
+    .ilike("item", params.item)
+    .order("created_at", { ascending: false })
+    .limit(1);
+  find = params.obra ? find.ilike("obra", params.obra) : find.is("obra", null);
+  const { data: achado, error: findErr } = await find;
+  if (findErr) throw new Error(`Falha ao buscar material: ${findErr.message}`);
+  const atual = (achado?.[0] as MaterialRow | undefined) ?? null;
+
+  const cotacoes = [...(atual?.cotacoes ?? []), ...(params.novasCotacoes ?? [])];
+
+  // valor_total: usa o informado; senão calcula de quantidade × valor unitário.
+  const qtd = params.quantidade ?? atual?.quantidade ?? null;
+  const vUnit = params.valorUnitario ?? atual?.valor_unitario ?? null;
+  const valorTotal =
+    params.valorTotal ??
+    (qtd != null && vUnit != null ? Number(qtd) * Number(vUnit) : atual?.valor_total ?? null);
+
+  const merged: Record<string, unknown> = {
+    user_wa: userWa,
+    obra: params.obra ?? atual?.obra ?? null,
+    item: params.item,
+    quantidade: qtd,
+    unidade: params.unidade ?? atual?.unidade ?? null,
+    status: params.status ?? atual?.status ?? "a_comprar",
+    fornecedor: params.fornecedor ?? atual?.fornecedor ?? null,
+    valor_unitario: vUnit,
+    valor_total: valorTotal,
+    cotacoes,
+    previsao_entrega: params.previsaoEntrega ?? atual?.previsao_entrega ?? null,
+    data_compra: params.dataCompra ?? atual?.data_compra ?? null,
+    observacoes: params.observacoes ?? atual?.observacoes ?? null,
+    updated_at: new Date().toISOString(),
+  };
+
+  if (atual) {
+    const { data, error } = await supabase
+      .from("secretaria_materiais")
+      .update(merged)
+      .eq("user_wa", userWa)
+      .eq("id", atual.id)
+      .select("*")
+      .single();
+    if (error) throw new Error(`Falha ao atualizar material: ${error.message}`);
+    return data as MaterialRow;
+  }
+
+  const { data, error } = await supabase
+    .from("secretaria_materiais")
+    .insert(merged)
+    .select("*")
+    .single();
+  if (error) throw new Error(`Falha ao registrar material: ${error.message}`);
+  return data as MaterialRow;
+}
+
+/** Lista materiais por obra e/ou status (mais recentes primeiro). */
+export async function consultarMateriais(
+  userWa: string,
+  filtros: { obra?: string | null; status?: MaterialStatus | null } = {},
+): Promise<MaterialRow[]> {
+  const supabase = getSupabase();
+  let query = supabase
+    .from("secretaria_materiais")
+    .select("*")
+    .eq("user_wa", userWa)
+    .order("updated_at", { ascending: false });
+
+  if (filtros.obra) query = query.ilike("obra", `%${filtros.obra}%`);
+  if (filtros.status) query = query.eq("status", filtros.status);
+
+  const { data, error } = await query;
+  if (error) throw new Error(`Falha ao consultar materiais: ${error.message}`);
+  return (data ?? []) as MaterialRow[];
+}
+
 /* ---------- Tokens do Google OAuth (calendário por usuário) ---------- */
 
 export interface OAuthTokenRow {
