@@ -5,5 +5,8 @@
       "maxDuration": 60
     }
   },
-  "rewrites": [{ "source": "/cadastro", "destination": "/api/cadastro" }]
+  "rewrites": [
+    { "source": "/cadastro", "destination": "/api/cadastro" },
+    { "source": "/privacidade", "destination": "/api/privacidade" }
+  ]
 }
