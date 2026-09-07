@@ -17,10 +17,10 @@ não escolhe calendarId — forçado no código.
 - **Ricardo Baggio** (dono) — wa `554888088057`; `dono=true` ⇒ calendário via
   env `GOOGLE_CALENDAR_ID`; contextos "ENGETEC, Certive ou Pessoal".
 - **Malu** (esposa; obras próprias, independentes) — cadastrada nas DUAS formas
-  do wa_id (`554891470656` e `5548991470656`, nono dígito incerto);
-  `calendar_id` ainda NULL ⇒ tools de agenda avisam "calendário não conectado"
-  (nunca caem no calendário do Ricardo). Falta: ela compartilhar o Google
-  Agenda com a conta de serviço e preencher `calendar_id` com o email dela.
+  do wa_id (`554891470656` e `5548991470656`, nono dígito incerto). Com o OAuth
+  no ar, ela NÃO precisa mais compartilhar calendário: é só mandar "conectar
+  agenda" pra Rosana e autorizar o próprio Gmail (escreve no `primary` dela).
+  Falta: adicionar o número dela na lista de destinatários da Meta.
 - Prompt/persona parametrizados por usuário (nome + contextos da tabela);
   dados totalmente isolados por `user_wa` em todas as tabelas.
 - App em **modo desenvolvimento** na Meta: além da tabela, o número precisa
