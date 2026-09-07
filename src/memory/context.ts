@@ -465,3 +465,63 @@ export async function registrarCadastro(dados: CadastroInput): Promise<string[]>
   if (error) throw new Error(`Falha ao gravar cadastro: ${error.message}`);
   return waIds;
 }
+
+/* ---------- Tokens do Google OAuth (calendário por usuário) ---------- */
+
+export interface OAuthTokenRow {
+  user_wa: string;
+  google_email: string | null;
+  refresh_token: string;
+  access_token: string | null;
+  expiry: string | null;
+  scope: string | null;
+}
+
+/**
+ * Busca o token OAuth do usuário (tolerando as variantes de wa_id). Retorna
+ * null se ele ainda não conectou a agenda pelo fluxo OAuth.
+ */
+export async function getOAuthToken(userWa: string): Promise<OAuthTokenRow | null> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from("secretaria_oauth_tokens")
+    .select("user_wa, google_email, refresh_token, access_token, expiry, scope")
+    .in("user_wa", waIdVariants(userWa))
+    .limit(1);
+
+  if (error) throw new Error(`Falha ao buscar token OAuth: ${error.message}`);
+  const rows = (data ?? []) as OAuthTokenRow[];
+  return rows[0] ?? null;
+}
+
+/**
+ * Grava/atualiza o token OAuth do usuário em TODAS as variantes de wa_id
+ * (igual ao cadastro), para responder qualquer forma que a Meta entregar.
+ */
+export async function saveOAuthToken(
+  userWa: string,
+  tok: {
+    refreshToken: string;
+    accessToken?: string | null;
+    expiry?: string | null;
+    scope?: string | null;
+    email?: string | null;
+  },
+): Promise<void> {
+  const supabase = getSupabase();
+  const rows = waIdVariants(userWa).map((wa) => ({
+    user_wa: wa,
+    provider: "google",
+    google_email: tok.email ?? null,
+    refresh_token: tok.refreshToken,
+    access_token: tok.accessToken ?? null,
+    expiry: tok.expiry ?? null,
+    scope: tok.scope ?? null,
+    updated_at: new Date().toISOString(),
+  }));
+
+  const { error } = await supabase
+    .from("secretaria_oauth_tokens")
+    .upsert(rows, { onConflict: "user_wa" });
+  if (error) throw new Error(`Falha ao salvar token OAuth: ${error.message}`);
+}

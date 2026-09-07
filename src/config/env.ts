@@ -35,11 +35,18 @@ const EnvSchema = z
     GROQ_STT_MODEL: z.string().default("whisper-large-v3"),
     OPENAI_STT_MODEL: z.string().default("whisper-1"),
 
-    // Google Calendar
+    // Google Calendar (conta de serviço — usada pelo dono/legado)
     GOOGLE_CALENDAR_ID: z.string().min(1, "GOOGLE_CALENDAR_ID é obrigatório"),
     GOOGLE_SERVICE_ACCOUNT_JSON: z
       .string()
       .min(1, "GOOGLE_SERVICE_ACCOUNT_JSON é obrigatório"),
+
+    // Google OAuth (por usuário do beta — cada um conecta a própria agenda).
+    // Opcionais: se não setados, só o caminho da conta de serviço funciona.
+    GOOGLE_OAUTH_CLIENT_ID: z.string().optional(),
+    GOOGLE_OAUTH_CLIENT_SECRET: z.string().optional(),
+    // Base pública do app (para montar o redirect do OAuth e links).
+    PUBLIC_BASE_URL: z.string().url().default("https://secretaria-virtual-seven.vercel.app"),
 
     // Supabase
     SUPABASE_URL: z.string().url("SUPABASE_URL deve ser uma URL válida"),

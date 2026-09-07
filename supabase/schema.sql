@@ -38,6 +38,23 @@ create table if not exists public.secretaria_conversations (
 create index if not exists secretaria_conversations_user_created_idx
   on public.secretaria_conversations (user_wa, created_at desc);
 
+-- Tokens do Google OAuth por usuário (beta): cada usuário conecta a PRÓPRIA
+-- conta Google e a Rosana escreve no calendário "primary" dele. Uma linha por
+-- variante de wa_id (com/sem o nono dígito). Acesso só pelo backend.
+create table if not exists public.secretaria_oauth_tokens (
+  user_wa       text        primary key,
+  provider      text        not null default 'google',
+  google_email  text,
+  refresh_token text        not null,
+  access_token  text,
+  expiry        timestamptz,
+  scope         text,
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now()
+);
+
+alter table public.secretaria_oauth_tokens enable row level security;
+
 -- Observação sobre RLS:
 -- O backend acessa o Postgres com a SERVICE ROLE KEY, que ignora Row Level
 -- Security. Estas tabelas nunca são expostas ao cliente/browser, então RLS

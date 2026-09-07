@@ -3,12 +3,15 @@ import {
   createCalendarEvent,
   searchCalendarEvents,
   updateCalendarEvent,
+  type CalendarAuth,
 } from "../calendar/google.js";
+import { oauthConfigured, signState } from "../oauth/google.js";
 import { buildRdoPdf } from "../pdf/rdo.js";
 import { sendDocumentMessage, uploadMedia } from "../whatsapp/client.js";
 import {
   consultarFotos,
   consultarRDO,
+  getOAuthToken,
   getPending,
   registrarCusto,
   registrarFoto,
@@ -20,6 +23,7 @@ import {
   type TipoFoto,
   type UsuarioRow,
 } from "../memory/context.js";
+import { getEnv } from "../config/env.js";
 import type { MemoryKind } from "../memory/supabase.js";
 
 /**
@@ -80,6 +84,17 @@ export const TOOLS: Anthropic.Tool[] = [
         end_iso: { type: "string", description: "Fim da janela ISO 8601" },
       },
       required: ["start_iso", "end_iso"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "conectar_agenda",
+    description:
+      "Gera um link para o usuário conectar a PRÓPRIA agenda do Google à Rosana (login/autorização Google). Use quando o usuário ainda não tem a agenda conectada e quer criar/ver compromissos, ou quando ele pedir para conectar/trocar a agenda. Depois de chamar, mande o link e explique em 1 frase que é só abrir, escolher a conta Google e autorizar. Não repita o link em toda mensagem.",
+    input_schema: {
+      type: "object",
+      properties: {},
+      required: [],
       additionalProperties: false,
     },
   },
@@ -266,24 +281,55 @@ export async function runTool(
   input: Record<string, unknown>,
 ): Promise<{ text: string; isError: boolean }> {
   const userWa = usuario.user_wa;
-  // Calendário do usuário, resolvido pelo SERVIDOR (nunca pelo modelo):
-  // - calendar_id da tabela, quando conectado;
-  // - dono=true sem calendar_id: null aqui -> fallback GOOGLE_CALENDAR_ID (Ricardo legado);
-  // - não-dono sem calendar_id: SEM calendário — as tools de agenda avisam
-  //   em vez de cair no calendário de outra pessoa.
-  const temCalendario = Boolean(usuario.calendar_id) || usuario.dono;
-  const userCalendarId = usuario.calendar_id ?? null;
+
+  // Auth de calendário resolvida pelo SERVIDOR (nunca pelo modelo), sob demanda:
+  // - OAuth: usuário conectou a própria conta Google -> escreve no "primary" dele;
+  // - service + calendar_id: usuário compartilhou o calendário (legado);
+  // - service + null (só dono): fallback GOOGLE_CALENDAR_ID (Ricardo);
+  // - nenhum: SEM calendário — a tool avisa e oferece conectar, nunca cai no
+  //   calendário de outra pessoa.
+  let calAuthCache: { value: CalendarAuth | null } | undefined;
+  async function resolveCalAuth(): Promise<CalendarAuth | null> {
+    if (calAuthCache) return calAuthCache.value;
+    let value: CalendarAuth | null = null;
+    const tok = await getOAuthToken(userWa);
+    if (tok) {
+      value = { kind: "oauth", refreshToken: tok.refresh_token };
+    } else if (usuario.dono || usuario.calendar_id) {
+      value = { kind: "service", calendarId: usuario.calendar_id ?? null };
+    }
+    calAuthCache = { value };
+    return value;
+  }
   const SEM_CALENDARIO = JSON.stringify({
     ok: false,
     error:
-      `O Google Agenda de ${usuario.nome} ainda não foi conectado. ` +
-      "Peça para compartilhar o calendário com a conta de serviço da Rosana e avisar o administrador.",
+      `A agenda do Google de ${usuario.nome} ainda não está conectada. ` +
+      "Chame a tool conectar_agenda e envie o link para o usuário autorizar o acesso à agenda dele.",
   });
 
   try {
     switch (name) {
+      case "conectar_agenda": {
+        if (!oauthConfigured()) {
+          return {
+            isError: true,
+            text: JSON.stringify({
+              ok: false,
+              error:
+                "A conexão de agenda por OAuth ainda não está configurada no servidor. Avise o administrador.",
+            }),
+          };
+        }
+        const url = `${getEnv().PUBLIC_BASE_URL.replace(/\/+$/, "")}/api/oauth/start?s=${encodeURIComponent(
+          signState(userWa),
+        )}`;
+        return { isError: false, text: JSON.stringify({ ok: true, url }) };
+      }
+
       case "create_calendar_event": {
-        if (!temCalendario) return { isError: true, text: SEM_CALENDARIO };
+        const calAuth = await resolveCalAuth();
+        if (!calAuth) return { isError: true, text: SEM_CALENDARIO };
         const ev = await createCalendarEvent({
           title: String(input.title),
           startIso: String(input.start_iso),
@@ -294,7 +340,7 @@ export async function runTool(
             typeof input.reminder_minutes === "number"
               ? input.reminder_minutes
               : undefined,
-        }, userCalendarId);
+        }, calAuth);
         return {
           isError: false,
           text: JSON.stringify({
@@ -309,14 +355,15 @@ export async function runTool(
       }
 
       case "update_calendar_event": {
-        if (!temCalendario) return { isError: true, text: SEM_CALENDARIO };
+        const calAuth = await resolveCalAuth();
+        if (!calAuth) return { isError: true, text: SEM_CALENDARIO };
         const ev = await updateCalendarEvent({
           eventId: String(input.event_id),
           startIso: input.start_iso ? String(input.start_iso) : undefined,
           endIso: input.end_iso ? String(input.end_iso) : undefined,
           title: input.title ? String(input.title) : undefined,
           location: input.location ? String(input.location) : undefined,
-        }, userCalendarId);
+        }, calAuth);
         return {
           isError: false,
           text: JSON.stringify({
@@ -330,11 +377,12 @@ export async function runTool(
       }
 
       case "search_calendar_events": {
-        if (!temCalendario) return { isError: true, text: SEM_CALENDARIO };
+        const calAuth = await resolveCalAuth();
+        if (!calAuth) return { isError: true, text: SEM_CALENDARIO };
         const events = await searchCalendarEvents(
           String(input.start_iso),
           String(input.end_iso),
-          userCalendarId,
+          calAuth,
         );
         return { isError: false, text: JSON.stringify({ ok: true, events }) };
       }

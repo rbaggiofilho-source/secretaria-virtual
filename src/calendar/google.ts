@@ -1,21 +1,31 @@
 import { google, type calendar_v3 } from "googleapis";
 import { getEnv } from "../config/env.js";
+import { authorizedClient } from "../oauth/google.js";
 import { timezone } from "../util/datetime.js";
 
 /**
- * Integração com o Google Calendar via Service Account.
+ * Integração com o Google Calendar. Há dois caminhos de autenticação, e o
+ * SERVIDOR (nunca o modelo) escolhe qual usar por usuário:
+ *
+ *   - OAuth (beta): o usuário conectou a própria conta Google; escrevemos no
+ *     calendário "primary" DELE, usando o refresh_token guardado.
+ *   - Service account (dono/legado): escreve no calendário resolvido pelo
+ *     GOOGLE_CALENDAR_ID (dono) ou pelo calendar_id compartilhado do usuário.
  *
  * REGRA DE NEGÓCIO INEGOCIÁVEL: todo evento vai no calendário PESSOAL do
- * usuário da conversa, resolvido PELO SERVIDOR (tabela secretaria_usuarios,
- * com fallback no GOOGLE_CALENDAR_ID da env para o dono). O modelo NUNCA
- * escolhe o calendarId — é impossível, por construção, cair no calendário
- * de uma empresa.
+ * usuário da conversa. O modelo NUNCA escolhe o calendarId nem o modo de auth —
+ * é impossível, por construção, cair no calendário de outra pessoa/empresa.
  */
 
-let calendarClient: calendar_v3.Calendar | null = null;
+/** Quem autentica a chamada — decidido pelo servidor a partir do usuário. */
+export type CalendarAuth =
+  | { kind: "oauth"; refreshToken: string }
+  | { kind: "service"; calendarId?: string | null };
 
-function getCalendar(): calendar_v3.Calendar {
-  if (calendarClient) return calendarClient;
+let serviceClient: calendar_v3.Calendar | null = null;
+
+function getServiceCalendar(): calendar_v3.Calendar {
+  if (serviceClient) return serviceClient;
   const env = getEnv();
 
   let creds: { client_email: string; private_key: string };
@@ -35,16 +45,38 @@ function getCalendar(): calendar_v3.Calendar {
     scopes: ["https://www.googleapis.com/auth/calendar"],
   });
 
-  calendarClient = google.calendar({ version: "v3", auth });
-  return calendarClient;
+  serviceClient = google.calendar({ version: "v3", auth });
+  return serviceClient;
 }
 
 /**
- * Resolve o calendário pessoal: o do usuário (vindo do servidor/tabela) ou,
- * em fallback, o GOOGLE_CALENDAR_ID da env. Nunca aceita valor do modelo.
+ * Resolve o calendário pessoal da conta de serviço: o do usuário (compartilhado)
+ * ou, em fallback, o GOOGLE_CALENDAR_ID da env. Nunca aceita valor do modelo.
  */
 function personalCalendarId(userCalendarId?: string | null): string {
   return userCalendarId?.trim() || getEnv().GOOGLE_CALENDAR_ID;
+}
+
+/**
+ * A partir do modo de auth escolhido pelo servidor, devolve o cliente do
+ * Calendar e o calendarId em que se deve gravar. OAuth => sempre "primary"
+ * (a conta é do próprio usuário).
+ */
+function resolveCalendar(auth: CalendarAuth): {
+  calendar: calendar_v3.Calendar;
+  calendarId: string;
+} {
+  if (auth.kind === "oauth") {
+    const client = authorizedClient(auth.refreshToken);
+    return {
+      calendar: google.calendar({ version: "v3", auth: client }),
+      calendarId: "primary",
+    };
+  }
+  return {
+    calendar: getServiceCalendar(),
+    calendarId: personalCalendarId(auth.calendarId),
+  };
 }
 
 export interface CreateEventInput {
@@ -67,9 +99,9 @@ export interface CalendarEventResult {
 /** Cria um evento SEMPRE no calendário pessoal. */
 export async function createCalendarEvent(
   input: CreateEventInput,
-  userCalendarId?: string | null,
+  auth: CalendarAuth,
 ): Promise<CalendarEventResult> {
-  const calendar = getCalendar();
+  const { calendar, calendarId } = resolveCalendar(auth);
   const tz = timezone();
 
   const event: calendar_v3.Schema$Event = {
@@ -88,7 +120,7 @@ export async function createCalendarEvent(
   }
 
   const res = await calendar.events.insert({
-    calendarId: personalCalendarId(userCalendarId),
+    calendarId,
     requestBody: event,
   });
 
@@ -109,9 +141,9 @@ export interface UpdateEventInput {
  */
 export async function updateCalendarEvent(
   input: UpdateEventInput,
-  userCalendarId?: string | null,
+  auth: CalendarAuth,
 ): Promise<CalendarEventResult> {
-  const calendar = getCalendar();
+  const { calendar, calendarId } = resolveCalendar(auth);
   const tz = timezone();
 
   const patch: calendar_v3.Schema$Event = {};
@@ -121,7 +153,7 @@ export async function updateCalendarEvent(
   if (input.endIso !== undefined) patch.end = { dateTime: input.endIso, timeZone: tz };
 
   const res = await calendar.events.patch({
-    calendarId: personalCalendarId(userCalendarId),
+    calendarId,
     eventId: input.eventId,
     requestBody: patch,
   });
@@ -133,11 +165,11 @@ export async function updateCalendarEvent(
 export async function searchCalendarEvents(
   startIso: string,
   endIso: string,
-  userCalendarId?: string | null,
+  auth: CalendarAuth,
 ): Promise<CalendarEventResult[]> {
-  const calendar = getCalendar();
+  const { calendar, calendarId } = resolveCalendar(auth);
   const res = await calendar.events.list({
-    calendarId: personalCalendarId(userCalendarId),
+    calendarId,
     timeMin: startIso,
     timeMax: endIso,
     singleEvents: true,

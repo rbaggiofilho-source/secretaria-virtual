@@ -51,8 +51,11 @@ não escolhe calendarId — forçado no código.
 `WHATSAPP_APP_SECRET`, `ALLOWED_WHATSAPP_NUMBER`, `ANTHROPIC_API_KEY`,
 `ANTHROPIC_MODEL` (default `claude-haiku-4-5`), `STT_PROVIDER` (default `groq`),
 `GROQ_API_KEY`, `GROQ_STT_MODEL`, `OPENAI_API_KEY`/`OPENAI_STT_MODEL` (alternativos),
-`GOOGLE_CALENDAR_ID`, `GOOGLE_SERVICE_ACCOUNT_JSON`, `SUPABASE_URL`,
-`SUPABASE_SERVICE_KEY`, `TIMEZONE` (default `America/Sao_Paulo`).
+`GOOGLE_CALENDAR_ID`, `GOOGLE_SERVICE_ACCOUNT_JSON`,
+`GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET` (OAuth por usuário do
+beta; opcionais — sem eles só o caminho da conta de serviço funciona),
+`PUBLIC_BASE_URL` (default `https://secretaria-virtual-seven.vercel.app`),
+`SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `TIMEZONE` (default `America/Sao_Paulo`).
 Validadas via `zod` em `src/config/env.ts` (faz `trim`; STT_PROVIDER tolerante a maiúsculas).
 
 ---
@@ -74,7 +77,10 @@ WhatsApp. Eventos de status (sent/delivered/read/failed) são logados.
 - `src/agent/tools.ts` — definição + dispatch das ferramentas.
 - `src/memory/context.ts` + `supabase.ts` — acesso a dados (memória, histórico, custos, RDO, fotos, dedup).
 - `src/stt/{index,groq,openai}.ts` — transcrição.
-- `src/calendar/google.ts` — Google Agenda.
+- `src/calendar/google.ts` — Google Agenda (conta de serviço OU OAuth por usuário; `CalendarAuth`).
+- `src/oauth/google.ts` — OAuth Google (URL de consentimento, troca de code, state assinado).
+- `src/oauth/page.ts` — páginas HTML de fim do fluxo OAuth (sucesso/erro).
+- `api/cadastro.ts` — site de cadastro do beta. `api/oauth/{start,callback}.ts` — fluxo OAuth.
 - `src/whatsapp/{client,signature,types}.ts` — envio (texto/documento/upload de mídia), HMAC, tipos.
 - `src/pdf/rdo.ts` — geração do PDF do RDO (pdf-lib).
 - `src/util/datetime.ts` — fuso e formatação de datas.
@@ -89,13 +95,38 @@ WhatsApp. Eventos de status (sent/delivered/read/failed) são logados.
 - `secretaria_rdo` — Diário de Obra (unique por user_wa+obra+data; clima, efetivo jsonb, atividades, ocorrências, materiais).
 - `secretaria_fotos` — registro fotográfico (tipo: foto_obra/nota_fiscal/outro; descrição da IA; obra; data; caminho).
 - `secretaria_usuarios` — usuários autorizados (PK user_wa; nome, calendar_id,
-  contextos, dono, ativo). Fonte da verdade da autorização.
+  contextos, dono, ativo; + nome_completo, cpf, endereco, profissao, status do
+  cadastro do beta). Fonte da verdade da autorização.
+- `secretaria_oauth_tokens` — tokens do Google OAuth por usuário (PK user_wa;
+  refresh_token, access_token, expiry, scope, google_email). Uma linha por
+  variante de wa_id.
 
 ## Ferramentas do agente
 `create_calendar_event`, `update_calendar_event`, `search_calendar_events`,
+`conectar_agenda` (gera link OAuth p/ o usuário conectar a própria agenda),
 `save_memory`, `get_pending`, `registrar_custo`, `relatorio_custos`,
 `registrar_rdo`, `consultar_rdo`, `registrar_foto`, `consultar_fotos`,
 `gerar_rdo_pdf`.
+
+## Onboarding do beta (site + OAuth) — desde 07/09/2026
+- **Site de cadastro:** `GET/POST /cadastro` (`api/cadastro.ts`, rewrite no
+  `vercel.json`). Coleta nome/CPF/endereço/profissão/WhatsApp + código de convite
+  (`BETA_INVITE_CODE`, default `ENGETEC2026`); grava em `secretaria_usuarios`
+  (uma linha por variante de wa_id, `waIdVariants`); devolve o número da Rosana +
+  manual. **Ainda exige** adicionar o número à mão na lista de destinatários da
+  Meta (modo dev, teto 5).
+- **Conexão de agenda por usuário (Google OAuth):** cada usuário (não-dono)
+  conecta a PRÓPRIA conta Google e a Rosana escreve no `primary` dele.
+  - Tool `conectar_agenda` → link `PUBLIC_BASE_URL/api/oauth/start?s=<state>`.
+  - `api/oauth/start.ts` valida o `state` (HMAC com `WHATSAPP_APP_SECRET`, TTL 30min)
+    e redireciona pro consentimento do Google (`src/oauth/google.ts`).
+  - `api/oauth/callback.ts` troca o `code` por tokens e salva o refresh_token
+    (`saveOAuthToken`, em `secretaria_oauth_tokens`). Página de fim em `src/oauth/page.ts`.
+  - `runTool` resolve a auth de calendário pelo SERVIDOR: OAuth (se houver token) →
+    `primary`; senão dono/`calendar_id` → conta de serviço; senão avisa e oferece
+    conectar. Escopo OAuth: `calendar.events`.
+  - Console Google: publicar o app em **Produção** evita a expiração de ~7 dias do
+    refresh_token do modo Testing (usuário vê aviso "app não verificado" — ok p/ ≤5).
 
 ## Funcionalidades (todas no ar)
 - **Base:** agenda/lembretes no Google Agenda pessoal; memória (obras/apelidos/pendências); texto e voz.
