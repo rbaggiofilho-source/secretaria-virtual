@@ -7,7 +7,7 @@ import {
 } from "../calendar/google.js";
 import { oauthConfigured, signState } from "../oauth/google.js";
 import { buildRdoPdf } from "../pdf/rdo.js";
-import { sendDocumentMessage, uploadMedia } from "../whatsapp/client.js";
+import { sendDocumentMessage, sendTextMessage, uploadMedia } from "../whatsapp/client.js";
 import {
   consultarFotos,
   consultarRDO,
@@ -90,7 +90,7 @@ export const TOOLS: Anthropic.Tool[] = [
   {
     name: "conectar_agenda",
     description:
-      "Gera um link para o usuário conectar a PRÓPRIA agenda do Google à Rosana (login/autorização Google). Use quando o usuário ainda não tem a agenda conectada e quer criar/ver compromissos, ou quando ele pedir para conectar/trocar a agenda. Depois de chamar, mande o link EXATAMENTE como veio (a URL crua), em uma linha só, SEM markdown, SEM asteriscos, SEM parênteses e sem nenhum caractere colado nele — senão o WhatsApp corrompe o link. Explique em 1 frase que é só abrir, escolher a conta Google e autorizar. Não repita o link em toda mensagem.",
+      "Envia ao usuário um link para ele conectar a PRÓPRIA agenda do Google à Rosana (login/autorização Google). Use quando o usuário ainda não tem a agenda conectada e quer criar/ver compromissos, ou quando ele pedir para conectar/trocar a agenda (inclusive se pedir 'outro link' / 'de novo' — SEMPRE chame a tool de novo, nunca reaproveite um link anterior). O PRÓPRIO SISTEMA já envia o link numa mensagem separada; você NÃO deve escrever, copiar nem inventar a URL — só confirme em 1 frase que enviou.",
     input_schema: {
       type: "object",
       properties: {},
@@ -321,10 +321,24 @@ export async function runTool(
             }),
           };
         }
-        const url = `${getEnv().PUBLIC_BASE_URL.replace(/\/+$/, "")}/api/oauth/start?s=${encodeURIComponent(
-          signState(userWa),
-        )}`;
-        return { isError: false, text: JSON.stringify({ ok: true, url }) };
+        // O SERVIDOR envia o link (não o modelo): a assinatura do state tem 43
+        // caracteres aleatórios e o modelo corromperia ao transcrever de memória.
+        // O state já é URL-safe (base64url + "."), então vai cru, sem encode.
+        const url = `${getEnv().PUBLIC_BASE_URL.replace(/\/+$/, "")}/api/oauth/start?s=${signState(userWa)}`;
+        await sendTextMessage(
+          userWa,
+          "Para conectar sua agenda do Google, toque no link abaixo, escolha sua conta e autorize:\n\n" +
+            url,
+        );
+        return {
+          isError: false,
+          text: JSON.stringify({
+            ok: true,
+            enviado: true,
+            instrucao:
+              "O link JÁ FOI ENVIADO ao usuário numa mensagem separada. NÃO escreva/repita o link nem invente uma URL. Apenas confirme em 1 frase curta que enviou o link e que é só abrir, escolher a conta Google e autorizar (se aparecer aviso de app não verificado, tocar em Avançado → Continuar).",
+          }),
+        };
       }
 
       case "create_calendar_event": {
