@@ -31,6 +31,34 @@ export function nowIso(): string {
   return new Date().toISOString();
 }
 
+/** Data de hoje no fuso do dono, no formato "YYYY-MM-DD". */
+export function todayIsoDate(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone(),
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
+/** Converte "YYYY-MM-DD" em timestamp UTC (meia-noite). */
+function utcMidnight(isoDate: string): number {
+  const p = isoDate.split("-");
+  return Date.UTC(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+}
+
+/** Soma (ou subtrai, com n negativo) dias a uma data "YYYY-MM-DD". */
+export function addDays(isoDate: string, n: number): string {
+  const dt = new Date(utcMidnight(isoDate));
+  dt.setUTCDate(dt.getUTCDate() + n);
+  return dt.toISOString().slice(0, 10);
+}
+
+/** Diferença em dias inteiros entre duas datas "YYYY-MM-DD" (b - a). */
+export function daysBetween(aIso: string, bIso: string): number {
+  return Math.round((utcMidnight(bIso) - utcMidnight(aIso)) / 86400000);
+}
+
 /**
  * Formata uma data "YYYY-MM-DD" (sem hora) de forma legível em pt-BR, ex.:
  * "terça-feira, 18/08/2026". Constrói a data ao meio-dia UTC para não sofrer

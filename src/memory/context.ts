@@ -466,6 +466,112 @@ export async function registrarCadastro(dados: CadastroInput): Promise<string[]>
   return waIds;
 }
 
+/* ---------- Documentos e prazos da obra ---------- */
+
+export type TipoDocumento =
+  | "alvara"
+  | "art"
+  | "rrt"
+  | "aso"
+  | "licenca"
+  | "seguro"
+  | "contrato"
+  | "certidao"
+  | "outro";
+
+export interface DocumentoRow {
+  id: number;
+  user_wa: string;
+  obra: string | null;
+  tipo: TipoDocumento;
+  descricao: string;
+  numero: string | null;
+  emissao: string | null;
+  vencimento: string | null;
+  responsavel: string | null;
+  status: "ativo" | "arquivado";
+  lembrete_event_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Registra um documento/prazo da obra (alvará, ART, ASO, licença, etc.). */
+export async function registrarDocumento(
+  userWa: string,
+  params: {
+    tipo?: TipoDocumento;
+    descricao: string;
+    obra?: string | null;
+    numero?: string | null;
+    emissao?: string | null;
+    vencimento?: string | null;
+    responsavel?: string | null;
+  },
+): Promise<DocumentoRow> {
+  const supabase = getSupabase();
+  const row: Record<string, unknown> = {
+    user_wa: userWa,
+    tipo: params.tipo ?? "outro",
+    descricao: params.descricao,
+    obra: params.obra ?? null,
+    numero: params.numero ?? null,
+    emissao: params.emissao ?? null,
+    vencimento: params.vencimento ?? null,
+    responsavel: params.responsavel ?? null,
+  };
+
+  const { data, error } = await supabase
+    .from("secretaria_documentos")
+    .insert(row)
+    .select("*")
+    .single();
+
+  if (error) throw new Error(`Falha ao registrar documento: ${error.message}`);
+  return data as DocumentoRow;
+}
+
+/** Vincula o id do evento de lembrete (agenda) a um documento já criado. */
+export async function setDocumentoLembrete(
+  userWa: string,
+  documentoId: number,
+  eventId: string,
+): Promise<void> {
+  const supabase = getSupabase();
+  const { error } = await supabase
+    .from("secretaria_documentos")
+    .update({ lembrete_event_id: eventId, updated_at: new Date().toISOString() })
+    .eq("user_wa", userWa)
+    .eq("id", documentoId);
+  if (error) {
+    console.error(`Falha ao vincular lembrete ao documento ${documentoId}: ${error.message}`);
+  }
+}
+
+/** Consulta documentos, por obra/tipo, mais próximos do vencimento primeiro. */
+export async function consultarDocumentos(
+  userWa: string,
+  filtros: {
+    obra?: string | null;
+    tipo?: TipoDocumento | null;
+    incluirArquivados?: boolean;
+  } = {},
+): Promise<DocumentoRow[]> {
+  const supabase = getSupabase();
+  let query = supabase
+    .from("secretaria_documentos")
+    .select("*")
+    .eq("user_wa", userWa)
+    .order("vencimento", { ascending: true, nullsFirst: false });
+
+  if (!filtros.incluirArquivados) query = query.eq("status", "ativo");
+  if (filtros.obra) query = query.ilike("obra", `%${filtros.obra}%`);
+  if (filtros.tipo) query = query.eq("tipo", filtros.tipo);
+
+  const { data, error } = await query;
+  if (error) throw new Error(`Falha ao consultar documentos: ${error.message}`);
+  return (data ?? []) as DocumentoRow[];
+}
+
 /* ---------- Tokens do Google OAuth (calendário por usuário) ---------- */
 
 export interface OAuthTokenRow {

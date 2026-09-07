@@ -100,13 +100,16 @@ WhatsApp. Eventos de status (sent/delivered/read/failed) são logados.
 - `secretaria_oauth_tokens` — tokens do Google OAuth por usuário (PK user_wa;
   refresh_token, access_token, expiry, scope, google_email). Uma linha por
   variante de wa_id.
+- `secretaria_documentos` — documentos/prazos da obra (alvará, ART/RRT, ASO,
+  licença, seguro, contrato, certidão; vencimento; lembrete_event_id do evento
+  na agenda). `registrar_documento` cria o lembrete (padrão 30 dias antes).
 
 ## Ferramentas do agente
 `create_calendar_event`, `update_calendar_event`, `search_calendar_events`,
 `conectar_agenda` (gera link OAuth p/ o usuário conectar a própria agenda),
 `save_memory`, `get_pending`, `registrar_custo`, `relatorio_custos`,
 `registrar_rdo`, `consultar_rdo`, `registrar_foto`, `consultar_fotos`,
-`gerar_rdo_pdf`.
+`gerar_rdo_pdf`, `registrar_documento`, `consultar_documentos`.
 
 ## Onboarding do beta (site + OAuth) — desde 07/09/2026
 - **Site de cadastro:** `GET/POST /cadastro` (`api/cadastro.ts`, rewrite no

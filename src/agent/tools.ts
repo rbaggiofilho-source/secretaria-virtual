@@ -9,21 +9,27 @@ import { oauthConfigured, signState } from "../oauth/google.js";
 import { buildRdoPdf } from "../pdf/rdo.js";
 import { sendDocumentMessage, sendTextMessage, uploadMedia } from "../whatsapp/client.js";
 import {
+  consultarDocumentos,
   consultarFotos,
   consultarRDO,
   getOAuthToken,
   getPending,
   registrarCusto,
+  registrarDocumento,
   registrarFoto,
   registrarRDO,
   relatorioCustos,
   saveMemory,
+  setDocumentoLembrete,
   type CategoriaCusto,
+  type DocumentoRow,
   type EfetivoItem,
+  type TipoDocumento,
   type TipoFoto,
   type UsuarioRow,
 } from "../memory/context.js";
 import { getEnv } from "../config/env.js";
+import { addDays, daysBetween, formatDateBr, todayIsoDate } from "../util/datetime.js";
 import type { MemoryKind } from "../memory/supabase.js";
 
 /**
@@ -266,6 +272,51 @@ export const TOOLS: Anthropic.Tool[] = [
         ate: { type: "string", description: "Data final YYYY-MM-DD (opcional)" },
       },
       required: ["obra"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "registrar_documento",
+    description:
+      "Registra um DOCUMENTO ou PRAZO da obra (alvará, ART, RRT, ASO, licença ambiental, seguro, contrato, certidão, etc.) com sua data de vencimento. Use quando o usuário mencionar um documento com validade/prazo (ex.: 'o alvará da obra do centro vence em 10/12', 'ART protocolo 123 emitida hoje'). Extraia tipo, descrição, número (se houver), emissão e vencimento. Se houver vencimento e a agenda estiver conectada, o sistema cria automaticamente um LEMBRETE na agenda (por padrão 30 dias antes). Datas em YYYY-MM-DD. Se a obra não estiver clara, pergunte.",
+    input_schema: {
+      type: "object",
+      properties: {
+        tipo: {
+          type: "string",
+          enum: ["alvara", "art", "rrt", "aso", "licenca", "seguro", "contrato", "certidao", "outro"],
+          description: "Tipo do documento",
+        },
+        descricao: { type: "string", description: "Descrição curta do documento (ex.: 'Alvará de construção')" },
+        obra: { type: "string", description: "Obra associada (use o apelido se houver)" },
+        numero: { type: "string", description: "Número/protocolo do documento (opcional)" },
+        emissao: { type: "string", description: "Data de emissão YYYY-MM-DD (opcional)" },
+        vencimento: { type: "string", description: "Data de vencimento YYYY-MM-DD (opcional, mas recomendado)" },
+        responsavel: { type: "string", description: "Responsável técnico/emissor (opcional)" },
+        dias_antes_lembrete: {
+          type: "integer",
+          description: "Quantos dias antes do vencimento criar o lembrete na agenda (padrão 30)",
+        },
+      },
+      required: ["descricao"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "consultar_documentos",
+    description:
+      "Lista os documentos/prazos da obra, com o status de cada um (vencido, vence em X dias, válido), do mais próximo do vencimento para o mais distante. Use quando o usuário perguntar sobre documentos, prazos, vencimentos, o que está para vencer, ou a situação de uma obra (ex.: 'o que vence esse mês?', 'quais documentos da CCC?'). Pode filtrar por obra e tipo.",
+    input_schema: {
+      type: "object",
+      properties: {
+        obra: { type: "string", description: "Filtrar por obra (opcional)" },
+        tipo: {
+          type: "string",
+          enum: ["alvara", "art", "rrt", "aso", "licenca", "seguro", "contrato", "certidao", "outro"],
+          description: "Filtrar por tipo (opcional)",
+        },
+      },
+      required: [],
       additionalProperties: false,
     },
   },
@@ -580,6 +631,108 @@ export async function runTool(
         return {
           isError: false,
           text: JSON.stringify({ ok: true, enviado: true, dias: rdos.length }),
+        };
+      }
+
+      case "registrar_documento": {
+        const vencimento = input.vencimento ? String(input.vencimento) : null;
+        const doc = await registrarDocumento(userWa, {
+          tipo: input.tipo ? (String(input.tipo) as TipoDocumento) : undefined,
+          descricao: String(input.descricao),
+          obra: input.obra ? String(input.obra) : null,
+          numero: input.numero ? String(input.numero) : null,
+          emissao: input.emissao ? String(input.emissao) : null,
+          vencimento,
+          responsavel: input.responsavel ? String(input.responsavel) : null,
+        });
+
+        // Cria o lembrete na agenda, se houver vencimento futuro e agenda conectada.
+        let lembrete: string;
+        if (!vencimento) {
+          lembrete = "sem_vencimento";
+        } else {
+          const hoje = todayIsoDate();
+          if (daysBetween(hoje, vencimento) < 0) {
+            lembrete = "ja_vencido"; // não agenda lembrete para algo já vencido
+          } else {
+            const calAuth = await resolveCalAuth();
+            if (!calAuth) {
+              lembrete = "sem_agenda"; // registra o doc, mas não tem onde lembrar
+            } else {
+              const diasAntes =
+                typeof input.dias_antes_lembrete === "number" && input.dias_antes_lembrete >= 0
+                  ? input.dias_antes_lembrete
+                  : 30;
+              let quando = addDays(vencimento, -diasAntes);
+              if (daysBetween(hoje, quando) < 0) quando = hoje; // não agenda no passado
+              try {
+                const ev = await createCalendarEvent(
+                  {
+                    title: `📄 ${doc.descricao} vence ${formatDateBr(vencimento)}`,
+                    startIso: `${quando}T09:00:00-03:00`,
+                    endIso: `${quando}T09:30:00-03:00`,
+                    description:
+                      `Documento: ${doc.descricao} (${doc.tipo})` +
+                      (doc.obra ? `\nObra: ${doc.obra}` : "") +
+                      (doc.numero ? `\nNº: ${doc.numero}` : "") +
+                      (doc.responsavel ? `\nResponsável: ${doc.responsavel}` : "") +
+                      `\nVencimento: ${formatDateBr(vencimento)}`,
+                    reminderMinutes: 0,
+                  },
+                  calAuth,
+                );
+                await setDocumentoLembrete(userWa, doc.id, ev.id);
+                lembrete = "agendado";
+              } catch (e) {
+                console.error(
+                  `[documento] falha ao criar lembrete: ${e instanceof Error ? e.message : String(e)}`,
+                );
+                lembrete = "falha_lembrete";
+              }
+            }
+          }
+        }
+
+        return {
+          isError: false,
+          text: JSON.stringify({
+            ok: true,
+            id: doc.id,
+            tipo: doc.tipo,
+            descricao: doc.descricao,
+            obra: doc.obra,
+            vencimento: doc.vencimento,
+            lembrete,
+          }),
+        };
+      }
+
+      case "consultar_documentos": {
+        const docs = await consultarDocumentos(userWa, {
+          obra: input.obra ? String(input.obra) : null,
+          tipo: input.tipo ? (String(input.tipo) as TipoDocumento) : null,
+        });
+        const hoje = todayIsoDate();
+        const situacao = (d: DocumentoRow): string => {
+          if (!d.vencimento) return "sem vencimento";
+          const dias = daysBetween(hoje, d.vencimento);
+          if (dias < 0) return `vencido há ${Math.abs(dias)} dia(s)`;
+          if (dias === 0) return "vence hoje";
+          return `vence em ${dias} dia(s)`;
+        };
+        return {
+          isError: false,
+          text: JSON.stringify({
+            ok: true,
+            documentos: docs.map((d) => ({
+              tipo: d.tipo,
+              descricao: d.descricao,
+              obra: d.obra,
+              numero: d.numero,
+              vencimento: d.vencimento,
+              situacao: situacao(d),
+            })),
+          }),
         };
       }
 

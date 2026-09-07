@@ -55,6 +55,27 @@ create table if not exists public.secretaria_oauth_tokens (
 
 alter table public.secretaria_oauth_tokens enable row level security;
 
+-- Documentos e prazos da obra (alvará, ART/RRT, ASO, licença, seguro, etc.),
+-- com vencimento e o id do evento de lembrete criado na agenda do usuário.
+create table if not exists public.secretaria_documentos (
+  id                bigint generated always as identity primary key,
+  user_wa           text        not null,
+  obra              text,
+  tipo              text        not null default 'outro'
+                    check (tipo in ('alvara','art','rrt','aso','licenca','seguro','contrato','certidao','outro')),
+  descricao         text        not null,
+  numero            text,
+  emissao           date,
+  vencimento        date,
+  responsavel       text,
+  status            text        not null default 'ativo' check (status in ('ativo','arquivado')),
+  lembrete_event_id text,
+  created_at        timestamptz not null default now(),
+  updated_at        timestamptz not null default now()
+);
+
+alter table public.secretaria_documentos enable row level security;
+
 -- Observação sobre RLS:
 -- O backend acessa o Postgres com a SERVICE ROLE KEY, que ignora Row Level
 -- Security. Estas tabelas nunca são expostas ao cliente/browser, então RLS
