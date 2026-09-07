@@ -20,7 +20,9 @@ export default {
     }
 
     const url = new URL(request.url);
-    const state = url.searchParams.get("s") ?? "";
+    // Limpa o `s`: apps de mensagem às vezes grudam pontuação (ex.: markdown
+    // "**") no fim do link clicável. Só existem no token base64url + ".".
+    const state = (url.searchParams.get("s") ?? "").replace(/[^A-Za-z0-9._-]/g, "");
     const waId = verifyState(state);
     if (!waId) {
       return errorPage(

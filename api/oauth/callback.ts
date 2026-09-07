@@ -26,7 +26,7 @@ export default {
     }
 
     const code = url.searchParams.get("code") ?? "";
-    const state = url.searchParams.get("state") ?? "";
+    const state = (url.searchParams.get("state") ?? "").replace(/[^A-Za-z0-9._-]/g, "");
     const waId = verifyState(state);
     if (!waId || !code) {
       return errorPage(

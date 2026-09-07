@@ -90,7 +90,7 @@ export const TOOLS: Anthropic.Tool[] = [
   {
     name: "conectar_agenda",
     description:
-      "Gera um link para o usuário conectar a PRÓPRIA agenda do Google à Rosana (login/autorização Google). Use quando o usuário ainda não tem a agenda conectada e quer criar/ver compromissos, ou quando ele pedir para conectar/trocar a agenda. Depois de chamar, mande o link e explique em 1 frase que é só abrir, escolher a conta Google e autorizar. Não repita o link em toda mensagem.",
+      "Gera um link para o usuário conectar a PRÓPRIA agenda do Google à Rosana (login/autorização Google). Use quando o usuário ainda não tem a agenda conectada e quer criar/ver compromissos, ou quando ele pedir para conectar/trocar a agenda. Depois de chamar, mande o link EXATAMENTE como veio (a URL crua), em uma linha só, SEM markdown, SEM asteriscos, SEM parênteses e sem nenhum caractere colado nele — senão o WhatsApp corrompe o link. Explique em 1 frase que é só abrir, escolher a conta Google e autorizar. Não repita o link em toda mensagem.",
     input_schema: {
       type: "object",
       properties: {},
