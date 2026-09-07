@@ -410,3 +410,58 @@ export async function getUsuario(userWa: string): Promise<UsuarioRow | null> {
   }
   return (data as UsuarioRow | null) ?? null;
 }
+
+/**
+ * Gera as variantes de wa_id de um número BR de celular. A Meta pode entregar
+ * COM ou SEM o nono dígito, então guardamos as duas formas (12 e 13 dígitos)
+ * para o mesmo usuário — igual fizemos com a Malu.
+ */
+export function waIdVariants(input: string): string[] {
+  const d = input.replace(/\D/g, "");
+  const out = new Set<string>();
+  if (d) out.add(d);
+  // BR celular: 55 + DDD(2) + numero. 13 dígitos = com 9; 12 = sem 9.
+  if (d.startsWith("55") && d.length === 13 && d[4] === "9") {
+    out.add(d.slice(0, 4) + d.slice(5)); // remove o 9 -> 12 dígitos
+  } else if (d.startsWith("55") && d.length === 12) {
+    out.add(d.slice(0, 4) + "9" + d.slice(4)); // insere o 9 -> 13 dígitos
+  }
+  return [...out];
+}
+
+export interface CadastroInput {
+  nomeCompleto: string;
+  cpf?: string | null;
+  endereco?: string | null;
+  profissao?: string | null;
+  whatsappInput: string;
+}
+
+/**
+ * Cria/atualiza o cadastro de um usuário do beta (uma linha por variante de
+ * wa_id). status='ativo', dono=false. Retorna os wa_ids gravados.
+ */
+export async function registrarCadastro(dados: CadastroInput): Promise<string[]> {
+  const supabase = getSupabase();
+  const waIds = waIdVariants(dados.whatsappInput);
+  if (waIds.length === 0) throw new Error("Número de WhatsApp inválido.");
+
+  const nome = dados.nomeCompleto.trim().split(/\s+/)[0] || dados.nomeCompleto.trim();
+  const rows = waIds.map((user_wa) => ({
+    user_wa,
+    nome,
+    nome_completo: dados.nomeCompleto.trim(),
+    cpf: dados.cpf?.trim() || null,
+    endereco: dados.endereco?.trim() || null,
+    profissao: dados.profissao?.trim() || null,
+    status: "ativo",
+    ativo: true,
+    dono: false,
+  }));
+
+  const { error } = await supabase
+    .from("secretaria_usuarios")
+    .upsert(rows, { onConflict: "user_wa" });
+  if (error) throw new Error(`Falha ao gravar cadastro: ${error.message}`);
+  return waIds;
+}
