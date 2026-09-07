@@ -75,7 +75,8 @@ WhatsApp. Eventos de status (sent/delivered/read/failed) são logados.
 - `src/agent/secretary.ts` — loop tool-use com Claude; conteúdo multimodal (imagem+texto).
 - `src/agent/system-prompt.ts` — persona + regras (obra, RDO, visão, áudio/transcrição, responsabilidade técnica).
 - `src/agent/tools.ts` — definição + dispatch das ferramentas.
-- `src/memory/context.ts` + `supabase.ts` — acesso a dados (memória, histórico, custos, RDO, fotos, dedup).
+- `src/memory/context.ts` + `supabase.ts` — acesso a dados (memória, histórico, custos, RDO, fotos, documentos, dedup).
+- `src/memory/storage.ts` — arquivos das fotos no Supabase Storage (bucket privado `secretaria-fotos`; upload no ingest, download p/ reenvio).
 - `src/stt/{index,groq,openai}.ts` — transcrição.
 - `src/calendar/google.ts` — Google Agenda (conta de serviço OU OAuth por usuário; `CalendarAuth`).
 - `src/oauth/google.ts` — OAuth Google (URL de consentimento, troca de code, state assinado).
@@ -109,7 +110,8 @@ WhatsApp. Eventos de status (sent/delivered/read/failed) são logados.
 `conectar_agenda` (gera link OAuth p/ o usuário conectar a própria agenda),
 `save_memory`, `get_pending`, `registrar_custo`, `relatorio_custos`,
 `registrar_rdo`, `consultar_rdo`, `registrar_foto`, `consultar_fotos`,
-`gerar_rdo_pdf`, `registrar_documento`, `consultar_documentos`.
+`enviar_foto` (reenvia imagem arquivada), `gerar_rdo_pdf`,
+`registrar_documento`, `consultar_documentos`.
 
 ## Onboarding do beta (site + OAuth) — desde 07/09/2026
 - **Site de cadastro:** `GET/POST /cadastro` (`api/cadastro.ts`, rewrite no
@@ -180,8 +182,8 @@ WhatsApp. Eventos de status (sent/delivered/read/failed) são logados.
 3. Configurar alertas de crédito baixo nos painéis Anthropic + Groq (não há API de
    saldo; a Rosana não consegue avisar sozinha).
 4. (Opcional) Verificação da empresa na Meta + número brasileiro próprio (produção).
-5. (Backlog) Arquivar o arquivo da foto no Storage; materiais/compras/cotações;
-   prazos de documentos (alvará/ART/ASO); DDS/EPI.
+5. (Backlog) materiais/compras/cotações; DDS/EPI. (Feito: arquivo da foto no
+   Storage + reenvio; prazos de documentos alvará/ART/ASO com lembrete.)
 6. (Grande) Virada multi-inquilino para virar SaaS (contas, login, Google via
    OAuth por cliente, cobrança, onboarding self-service, roteamento multi-número).
 

@@ -25,6 +25,8 @@ export async function runSecretary(params: {
   context: OwnerContext;
   /** Imagens enviadas com a mensagem atual (foto de obra, nota fiscal, etc.). */
   images?: Array<{ base64: string; mimeType: string }>;
+  /** Caminhos das imagens já arquivadas no Storage, na ordem de `images`. */
+  imagePaths?: string[];
   /** A mensagem atual veio de um áudio (foi transcrita antes de chegar aqui). */
   wasAudio?: boolean;
 }): Promise<string> {
@@ -66,6 +68,10 @@ export async function runSecretary(params: {
     { role: "user", content: currentContent },
   ];
 
+  // Contexto do turno passado às tools: fila de caminhos das imagens já
+  // arquivadas, que o registrar_foto consome para ligar a foto ao arquivo.
+  const toolCtx = { imagePaths: [...(params.imagePaths ?? [])] };
+
   for (let turn = 0; turn < MAX_TURNS; turn++) {
     const response = await client.messages.create({
       model: env.ANTHROPIC_MODEL,
@@ -89,6 +95,7 @@ export async function runSecretary(params: {
           params.usuario,
           tu.name,
           (tu.input ?? {}) as Record<string, unknown>,
+          toolCtx,
         );
         toolResults.push({
           type: "tool_result",

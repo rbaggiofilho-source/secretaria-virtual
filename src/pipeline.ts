@@ -7,6 +7,7 @@ import {
   loadRecentHistory,
   type UsuarioRow,
 } from "./memory/context.js";
+import { uploadFoto } from "./memory/storage.js";
 import { transcribe } from "./stt/index.js";
 import { downloadMedia, sendTextMessage } from "./whatsapp/client.js";
 import type { WhatsAppMessage } from "./whatsapp/types.js";
@@ -55,6 +56,9 @@ export async function handleIncomingMessage(message: WhatsAppMessage): Promise<v
 
   let userText: string;
   let images: Array<{ base64: string; mimeType: string }> = [];
+  // Caminhos dos arquivos já arquivados no Storage (para o registrar_foto ligar
+  // a foto ao arquivo). Vazio quando não há imagem ou o arquivamento falhou.
+  const imagePaths: string[] = [];
 
   try {
     if (message.type === "image") {
@@ -66,6 +70,13 @@ export async function handleIncomingMessage(message: WhatsAppMessage): Promise<v
       console.log(`[image] Imagem baixada: ${buffer.length} bytes (${mimeType}).`);
       images = [{ base64: buffer.toString("base64"), mimeType }];
       userText = img.caption ?? "";
+      // Arquiva o arquivo no Storage (não crítico): se falhar, seguimos com a
+      // visão/descrição normalmente, só sem guardar o arquivo.
+      try {
+        imagePaths.push(await uploadFoto(from, buffer, mimeType));
+      } catch (err) {
+        logError("arquivar imagem no Storage", err);
+      }
     } else {
       userText = await resolveUserText(message);
     }
@@ -93,6 +104,7 @@ export async function handleIncomingMessage(message: WhatsAppMessage): Promise<v
       usuario,
       userText,
       images,
+      imagePaths,
       history,
       context,
       wasAudio: message.type === "audio",

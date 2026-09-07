@@ -358,6 +358,19 @@ export async function registrarFoto(
   return data as FotoRow;
 }
 
+/** Busca uma foto específica do usuário pelo id (para reenviar o arquivo). */
+export async function getFoto(userWa: string, id: number): Promise<FotoRow | null> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from("secretaria_fotos")
+    .select("*")
+    .eq("user_wa", userWa)
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw new Error(`Falha ao buscar foto: ${error.message}`);
+  return (data as FotoRow | null) ?? null;
+}
+
 /** Consulta o registro fotográfico por obra, tipo e/ou intervalo (YYYY-MM-DD). */
 export async function consultarFotos(
   userWa: string,

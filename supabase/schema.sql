@@ -76,6 +76,13 @@ create table if not exists public.secretaria_documentos (
 
 alter table public.secretaria_documentos enable row level security;
 
+-- Storage: as imagens (fotos/notas fiscais) ficam no bucket PRIVADO
+-- 'secretaria-fotos' (não em tabela). Criar uma vez:
+--   insert into storage.buckets (id, name, public)
+--   values ('secretaria-fotos','secretaria-fotos', false) on conflict do nothing;
+-- O caminho de cada arquivo começa pelo user_wa (isolamento). Acesso só pelo
+-- backend com a service key (que ignora as policies de Storage).
+
 -- Observação sobre RLS:
 -- O backend acessa o Postgres com a SERVICE ROLE KEY, que ignora Row Level
 -- Security. Estas tabelas nunca são expostas ao cliente/browser, então RLS

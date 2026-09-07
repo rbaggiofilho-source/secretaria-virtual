@@ -108,6 +108,35 @@ export async function sendDocumentMessage(
   }
 }
 
+/** Envia uma imagem (por media_id) para o usuário no WhatsApp. */
+export async function sendImageMessage(
+  to: string,
+  mediaId: string,
+  caption?: string,
+): Promise<void> {
+  const env = getEnv();
+  const url = `${GRAPH_BASE}/${env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${env.WHATSAPP_TOKEN}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to,
+      type: "image",
+      image: { id: mediaId, caption },
+    }),
+  });
+  if (!res.ok) {
+    const detail = await safeErrorText(res);
+    throw new Error(`Falha ao enviar imagem no WhatsApp (${res.status}): ${detail}`);
+  }
+}
+
 /**
  * Baixa uma mídia (áudio) do WhatsApp a partir do media_id.
  * Fluxo em 2 passos exigido pela Graph API:

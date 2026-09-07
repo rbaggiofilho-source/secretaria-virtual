@@ -7,11 +7,17 @@ import {
 } from "../calendar/google.js";
 import { oauthConfigured, signState } from "../oauth/google.js";
 import { buildRdoPdf } from "../pdf/rdo.js";
-import { sendDocumentMessage, sendTextMessage, uploadMedia } from "../whatsapp/client.js";
+import {
+  sendDocumentMessage,
+  sendImageMessage,
+  sendTextMessage,
+  uploadMedia,
+} from "../whatsapp/client.js";
 import {
   consultarDocumentos,
   consultarFotos,
   consultarRDO,
+  getFoto,
   getOAuthToken,
   getPending,
   registrarCusto,
@@ -28,6 +34,7 @@ import {
   type TipoFoto,
   type UsuarioRow,
 } from "../memory/context.js";
+import { downloadFoto } from "../memory/storage.js";
 import { getEnv } from "../config/env.js";
 import { addDays, daysBetween, formatDateBr, todayIsoDate } from "../util/datetime.js";
 import type { MemoryKind } from "../memory/supabase.js";
@@ -261,6 +268,19 @@ export const TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: "enviar_foto",
+    description:
+      "Reenvia ao usuário uma FOTO/imagem que ele já mandou antes e que ficou arquivada. Use quando ele pedir para ver/reenviar uma foto ou nota fiscal específica (ex.: 'me manda de novo a foto da laje da CCC', 'reenvia aquela nota fiscal'). Primeiro use consultar_fotos para achar o id da imagem certa; depois chame enviar_foto com esse foto_id. O sistema envia a imagem no WhatsApp e você só confirma por texto.",
+    input_schema: {
+      type: "object",
+      properties: {
+        foto_id: { type: "integer", description: "id da foto (obtido em consultar_fotos)" },
+      },
+      required: ["foto_id"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "gerar_rdo_pdf",
     description:
       "Gera o PDF do Diário de Obra (RDO) de uma obra e ENVIA como documento no WhatsApp do usuário. Use quando ele(a) pedir o PDF/relatório do diário (ex.: 'me manda o PDF do diário da CCC desse mês'). Informe obra e, se ele delimitar, o período (desde/ate em YYYY-MM-DD). Depois de chamar, confirme por texto que o PDF foi enviado.",
@@ -330,6 +350,7 @@ export async function runTool(
   usuario: UsuarioRow,
   name: string,
   input: Record<string, unknown>,
+  ctx?: { imagePaths?: string[] },
 ): Promise<{ text: string; isError: boolean }> {
   const userWa = usuario.user_wa;
 
@@ -568,11 +589,16 @@ export async function runTool(
       }
 
       case "registrar_foto": {
+        // Liga a foto ao arquivo já arquivado no Storage (consumido da fila do
+        // turno). Se não houver, salva só a descrição, como antes.
+        const caminho =
+          ctx?.imagePaths && ctx.imagePaths.length > 0 ? ctx.imagePaths.shift()! : null;
         const row = await registrarFoto(userWa, {
           obra: input.obra ? String(input.obra) : null,
           tipo: input.tipo ? (String(input.tipo) as TipoFoto) : undefined,
           descricao: input.descricao ? String(input.descricao) : null,
           data: input.data ? String(input.data) : null,
+          caminho,
         });
         return {
           isError: false,
@@ -582,6 +608,7 @@ export async function runTool(
             obra: row.obra,
             tipo: row.tipo,
             data: row.data,
+            arquivada: Boolean(caminho),
           }),
         };
       }
@@ -598,12 +625,46 @@ export async function runTool(
           text: JSON.stringify({
             ok: true,
             fotos: rows.map((r) => ({
+              id: r.id,
               data: r.data,
               obra: r.obra,
               tipo: r.tipo,
               descricao: r.descricao,
+              arquivada: Boolean(r.caminho),
             })),
           }),
+        };
+      }
+
+      case "enviar_foto": {
+        const fotoId = Number(input.foto_id);
+        const foto = await getFoto(userWa, fotoId);
+        if (!foto) {
+          return {
+            isError: false,
+            text: JSON.stringify({ ok: false, error: "Foto não encontrada." }),
+          };
+        }
+        if (!foto.caminho) {
+          return {
+            isError: false,
+            text: JSON.stringify({
+              ok: false,
+              error:
+                "Essa foto foi registrada só com a descrição (sem arquivo guardado), então não dá para reenviar a imagem.",
+            }),
+          };
+        }
+        const { bytes, mimeType } = await downloadFoto(foto.caminho);
+        const filename = `foto_${foto.id}.${mimeType.split("/")[1] ?? "jpg"}`;
+        const mediaId = await uploadMedia(bytes, mimeType, filename);
+        const caption = foto.descricao
+          ? `${foto.descricao}${foto.obra ? ` — ${foto.obra}` : ""}`
+          : undefined;
+        await sendImageMessage(userWa, mediaId, caption);
+        return {
+          isError: false,
+          text: JSON.stringify({ ok: true, enviado: true, id: foto.id }),
         };
       }
 
