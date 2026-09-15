@@ -21,6 +21,7 @@ import {
   getFoto,
   getOAuthToken,
   getPending,
+  panoramaUsuario,
   registrarCusto,
   registrarDocumento,
   registrarFoto,
@@ -153,6 +154,17 @@ export const TOOLS: Anthropic.Tool[] = [
           },
         },
       },
+      required: [],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "resumo_geral",
+    description:
+      "Retorna TUDO que está salvo do usuário: fatos, obras, apelidos, preferências, pendências abertas, documentos/prazos, materiais/compras e a contagem de custos, fotos e RDOs. Use quando ele pedir para ver/exportar tudo que você tem guardado, um panorama geral, 'o que você sabe sobre mim/minhas obras', ou uma auditoria da memória. Apresente organizado por seção; some as contagens quando não houver itens.",
+    input_schema: {
+      type: "object",
+      properties: {},
       required: [],
       additionalProperties: false,
     },
@@ -594,6 +606,11 @@ export async function runTool(
           isError: false,
           text: JSON.stringify({ ok: true, id: row.id, kind: row.kind }),
         };
+      }
+
+      case "resumo_geral": {
+        const p = await panoramaUsuario(userWa);
+        return { isError: false, text: JSON.stringify({ ok: true, ...p }) };
       }
 
       case "get_pending": {

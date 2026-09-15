@@ -112,7 +112,8 @@ WhatsApp. Eventos de status (sent/delivered/read/failed) são logados.
 ## Ferramentas do agente
 `create_calendar_event`, `update_calendar_event`, `search_calendar_events`,
 `conectar_agenda` (gera link OAuth p/ o usuário conectar a própria agenda),
-`save_memory`, `get_pending`, `registrar_custo`, `relatorio_custos`,
+`save_memory`, `get_pending`, `resumo_geral` (panorama/export de tudo salvo),
+`registrar_custo`, `relatorio_custos`,
 `registrar_rdo`, `consultar_rdo`, `registrar_foto`, `consultar_fotos`,
 `enviar_foto` (reenvia imagem arquivada), `gerar_rdo_pdf`,
 `registrar_documento`, `consultar_documentos`,

@@ -40,6 +40,53 @@ export async function loadOwnerContext(userWa: string): Promise<OwnerContext> {
   };
 }
 
+/**
+ * Panorama consolidado de TUDO que está salvo do usuário (para o comando
+ * "me mostra tudo que você tem"/auditoria). Reúne memória + pendências +
+ * documentos + materiais + contadores de custos/fotos/RDO em uma passada.
+ * Custos/fotos/RDO entram como CONTAGEM (podem ser muitos); o resto vem inteiro.
+ */
+export interface Panorama {
+  fatos: string[];
+  obras: string[];
+  apelidos: string[];
+  preferencias: string[];
+  pendencias: Array<{ content: string; obra: string | null }>;
+  documentos: Array<{ tipo: string; descricao: string; obra: string | null; vencimento: string | null }>;
+  materiais: Array<{ item: string; obra: string | null; status: string }>;
+  custos: { total: number; lancamentos: number };
+  fotos: number;
+  rdos: number;
+}
+
+export async function panoramaUsuario(userWa: string): Promise<Panorama> {
+  const [ctx, docs, mats, custos, fotos, rdos] = await Promise.all([
+    loadOwnerContext(userWa),
+    consultarDocumentos(userWa, {}),
+    consultarMateriais(userWa, {}),
+    relatorioCustos(userWa, {}),
+    consultarFotos(userWa, {}),
+    consultarRDO(userWa, {}),
+  ]);
+  return {
+    fatos: ctx.fatos,
+    obras: ctx.obras,
+    apelidos: ctx.apelidos,
+    preferencias: ctx.preferencias,
+    pendencias: ctx.pendenciasAbertas.map((p) => ({ content: p.content, obra: p.obra })),
+    documentos: docs.map((d) => ({
+      tipo: d.tipo,
+      descricao: d.descricao,
+      obra: d.obra,
+      vencimento: d.vencimento,
+    })),
+    materiais: mats.map((m) => ({ item: m.item, obra: m.obra, status: m.status })),
+    custos: { total: custos.total, lancamentos: custos.itens.length },
+    fotos: fotos.length,
+    rdos: rdos.length,
+  };
+}
+
 /** Salva uma nova memória (fato/obra/apelido/pendencia/preferencia). */
 export async function saveMemory(
   userWa: string,
