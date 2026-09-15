@@ -27,6 +27,7 @@ import {
   registrarMaterial,
   registrarRDO,
   relatorioCustos,
+  saveMemories,
   saveMemory,
   setDocumentoLembrete,
   type CategoriaCusto,
@@ -119,21 +120,40 @@ export const TOOLS: Anthropic.Tool[] = [
   {
     name: "save_memory",
     description:
-      "Salva uma memória de longo prazo. kind: 'fato', 'obra', 'apelido', 'pendencia' ou 'preferencia'. Para pendências, informe 'obra' quando fizer sentido.",
+      "Salva memória de longo prazo (persiste no banco — o histórico de conversa NÃO é memória e some depois). kind: 'fato', 'obra', 'apelido', 'pendencia' ou 'preferencia'. Para pendências, informe 'obra' quando fizer sentido. Quando o usuário passar VÁRIOS itens de uma vez (ex.: uma lista de pendências), mande TODOS de uma vez no array 'itens' numa única chamada — não deixe nenhum de fora. Só confirme que salvou DEPOIS de chamar esta tool.",
     input_schema: {
       type: "object",
       properties: {
         kind: {
           type: "string",
           enum: ["fato", "obra", "apelido", "pendencia", "preferencia"],
+          description: "Tipo (para um único item)",
         },
-        content: { type: "string", description: "Conteúdo da memória" },
+        content: { type: "string", description: "Conteúdo da memória (para um único item)" },
         obra: {
           type: "string",
           description: "Obra/local associado (opcional, útil em pendências)",
         },
+        itens: {
+          type: "array",
+          description:
+            "Vários itens de uma vez (use para listas — ex.: 6 pendências de uma obra). Quando presente, os campos avulsos acima são ignorados.",
+          items: {
+            type: "object",
+            properties: {
+              kind: {
+                type: "string",
+                enum: ["fato", "obra", "apelido", "pendencia", "preferencia"],
+              },
+              content: { type: "string", description: "Conteúdo do item" },
+              obra: { type: "string", description: "Obra/local associado (opcional)" },
+            },
+            required: ["kind", "content"],
+            additionalProperties: false,
+          },
+        },
       },
-      required: ["kind", "content"],
+      required: [],
       additionalProperties: false,
     },
   },
@@ -542,6 +562,28 @@ export async function runTool(
       }
 
       case "save_memory": {
+        // Lote: quando o usuário passa uma lista, salva TODOS de uma vez.
+        if (Array.isArray(input.itens) && input.itens.length > 0) {
+          const itens = (input.itens as unknown[]).map((it) => {
+            const o = (it ?? {}) as Record<string, unknown>;
+            return {
+              kind: o.kind as MemoryKind,
+              content: String(o.content ?? ""),
+              obra: o.obra ? String(o.obra) : null,
+            };
+          });
+          const n = await saveMemories(userWa, itens);
+          return { isError: false, text: JSON.stringify({ ok: true, salvos: n }) };
+        }
+        if (!input.content || !input.kind) {
+          return {
+            isError: true,
+            text: JSON.stringify({
+              ok: false,
+              error: "Informe 'kind' e 'content' (ou uma lista em 'itens').",
+            }),
+          };
+        }
         const row = await saveMemory(
           userWa,
           input.kind as MemoryKind,

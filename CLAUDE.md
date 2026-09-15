@@ -163,6 +163,14 @@ WhatsApp. Eventos de status (sent/delivered/read/failed) são logados.
   `secretaria_processed_messages` evita duplicado.
 - **Segurança:** RLS foi ligado em todas as tabelas (antes exposto via anon key).
   App usa só a `service_key`.
+- **"Disse que salvou mas não salvou" (15/09):** o modelo confirmava "registrei a
+  pendência" SEM chamar save_memory; conseguia até "mostrar a lista" porque ela
+  ainda estava no histórico recente — que depois rola pra fora da janela e o item
+  se perde (nunca virou memória). Caso real: pendências da Certive (18/08) só
+  foram parar no banco em 15/09. Correção: (a) save_memory aceita lote (`itens`)
+  p/ salvar listas numa chamada; (b) regra dura no prompt: NUNCA confirmar
+  "registrei/anotei" sem chamar save_memory no mesmo turno, e listar sempre a
+  partir de get_pending, não "de cabeça".
 
 ## Convenções
 - Commit/push só na branch de produção; deploy é automático ao dar push.

@@ -60,6 +60,28 @@ export async function saveMemory(
   return data as MemoryRow;
 }
 
+/**
+ * Salva VÁRIAS memórias de uma vez (ex.: uma lista de pendências passada numa
+ * única mensagem). Um único insert atômico — evita que o modelo "resuma" a
+ * lista em texto em vez de gravar item a item. Retorna quantas foram salvas.
+ */
+export async function saveMemories(
+  userWa: string,
+  itens: Array<{ kind: MemoryKind; content: string; obra?: string | null }>,
+): Promise<number> {
+  if (itens.length === 0) return 0;
+  const supabase = getSupabase();
+  const rows = itens.map((i) => ({
+    user_wa: userWa,
+    kind: i.kind,
+    content: i.content,
+    obra: i.obra ?? null,
+  }));
+  const { error } = await supabase.from("secretaria_memories").insert(rows);
+  if (error) throw new Error(`Falha ao salvar memórias: ${error.message}`);
+  return rows.length;
+}
+
 /** Lista pendências abertas, opcionalmente filtradas por obra/local. */
 export async function getPending(
   userWa: string,
