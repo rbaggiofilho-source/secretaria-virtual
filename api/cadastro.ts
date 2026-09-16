@@ -112,7 +112,7 @@ function formPage(): string {
   <div><label for="profissao">Profissão</label><input id="profissao" name="profissao" type="text" placeholder="Ex.: Engenheiro civil, mestre de obra"></div>
   <div><label for="cpf">CPF</label><input id="cpf" name="cpf" type="text" placeholder="Somente números"></div>
   <div><label for="endereco">Endereço</label><input id="endereco" name="endereco" type="text"></div>
-  <label class="consent"><input type="checkbox" name="consent" value="1" required> Concordo que meus dados sejam usados para operar a Rosana (LGPD).</label>
+  <label class="consent"><input type="checkbox" name="consent" value="1" required> Li e concordo com os <a href="/termos" target="_blank" style="color:var(--amber)">Termos de Uso</a> e a <a href="/privacidade" target="_blank" style="color:var(--amber)">Política de Privacidade</a>, e autorizo o uso dos meus dados para operar a Rosana (LGPD).</label>
   <button type="submit">Criar meu acesso →</button>
 </form>`;
 }

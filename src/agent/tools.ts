@@ -18,6 +18,7 @@ import {
   consultarFotos,
   consultarMateriais,
   consultarRDO,
+  excluirDadosUsuario,
   getFoto,
   getOAuthToken,
   getPending,
@@ -166,6 +167,22 @@ export const TOOLS: Anthropic.Tool[] = [
       type: "object",
       properties: {},
       required: [],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "excluir_meus_dados",
+    description:
+      "Exclui PERMANENTEMENTE a conta e TODOS os dados do usuário (memória, obras, custos, RDO, documentos, materiais, fotos, agenda conectada e a autorização de acesso). Ação IRREVERSÍVEL (LGPD/direito ao esquecimento). Fluxo OBRIGATÓRIO: (1) quando o usuário pedir para excluir a conta/apagar os dados, PRIMEIRO explique o que será apagado e que é irreversível, e peça para ele digitar EXATAMENTE a frase: EXCLUIR MEUS DADOS; (2) só chame esta tool DEPOIS que ele enviar essa frase, passando-a em 'confirmacao'. Se ele não confirmou com a frase exata, NÃO chame — apenas peça a confirmação.",
+    input_schema: {
+      type: "object",
+      properties: {
+        confirmacao: {
+          type: "string",
+          description: "A frase de confirmação exata digitada pelo usuário (ex.: 'EXCLUIR MEUS DADOS').",
+        },
+      },
+      required: ["confirmacao"],
       additionalProperties: false,
     },
   },
@@ -611,6 +628,49 @@ export async function runTool(
       case "resumo_geral": {
         const p = await panoramaUsuario(userWa);
         return { isError: false, text: JSON.stringify({ ok: true, ...p }) };
+      }
+
+      case "excluir_meus_dados": {
+        // A conta do dono/administrador não é excluível por aqui (evita apagar
+        // a conta-mãe por engano num teste).
+        if (usuario.dono) {
+          return {
+            isError: false,
+            text: JSON.stringify({
+              ok: false,
+              error:
+                "A conta do administrador não pode ser excluída por este caminho.",
+            }),
+          };
+        }
+        // Confirmação literal obrigatória (normaliza acentos/caixa/espaços).
+        const conf = String(input.confirmacao ?? "")
+          .normalize("NFD")
+          .replace(/[̀-ͯ]/g, "")
+          .replace(/\s+/g, " ")
+          .trim()
+          .toUpperCase();
+        if (conf !== "EXCLUIR MEUS DADOS") {
+          return {
+            isError: false,
+            text: JSON.stringify({
+              ok: false,
+              precisa_confirmar: true,
+              error:
+                "Confirmação ausente ou incorreta. NÃO exclua. Peça ao usuário para digitar EXATAMENTE: EXCLUIR MEUS DADOS",
+            }),
+          };
+        }
+        const r = await excluirDadosUsuario(userWa);
+        return {
+          isError: false,
+          text: JSON.stringify({
+            ok: true,
+            excluido: true,
+            registros_apagados: r.total,
+            arquivos_apagados: r.arquivos,
+          }),
+        };
       }
 
       case "get_pending": {

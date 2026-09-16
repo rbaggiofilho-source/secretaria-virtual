@@ -1,4 +1,5 @@
 import { getSupabase, type MemoryKind, type MemoryRow } from "./supabase.js";
+import { removeFotos } from "./storage.js";
 
 /**
  * Camada de acesso à memória. Todas as funções são escopadas por user_wa
@@ -546,6 +547,74 @@ export async function registrarCadastro(dados: CadastroInput): Promise<string[]>
     .upsert(rows, { onConflict: "user_wa" });
   if (error) throw new Error(`Falha ao gravar cadastro: ${error.message}`);
   return waIds;
+}
+
+/* ---------- Exclusão de conta (LGPD / direito ao esquecimento) ---------- */
+
+export interface ResultadoExclusao {
+  arquivos: number;
+  registros: Record<string, number>;
+  total: number;
+}
+
+/**
+ * Apaga TODOS os dados do usuário (todas as variantes de wa_id): memória,
+ * conversas, custos, RDO, fotos (arquivo + registro), documentos, materiais,
+ * tokens do Google e, por fim, a autorização de acesso. Irreversível.
+ *
+ * Ordem: remove os arquivos do Storage antes de apagar os registros das fotos
+ * (senão perderíamos os caminhos), e deixa `secretaria_usuarios` por último
+ * (é o que desautoriza o número).
+ */
+export async function excluirDadosUsuario(userWa: string): Promise<ResultadoExclusao> {
+  const supabase = getSupabase();
+  const variantes = waIdVariants(userWa);
+
+  // 1) Arquivos do Storage: pega os caminhos antes de apagar os registros.
+  let arquivos = 0;
+  try {
+    const { data } = await supabase
+      .from("secretaria_fotos")
+      .select("caminho")
+      .in("user_wa", variantes);
+    const caminhos = (data ?? [])
+      .map((r) => (r as { caminho: string | null }).caminho)
+      .filter((c): c is string => Boolean(c));
+    if (caminhos.length > 0) arquivos = await removeFotos(caminhos);
+  } catch (err) {
+    // Não bloqueia a exclusão dos dados por falha ao limpar arquivos.
+    console.error(
+      `[exclusao] falha ao remover arquivos: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+
+  // 2) Apaga os registros de todas as tabelas por user_wa.
+  const tabelas = [
+    "secretaria_memories",
+    "secretaria_conversations",
+    "secretaria_custos",
+    "secretaria_rdo",
+    "secretaria_fotos",
+    "secretaria_documentos",
+    "secretaria_materiais",
+    "secretaria_oauth_tokens",
+    "secretaria_usuarios", // por último: desautoriza o número
+  ];
+
+  const registros: Record<string, number> = {};
+  let total = 0;
+  for (const t of tabelas) {
+    const { error, count } = await supabase
+      .from(t)
+      .delete({ count: "exact" })
+      .in("user_wa", variantes);
+    if (error) throw new Error(`Falha ao excluir de ${t}: ${error.message}`);
+    registros[t] = count ?? 0;
+    total += count ?? 0;
+  }
+
+  console.log(`[exclusao] concluída: ${total} registros, ${arquivos} arquivos.`);
+  return { arquivos, registros, total };
 }
 
 /* ---------- Documentos e prazos da obra ---------- */

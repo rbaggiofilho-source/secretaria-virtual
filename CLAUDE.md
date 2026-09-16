@@ -82,6 +82,8 @@ WhatsApp. Eventos de status (sent/delivered/read/failed) são logados.
 - `src/oauth/google.ts` — OAuth Google (URL de consentimento, troca de code, state assinado).
 - `src/oauth/page.ts` — páginas HTML de fim do fluxo OAuth (sucesso/erro).
 - `api/cadastro.ts` — site de cadastro do beta. `api/oauth/{start,callback}.ts` — fluxo OAuth.
+- `api/privacidade.ts` (/privacidade) e `api/termos.ts` (/termos) — páginas legais (LGPD).
+- Exclusão de conta: `excluirDadosUsuario` (context.ts) apaga tudo por wa_id + arquivos do Storage (`removeFotos`).
 - `src/whatsapp/{client,signature,types}.ts` — envio (texto/documento/upload de mídia), HMAC, tipos.
 - `src/pdf/rdo.ts` — geração do PDF do RDO (pdf-lib).
 - `src/util/datetime.ts` — fuso e formatação de datas.
@@ -113,7 +115,8 @@ WhatsApp. Eventos de status (sent/delivered/read/failed) são logados.
 `create_calendar_event`, `update_calendar_event`, `search_calendar_events`,
 `conectar_agenda` (gera link OAuth p/ o usuário conectar a própria agenda),
 `save_memory`, `get_pending`, `resumo_geral` (panorama/export de tudo salvo),
-`registrar_custo`, `relatorio_custos`,
+`excluir_meus_dados` (exclusão de conta LGPD; exige a frase "EXCLUIR MEUS DADOS";
+dono é blindado), `registrar_custo`, `relatorio_custos`,
 `registrar_rdo`, `consultar_rdo`, `registrar_foto`, `consultar_fotos`,
 `enviar_foto` (reenvia imagem arquivada), `gerar_rdo_pdf`,
 `registrar_documento`, `consultar_documentos`,

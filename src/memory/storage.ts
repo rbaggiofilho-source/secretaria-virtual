@@ -52,6 +52,16 @@ export async function uploadFoto(
   return path;
 }
 
+/** Remove arquivos do bucket (usado na exclusão de conta / LGPD). */
+export async function removeFotos(paths: string[]): Promise<number> {
+  const limpos = paths.filter((p) => typeof p === "string" && p.length > 0);
+  if (limpos.length === 0) return 0;
+  const supabase = getSupabase();
+  const { error } = await supabase.storage.from(BUCKET).remove(limpos);
+  if (error) throw new Error(`Falha ao remover arquivos do Storage: ${error.message}`);
+  return limpos.length;
+}
+
 /** Baixa os bytes de uma imagem arquivada (para reenviar no WhatsApp). */
 export async function downloadFoto(
   path: string,

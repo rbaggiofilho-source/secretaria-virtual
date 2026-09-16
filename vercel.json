@@ -7,6 +7,7 @@
   },
   "rewrites": [
     { "source": "/cadastro", "destination": "/api/cadastro" },
-    { "source": "/privacidade", "destination": "/api/privacidade" }
+    { "source": "/privacidade", "destination": "/api/privacidade" },
+    { "source": "/termos", "destination": "/api/termos" }
   ]
 }
