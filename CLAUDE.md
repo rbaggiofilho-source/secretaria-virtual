@@ -113,6 +113,7 @@ WhatsApp. Eventos de status (sent/delivered/read/failed) são logados.
 
 ## Ferramentas do agente
 `create_calendar_event`, `update_calendar_event`, `search_calendar_events`,
+`dia_da_semana` (dia da semana correto de uma data — modelo não calcula de cabeça),
 `conectar_agenda` (gera link OAuth p/ o usuário conectar a própria agenda),
 `save_memory`, `get_pending`, `resumo_geral` (panorama/export de tudo salvo),
 `excluir_meus_dados` (exclusão de conta LGPD; exige a frase "EXCLUIR MEUS DADOS";
@@ -167,6 +168,12 @@ dono é blindado), `registrar_custo`, `relatorio_custos`,
   `secretaria_processed_messages` evita duplicado.
 - **Segurança:** RLS foi ligado em todas as tabelas (antes exposto via anon key).
   App usa só a `service_key`.
+- **Dia da semana alucinado (17/09):** o modelo dizia o dia da semana errado de
+  uma data (ex.: 13/10/2026 = terça, ele disse domingo→segunda→segunda) e, ao ser
+  corrigido, só CONCORDAVA sem verificar. A data salva no evento estava certa —
+  o erro era só o texto. Correção: `weekdayBr` (código) calcula o dia; a tool de
+  agenda devolve `dia_semana`; tool `dia_da_semana` p/ perguntas; regra dura no
+  prompt: nunca deduzir dia da semana de cabeça, conferir ao ser corrigido.
 - **"Disse que salvou mas não salvou" (15/09):** o modelo confirmava "registrei a
   pendência" SEM chamar save_memory; conseguia até "mostrar a lista" porque ela
   ainda estava no histórico recente — que depois rola pra fora da janela e o item

@@ -44,7 +44,7 @@ import {
 } from "../memory/context.js";
 import { downloadFoto } from "../memory/storage.js";
 import { getEnv } from "../config/env.js";
-import { addDays, daysBetween, formatDateBr, todayIsoDate } from "../util/datetime.js";
+import { addDays, daysBetween, formatDateBr, todayIsoDate, weekdayBr } from "../util/datetime.js";
 import type { MemoryKind } from "../memory/supabase.js";
 
 /**
@@ -105,6 +105,19 @@ export const TOOLS: Anthropic.Tool[] = [
         end_iso: { type: "string", description: "Fim da janela ISO 8601" },
       },
       required: ["start_iso", "end_iso"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "dia_da_semana",
+    description:
+      "Retorna o dia da semana correto de uma data. Use SEMPRE que precisar dizer ou confirmar em que dia da semana cai uma data — você NÃO calcula dia da semana de cabeça com confiabilidade. Se o usuário disser/corrigir um dia da semana, confira aqui em vez de só concordar. Data em YYYY-MM-DD.",
+    input_schema: {
+      type: "object",
+      properties: {
+        data: { type: "string", description: "Data em YYYY-MM-DD" },
+      },
+      required: ["data"],
       additionalProperties: false,
     },
   },
@@ -499,6 +512,18 @@ export async function runTool(
 
   try {
     switch (name) {
+      case "dia_da_semana": {
+        const data = String(input.data);
+        const dia = weekdayBr(data);
+        if (!dia) {
+          return {
+            isError: true,
+            text: JSON.stringify({ ok: false, error: "Data inválida. Use YYYY-MM-DD." }),
+          };
+        }
+        return { isError: false, text: JSON.stringify({ ok: true, data, dia_semana: dia }) };
+      }
+
       case "conectar_agenda": {
         if (!oauthConfigured()) {
           return {
@@ -552,6 +577,7 @@ export async function runTool(
             title: ev.title,
             start: ev.start,
             end: ev.end,
+            dia_semana: ev.start ? weekdayBr(ev.start) : null,
             link: ev.htmlLink,
           }),
         };
@@ -575,6 +601,7 @@ export async function runTool(
             title: ev.title,
             start: ev.start,
             end: ev.end,
+            dia_semana: ev.start ? weekdayBr(ev.start) : null,
           }),
         };
       }
@@ -587,7 +614,16 @@ export async function runTool(
           String(input.end_iso),
           calAuth,
         );
-        return { isError: false, text: JSON.stringify({ ok: true, events }) };
+        return {
+          isError: false,
+          text: JSON.stringify({
+            ok: true,
+            events: events.map((e) => ({
+              ...e,
+              dia_semana: e.start ? weekdayBr(e.start) : null,
+            })),
+          }),
+        };
       }
 
       case "save_memory": {

@@ -60,6 +60,22 @@ export function daysBetween(aIso: string, bIso: string): number {
 }
 
 /**
+ * Dia da semana em pt-BR (ex.: "terça-feira") de uma data "YYYY-MM-DD" ou de um
+ * datetime ISO com offset. CÁLCULO DETERMINÍSTICO — o modelo não deve deduzir
+ * dia da semana de cabeça (erra). Para data sem hora, ancora ao meio-dia no
+ * fuso para não escorregar de dia.
+ */
+export function weekdayBr(iso: string): string {
+  const base = iso.includes("T") ? iso : `${iso}T12:00:00-03:00`;
+  const dt = new Date(base);
+  if (Number.isNaN(dt.getTime())) return "";
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: timezone(),
+    weekday: "long",
+  }).format(dt);
+}
+
+/**
  * Formata uma data "YYYY-MM-DD" (sem hora) de forma legível em pt-BR, ex.:
  * "terça-feira, 18/08/2026". Constrói a data ao meio-dia UTC para não sofrer
  * deslocamento de dia por fuso.
