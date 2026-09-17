@@ -29,6 +29,8 @@ export async function runSecretary(params: {
   imagePaths?: string[];
   /** A mensagem atual veio de um áudio (foi transcrita antes de chegar aqui). */
   wasAudio?: boolean;
+  /** Primeira interação deste usuário (sem histórico) — dispara onboarding. */
+  primeiroContato?: boolean;
 }): Promise<string> {
   const env = getEnv();
   const client = getClient();
@@ -39,7 +41,18 @@ export async function runSecretary(params: {
       'seção "Áudio e transcrição" para decidir entre AGIR sobre o pedido ou ' +
       "apenas devolver a transcrição."
     : "";
-  const system = buildSystemPrompt(params.context, params.usuario) + audioHint;
+  // No primeiro contato (sem histórico), dispara as boas-vindas guiadas da
+  // seção "Primeiro acesso" — de forma determinística, sem depender do modelo
+  // perceber que é a estreia.
+  const onboardingHint =
+    params.primeiroContato && !params.usuario.dono
+      ? "\n\nESTA É A PRIMEIRA MENSAGEM deste usuário (sem histórico). Dê as " +
+        'BOAS-VINDAS GUIADAS conforme a seção "Primeiro acesso e boas-vindas ' +
+        'guiadas": apresente-se em 1 frase, proponha 2–3 primeiras ações ' +
+        "concretas com exemplo real e convide-o a testar uma agora. Faça isso " +
+        "ANTES de responder qualquer outra coisa, mas sem ignorar o que ele pediu."
+      : "";
+  const system = buildSystemPrompt(params.context, params.usuario) + audioHint + onboardingHint;
 
   // Monta o conteúdo da mensagem atual. Com imagem, usa blocos (visão);
   // sem imagem, mantém a string simples de sempre.

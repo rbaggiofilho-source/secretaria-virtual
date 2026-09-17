@@ -474,6 +474,7 @@ export interface UsuarioRow {
   nome: string;
   calendar_id: string | null;
   contextos: string | null;
+  profissao: string | null;
   dono: boolean;
   ativo: boolean;
 }
@@ -483,7 +484,7 @@ export async function getUsuario(userWa: string): Promise<UsuarioRow | null> {
   const supabase = getSupabase();
   const { data, error } = await supabase
     .from("secretaria_usuarios")
-    .select("user_wa, nome, calendar_id, contextos, dono, ativo")
+    .select("user_wa, nome, calendar_id, contextos, profissao, dono, ativo")
     .eq("user_wa", userWa)
     .maybeSingle();
 

@@ -45,6 +45,7 @@ export async function handleIncomingMessage(message: WhatsAppMessage): Promise<v
         nome: "Ricardo",
         calendar_id: null,
         contextos: null,
+        profissao: null,
         dono: true,
         ativo: true,
       };
@@ -108,6 +109,8 @@ export async function handleIncomingMessage(message: WhatsAppMessage): Promise<v
       history,
       context,
       wasAudio: message.type === "audio",
+      // Sem histórico = primeiro contato: dispara as boas-vindas guiadas.
+      primeiroContato: history.length === 0,
     });
 
     // Persiste histórico (não crítico) e responde (crítico). Para imagem sem
