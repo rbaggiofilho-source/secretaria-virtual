@@ -115,7 +115,9 @@ WhatsApp. Eventos de status (sent/delivered/read/failed) são logados.
 `create_calendar_event`, `update_calendar_event`, `search_calendar_events`,
 `dia_da_semana` (dia da semana correto de uma data — modelo não calcula de cabeça),
 `conectar_agenda` (gera link OAuth p/ o usuário conectar a própria agenda),
-`save_memory`, `get_pending`, `resumo_geral` (panorama/export de tudo salvo),
+`save_memory`, `get_pending`, `atualizar_memoria` (atualiza fato/obra que mudou —
+evita duplicar/contradizer), `concluir_pendencia` (marca pendência resolvida),
+`resumo_geral` (panorama/export de tudo salvo),
 `excluir_meus_dados` (exclusão de conta LGPD; exige a frase "EXCLUIR MEUS DADOS";
 dono é blindado), `registrar_custo`, `relatorio_custos`,
 `registrar_rdo`, `consultar_rdo`, `registrar_foto`, `consultar_fotos`,
@@ -212,6 +214,9 @@ dono é blindado), `registrar_custo`, `relatorio_custos`,
    documentos alvará/ART/ASO com lembrete; materiais/compras/cotações.)
 6. (Grande) Virada multi-inquilino para virar SaaS (contas, login, Google via
    OAuth por cliente, cobrança, onboarding self-service, roteamento multi-número).
+7. (Backlog memória) CONSOLIDAÇÃO da memória de longo prazo (resumir/fundir
+   quando o volume crescer — o análogo de "compactar contexto"). Hoje já dá p/
+   ATUALIZAR (atualizar_memoria) e CONCLUIR pendência; falta o resumo em massa.
 
 ---
 

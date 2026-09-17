@@ -130,6 +130,79 @@ export async function saveMemories(
   return rows.length;
 }
 
+/**
+ * Atualiza o CONTEÚDO de uma memória existente (fato/obra/apelido/preferência)
+ * — para quando algo muda (obra mudou de fase, trocou o responsável) em vez de
+ * acumular fatos contraditórios. Localiza pela busca (texto que aparece no
+ * conteúdo atual), pega a mais recente. Retorna a linha atualizada ou null se
+ * não achar (aí o agente pede para o usuário esclarecer).
+ */
+export async function atualizarMemoria(
+  userWa: string,
+  busca: string,
+  novoConteudo: string,
+  kind?: MemoryKind | null,
+): Promise<MemoryRow | null> {
+  const supabase = getSupabase();
+  let query = supabase
+    .from("secretaria_memories")
+    .select("*")
+    .eq("user_wa", userWa)
+    .ilike("content", `%${busca}%`)
+    .order("created_at", { ascending: false })
+    .limit(1);
+  if (kind) query = query.eq("kind", kind);
+
+  const { data, error } = await query;
+  if (error) throw new Error(`Falha ao buscar memória: ${error.message}`);
+  const row = data?.[0] as MemoryRow | undefined;
+  if (!row) return null;
+
+  const { data: upd, error: e2 } = await supabase
+    .from("secretaria_memories")
+    .update({ content: novoConteudo, updated_at: new Date().toISOString() })
+    .eq("user_wa", userWa)
+    .eq("id", row.id)
+    .select("*")
+    .single();
+  if (e2) throw new Error(`Falha ao atualizar memória: ${e2.message}`);
+  return upd as MemoryRow;
+}
+
+/**
+ * Marca uma pendência aberta como concluída (localiza pela busca). Assim ela
+ * some das listas — corrige o "disse que resolveu mas não fez". Retorna a linha
+ * ou null se não encontrar pendência aberta que case.
+ */
+export async function concluirPendencia(
+  userWa: string,
+  busca: string,
+): Promise<MemoryRow | null> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from("secretaria_memories")
+    .select("*")
+    .eq("user_wa", userWa)
+    .eq("kind", "pendencia")
+    .eq("status", "aberta")
+    .ilike("content", `%${busca}%`)
+    .order("created_at", { ascending: false })
+    .limit(1);
+  if (error) throw new Error(`Falha ao buscar pendência: ${error.message}`);
+  const row = data?.[0] as MemoryRow | undefined;
+  if (!row) return null;
+
+  const { data: upd, error: e2 } = await supabase
+    .from("secretaria_memories")
+    .update({ status: "concluida", updated_at: new Date().toISOString() })
+    .eq("user_wa", userWa)
+    .eq("id", row.id)
+    .select("*")
+    .single();
+  if (e2) throw new Error(`Falha ao concluir pendência: ${e2.message}`);
+  return upd as MemoryRow;
+}
+
 /** Lista pendências abertas, opcionalmente filtradas por obra/local. */
 export async function getPending(
   userWa: string,

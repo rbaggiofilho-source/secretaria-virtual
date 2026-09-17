@@ -14,6 +14,8 @@ import {
   uploadMedia,
 } from "../whatsapp/client.js";
 import {
+  atualizarMemoria,
+  concluirPendencia,
   consultarDocumentos,
   consultarFotos,
   consultarMateriais,
@@ -196,6 +198,38 @@ export const TOOLS: Anthropic.Tool[] = [
         },
       },
       required: ["confirmacao"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "atualizar_memoria",
+    description:
+      "Atualiza uma memória que já existe, quando algo MUDOU (a obra passou de fase, trocou o responsável/empreiteiro, um dado ficou desatualizado). Use no lugar de save_memory para NÃO criar fatos contraditórios/duplicados. 'busca' = um trecho do conteúdo atual que identifica a memória (ex.: 'Catamarã'); 'novo_conteudo' = o texto completo e atualizado. Se não encontrar, a tool avisa — aí peça ao usuário para esclarecer qual item.",
+    input_schema: {
+      type: "object",
+      properties: {
+        busca: { type: "string", description: "Trecho que identifica a memória a atualizar (ex.: 'Catamarã')" },
+        novo_conteudo: { type: "string", description: "Novo conteúdo completo e atualizado" },
+        kind: {
+          type: "string",
+          enum: ["fato", "obra", "apelido", "pendencia", "preferencia"],
+          description: "Tipo da memória (opcional, ajuda a achar a certa)",
+        },
+      },
+      required: ["busca", "novo_conteudo"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "concluir_pendencia",
+    description:
+      "Marca uma pendência como CONCLUÍDA/resolvida, para ela sair das listas. Use SEMPRE que o usuário disser que terminou/resolveu algo ('já paguei o Agibank', 'resolvido o problema do Nissan') — nunca diga que marcou como resolvido sem chamar esta tool. 'busca' = trecho que identifica a pendência.",
+    input_schema: {
+      type: "object",
+      properties: {
+        busca: { type: "string", description: "Trecho que identifica a pendência (ex.: 'Agibank')" },
+      },
+      required: ["busca"],
       additionalProperties: false,
     },
   },
@@ -706,6 +740,48 @@ export async function runTool(
             registros_apagados: r.total,
             arquivos_apagados: r.arquivos,
           }),
+        };
+      }
+
+      case "atualizar_memoria": {
+        const row = await atualizarMemoria(
+          userWa,
+          String(input.busca),
+          String(input.novo_conteudo),
+          input.kind ? (input.kind as MemoryKind) : null,
+        );
+        if (!row) {
+          return {
+            isError: false,
+            text: JSON.stringify({
+              ok: false,
+              nao_encontrado: true,
+              error:
+                "Não achei uma memória que case com essa busca. Peça ao usuário para esclarecer qual item atualizar (ou salve como nova memória se for algo novo).",
+            }),
+          };
+        }
+        return {
+          isError: false,
+          text: JSON.stringify({ ok: true, id: row.id, kind: row.kind, atualizado: true }),
+        };
+      }
+
+      case "concluir_pendencia": {
+        const row = await concluirPendencia(userWa, String(input.busca));
+        if (!row) {
+          return {
+            isError: false,
+            text: JSON.stringify({
+              ok: false,
+              nao_encontrado: true,
+              error: "Não achei uma pendência aberta que case com essa busca. Confirme com o usuário qual é.",
+            }),
+          };
+        }
+        return {
+          isError: false,
+          text: JSON.stringify({ ok: true, id: row.id, concluida: true }),
         };
       }
 
