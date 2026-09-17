@@ -107,6 +107,21 @@ alter table public.secretaria_materiais enable row level security;
 -- O caminho de cada arquivo começa pelo user_wa (isolamento). Acesso só pelo
 -- backend com a service key (que ignora as policies de Storage).
 
+-- Códigos de login da plataforma web (OTP por WhatsApp). Guardamos só o HASH
+-- do código (nunca o código puro), com validade curta e contador de tentativas.
+-- PK = user_wa: um código ativo por pessoa (pedir de novo substitui o anterior).
+-- Acesso só pelo backend com a service key.
+create table if not exists public.secretaria_auth_codes (
+  user_wa      text        primary key,
+  code_hash    text        not null,
+  expires_at   timestamptz not null,
+  attempts     integer     not null default 0,
+  last_sent_at timestamptz not null default now(),
+  created_at   timestamptz not null default now()
+);
+
+alter table public.secretaria_auth_codes enable row level security;
+
 -- Observação sobre RLS:
 -- O backend acessa o Postgres com a SERVICE ROLE KEY, que ignora Row Level
 -- Security. Estas tabelas nunca são expostas ao cliente/browser, então RLS

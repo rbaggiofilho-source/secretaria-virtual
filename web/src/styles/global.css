@@ -30,3 +30,35 @@ main { padding: 31px 34px 20px; max-width: 1600px; margin: auto; }.welcome { dis
 @media (max-width: 1100px) { .dashboard-grid { grid-template-columns: 1fr; }.stats-grid { grid-template-columns: repeat(2, 1fr); }.cost-content { grid-template-columns: 220px 1fr; } }
 @media (max-width: 760px) { .sidebar { transform: translateX(-100%); transition: transform .25s; }.sidebar.is-open { transform: translateX(0); }.sidebar-backdrop { display: block; position: fixed; inset: 0; z-index: 9; border: 0; background: #102d2877; }.close-menu { display: block; border: 0; background: transparent; color: white; }.app-body { margin-left: 0; width: 100%; }.menu-button { display: grid; place-items: center; border: 0; background: none; color: #33443f; }.topbar { padding: 0 16px; }.search { display: none; } main { padding: 24px 16px; }.welcome { align-items: start; }.period-button { display: none; }.stats-grid { grid-template-columns: 1fr 1fr; gap: 10px; }.stat-card { padding: 14px; min-height: 125px; }.cost-content { grid-template-columns: 1fr; }.donut { width: 165px; }.legend { grid-template-columns: 1fr 1fr; }.work-item { grid-template-columns: 40px 1fr; }.work-value { display: none; } }
 @media (max-width: 430px) { .stats-grid { grid-template-columns: 1fr; }.stat-card { min-height: 115px; }.welcome h1 { font-size: 23px; }.primary-button { padding: 0 12px; }.primary-button svg { display: none; }.legend { grid-template-columns: 1fr; } }
+
+/* ---------- Login ---------- */
+.login-shell { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px 16px; gap: 18px; background: radial-gradient(120% 120% at 50% 0%, #1c463c 0%, #12332c 45%, #0e2a24 100%); }
+.login-card { width: 100%; max-width: 400px; background: #fafaf7; border: 1px solid var(--border); border-radius: 16px; padding: 30px 28px 26px; box-shadow: 0 24px 60px #06201a55; }
+.login-brand { margin-bottom: 22px; }
+.login-brand .logo { color: #173d35; }
+.login-brand .logo > span:last-child i { color: #c4763b; }
+.login-card h1 { font: 700 22px Manrope; color: #21302c; margin: 0 0 8px; letter-spacing: -.4px; }
+.login-sub { color: var(--muted); font-size: 13px; line-height: 1.5; margin: 0 0 20px; }
+.login-sub strong { color: #3a4b46; }
+.login-field { display: flex; flex-direction: column; gap: 7px; margin-bottom: 16px; }
+.login-field span { font-size: 11px; font-weight: 700; letter-spacing: .6px; color: #7c857f; text-transform: uppercase; }
+.login-field input { height: 48px; border: 1px solid #d9d8cf; border-radius: 10px; background: #fff; padding: 0 14px; font-size: 16px; color: #24312e; outline: none; transition: border-color .15s, box-shadow .15s; }
+.login-field input:focus { border-color: #2c7a63; box-shadow: 0 0 0 3px #2c7a6322; }
+.login-code { text-align: center; letter-spacing: 10px; font: 700 26px Manrope; padding-left: 10px !important; }
+.login-btn { width: 100%; height: 48px; border: 0; border-radius: 10px; background: var(--green); color: #fff; font-size: 15px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px; transition: background .15s, opacity .15s; }
+.login-btn:hover:not(:disabled) { background: #12332c; }
+.login-btn:disabled { opacity: .5; cursor: default; }
+.login-erro { background: #f8e9e4; border: 1px solid #ecccc0; color: #9e4a2e; font-size: 12.5px; line-height: 1.45; padding: 10px 12px; border-radius: 9px; margin: 0 0 14px; }
+.login-note { display: flex; align-items: center; justify-content: center; gap: 6px; color: #8a938f; font-size: 11.5px; margin: 16px 0 0; }
+.login-actions { display: flex; justify-content: space-between; margin-top: 16px; }
+.login-link { border: 0; background: none; color: #3b665c; font-size: 12.5px; font-weight: 600; display: flex; align-items: center; gap: 5px; }
+.login-link:disabled { opacity: .5; }
+.login-footer { color: #b9cbc6; font-size: 11px; }
+
+/* ---------- Splash / mensagens do painel / estados vazios ---------- */
+.splash { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; background: #12332c; color: #fff; }
+.splash .logo > span:last-child i { color: #c4763b; }
+.splash p { color: #9fb8b1; font-size: 13px; }
+.board-msg { background: #fafaf7; border: 1px solid var(--border); border-radius: 10px; padding: 22px; color: var(--muted); font-size: 13px; text-align: center; }
+.board-msg.erro { background: #f8e9e4; border-color: #ecccc0; color: #9e4a2e; }
+.empty { color: #8a938f; font-size: 12.5px; line-height: 1.5; padding: 20px; text-align: center; }
