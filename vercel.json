@@ -3,8 +3,12 @@
   "functions": {
     "api/webhook.ts": {
       "maxDuration": 60
+    },
+    "api/cron/bomdia.ts": {
+      "maxDuration": 60
     }
   },
+  "crons": [{ "path": "/api/cron/bomdia", "schedule": "0 11 * * 1-5" }],
   "rewrites": [
     { "source": "/cadastro", "destination": "/api/cadastro" },
     { "source": "/privacidade", "destination": "/api/privacidade" },

@@ -55,7 +55,8 @@ não escolhe calendarId — forçado no código.
 `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET` (OAuth por usuário do
 beta; opcionais — sem eles só o caminho da conta de serviço funciona),
 `PUBLIC_BASE_URL` (default `https://secretaria-virtual-seven.vercel.app`),
-`SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `TIMEZONE` (default `America/Sao_Paulo`).
+`SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `TIMEZONE` (default `America/Sao_Paulo`),
+`CRON_SECRET` (protege o cron do "bom dia"; a Vercel manda como `Authorization: Bearer`).
 Validadas via `zod` em `src/config/env.ts` (faz `trim`; STT_PROVIDER tolerante a maiúsculas).
 
 ---
@@ -82,6 +83,9 @@ WhatsApp. Eventos de status (sent/delivered/read/failed) são logados.
 - `src/oauth/google.ts` — OAuth Google (URL de consentimento, troca de code, state assinado).
 - `src/oauth/page.ts` — páginas HTML de fim do fluxo OAuth (sucesso/erro).
 - `api/cadastro.ts` — site de cadastro do beta. `api/oauth/{start,callback}.ts` — fluxo OAuth.
+- `api/cron/bomdia.ts` — "bom dia" diário (Vercel Cron `0 11 * * 1-5` = 8h BRT, seg–sex).
+  Envia SÓ para quem mandou mensagem nas últimas 24h (janela da Meta) e com
+  `nudge_diario=true`. Protegido por `CRON_SECRET`. Não recupera quem sumiu (fora da janela).
 - `api/privacidade.ts` (/privacidade) e `api/termos.ts` (/termos) — páginas legais (LGPD).
 - Exclusão de conta: `excluirDadosUsuario` (context.ts) apaga tudo por wa_id + arquivos do Storage (`removeFotos`).
 - `src/whatsapp/{client,signature,types}.ts` — envio (texto/documento/upload de mídia), HMAC, tipos.
@@ -98,8 +102,8 @@ WhatsApp. Eventos de status (sent/delivered/read/failed) são logados.
 - `secretaria_rdo` — Diário de Obra (unique por user_wa+obra+data; clima, efetivo jsonb, atividades, ocorrências, materiais).
 - `secretaria_fotos` — registro fotográfico (tipo: foto_obra/nota_fiscal/outro; descrição da IA; obra; data; caminho).
 - `secretaria_usuarios` — usuários autorizados (PK user_wa; nome, calendar_id,
-  contextos, dono, ativo; + nome_completo, cpf, endereco, profissao, status do
-  cadastro do beta). Fonte da verdade da autorização.
+  contextos, dono, ativo, nudge_diario; + nome_completo, cpf, endereco, profissao,
+  status do cadastro do beta). Fonte da verdade da autorização.
 - `secretaria_oauth_tokens` — tokens do Google OAuth por usuário (PK user_wa;
   refresh_token, access_token, expiry, scope, google_email). Uma linha por
   variante de wa_id.
@@ -119,7 +123,8 @@ WhatsApp. Eventos de status (sent/delivered/read/failed) são logados.
 evita duplicar/contradizer), `concluir_pendencia` (marca pendência resolvida),
 `resumo_geral` (panorama/export de tudo salvo),
 `excluir_meus_dados` (exclusão de conta LGPD; exige a frase "EXCLUIR MEUS DADOS";
-dono é blindado), `registrar_custo`, `relatorio_custos`,
+dono é blindado), `configurar_lembrete_diario` (liga/desliga o "bom dia"),
+`registrar_custo`, `relatorio_custos`,
 `registrar_rdo`, `consultar_rdo`, `registrar_foto`, `consultar_fotos`,
 `enviar_foto` (reenvia imagem arquivada), `gerar_rdo_pdf`,
 `registrar_documento`, `consultar_documentos`,

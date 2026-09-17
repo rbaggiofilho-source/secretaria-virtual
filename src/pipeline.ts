@@ -48,6 +48,7 @@ export async function handleIncomingMessage(message: WhatsAppMessage): Promise<v
         profissao: null,
         dono: true,
         ativo: true,
+        nudge_diario: true,
       };
     } else {
       console.warn(`Mensagem ignorada de número não autorizado: ${from}`);

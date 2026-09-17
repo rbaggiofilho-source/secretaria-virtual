@@ -550,6 +550,7 @@ export interface UsuarioRow {
   profissao: string | null;
   dono: boolean;
   ativo: boolean;
+  nudge_diario: boolean;
 }
 
 /** Busca o usuário pelo wa_id. Retorna null se não cadastrado. */
@@ -557,7 +558,7 @@ export async function getUsuario(userWa: string): Promise<UsuarioRow | null> {
   const supabase = getSupabase();
   const { data, error } = await supabase
     .from("secretaria_usuarios")
-    .select("user_wa, nome, calendar_id, contextos, profissao, dono, ativo")
+    .select("user_wa, nome, calendar_id, contextos, profissao, dono, ativo, nudge_diario")
     .eq("user_wa", userWa)
     .maybeSingle();
 
@@ -566,6 +567,59 @@ export async function getUsuario(userWa: string): Promise<UsuarioRow | null> {
     throw new Error(`Falha ao buscar usuário: ${error.message}`);
   }
   return (data as UsuarioRow | null) ?? null;
+}
+
+/**
+ * Liga/desliga o "bom dia" diário para o usuário (todas as variantes de wa_id).
+ */
+export async function setNudgeDiario(userWa: string, ativar: boolean): Promise<void> {
+  const supabase = getSupabase();
+  const { error } = await supabase
+    .from("secretaria_usuarios")
+    .update({ nudge_diario: ativar })
+    .in("user_wa", waIdVariants(userWa));
+  if (error) throw new Error(`Falha ao configurar lembrete diário: ${error.message}`);
+}
+
+/**
+ * Usuários elegíveis para o "bom dia" diário: ATIVOS, com nudge ligado, que
+ * mandaram uma mensagem nas últimas 24h (regra da Meta — só dá para enviar texto
+ * livre dentro da janela de 24h). Deduplica por pessoa (variantes de wa_id),
+ * mantendo o wa_id que esteve ativo.
+ */
+export async function usuariosAtivosParaNudge(): Promise<Array<{ user_wa: string; nome: string }>> {
+  const supabase = getSupabase();
+  const desde = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+  // 1) wa_ids que mandaram mensagem (role=user) nas últimas 24h.
+  const { data: conv, error: e1 } = await supabase
+    .from("secretaria_conversations")
+    .select("user_wa")
+    .eq("role", "user")
+    .gt("created_at", desde);
+  if (e1) throw new Error(`Falha ao buscar ativos: ${e1.message}`);
+  const ativos = [...new Set((conv ?? []).map((r) => (r as { user_wa: string }).user_wa))];
+  if (ativos.length === 0) return [];
+
+  // 2) desses, os usuários ativos com nudge ligado.
+  const { data: users, error: e2 } = await supabase
+    .from("secretaria_usuarios")
+    .select("user_wa, nome")
+    .in("user_wa", ativos)
+    .eq("ativo", true)
+    .eq("nudge_diario", true);
+  if (e2) throw new Error(`Falha ao filtrar usuários do nudge: ${e2.message}`);
+
+  // 3) dedup por pessoa (variantes) — não mandar duas vezes.
+  const vistos = new Set<string>();
+  const out: Array<{ user_wa: string; nome: string }> = [];
+  for (const u of (users ?? []) as Array<{ user_wa: string; nome: string }>) {
+    const chave = waIdVariants(u.user_wa).sort()[0] ?? u.user_wa;
+    if (vistos.has(chave)) continue;
+    vistos.add(chave);
+    out.push(u);
+  }
+  return out;
 }
 
 /**

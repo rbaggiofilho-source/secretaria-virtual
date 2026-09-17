@@ -34,6 +34,7 @@ import {
   saveMemories,
   saveMemory,
   setDocumentoLembrete,
+  setNudgeDiario,
   type CategoriaCusto,
   type Cotacao,
   type DocumentoRow,
@@ -230,6 +231,19 @@ export const TOOLS: Anthropic.Tool[] = [
         busca: { type: "string", description: "Trecho que identifica a pendência (ex.: 'Agibank')" },
       },
       required: ["busca"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "configurar_lembrete_diario",
+    description:
+      "Liga ou desliga a mensagem de 'bom dia' diária (dias úteis de manhã, um lembrete pra ajudar). Use quando o usuário pedir para PARAR de receber ('não quero mensagem de bom dia', 'para de me mandar de manhã') → ativar=false; ou para VOLTAR a receber → ativar=true. Só existe liga/desliga por enquanto (o horário é fixo, manhã em dias úteis); se ele pedir outro horário/dia, explique que por ora é só de manhã nos dias úteis.",
+    input_schema: {
+      type: "object",
+      properties: {
+        ativar: { type: "boolean", description: "true = receber o bom dia; false = parar de receber" },
+      },
+      required: ["ativar"],
       additionalProperties: false,
     },
   },
@@ -783,6 +797,12 @@ export async function runTool(
           isError: false,
           text: JSON.stringify({ ok: true, id: row.id, concluida: true }),
         };
+      }
+
+      case "configurar_lembrete_diario": {
+        const ativar = input.ativar === true;
+        await setNudgeDiario(userWa, ativar);
+        return { isError: false, text: JSON.stringify({ ok: true, nudge_diario: ativar }) };
       }
 
       case "get_pending": {

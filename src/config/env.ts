@@ -54,6 +54,9 @@ const EnvSchema = z
 
     // Geral
     TIMEZONE: z.string().default("America/Sao_Paulo"),
+    // Segredo do Cron da Vercel (protege o endpoint do "bom dia"). Opcional,
+    // mas o endpoint recusa rodar sem ele (evita disparo aberto de mensagens).
+    CRON_SECRET: z.string().optional(),
   })
   .superRefine((env, ctx) => {
     // A chave do provedor de STT escolhido precisa existir.
