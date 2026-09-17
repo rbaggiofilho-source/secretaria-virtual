@@ -1,0 +1,9 @@
+node_modules
+dist
+.vite
+*.local
+
+# Artefatos gerados pelo tsc -b / build
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
