@@ -46,11 +46,12 @@ export async function runSecretary(params: {
   // perceber que é a estreia.
   const onboardingHint =
     params.primeiroContato && !params.usuario.dono
-      ? "\n\nESTA É A PRIMEIRA MENSAGEM deste usuário (sem histórico). Dê as " +
-        'BOAS-VINDAS GUIADAS conforme a seção "Primeiro acesso e boas-vindas ' +
-        'guiadas": apresente-se em 1 frase, proponha 2–3 primeiras ações ' +
-        "concretas com exemplo real e convide-o a testar uma agora. Faça isso " +
-        "ANTES de responder qualquer outra coisa, mas sem ignorar o que ele pediu."
+      ? "\n\nESTA É A PRIMEIRA MENSAGEM deste usuário (sem histórico). Conduza o " +
+        'ONBOARDING da seção "Primeiro acesso e boas-vindas guiadas": apresente-se, ' +
+        "diga em visão geral tudo que você faz, deixe claro que também ensina a te " +
+        "usar (é só perguntar), proponha 2–3 primeiras ações com exemplo pronto, e " +
+        "COMECE a conhecer o usuário com poucas perguntas (empresa, obras, fases, " +
+        "responsáveis) — em CONVERSA, sem textão, salvando na memória o que aprender."
       : "";
   const system = buildSystemPrompt(params.context, params.usuario) + audioHint + onboardingHint;
 
