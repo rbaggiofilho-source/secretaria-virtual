@@ -26,7 +26,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
         <div className="sidebar-bottom">
           <div className="calendar-state"><span><CalendarDays size={18} /></span><div><strong>Google Agenda</strong><small><i /> Conectada</small></div></div>
           <button className="nav-item"><Settings size={19} /><span>Configurações</span></button>
-          <div className="profile"><div className="avatar">RM</div><div><strong>Ricardo Martins</strong><small>Construtora Martins</small></div><button aria-label="Opções do perfil">•••</button></div>
+          <div className="profile"><div className="avatar">RB</div><div><strong>Ricardo Baggio</strong><small>ENGETEC</small></div><button aria-label="Opções do perfil">•••</button></div>
         </div>
       </aside>
     </>
