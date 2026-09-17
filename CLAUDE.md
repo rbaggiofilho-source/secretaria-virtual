@@ -201,7 +201,9 @@ dono é blindado), `registrar_custo`, `relatorio_custos`,
   do PDF (`uploadMedia`/`sendDocumentMessage`) — risco de limite no número de teste.
 
 ## Pendências abertas
-1. Regenerar chaves Anthropic + Groq (foram expostas em chat) e revogar as antigas.
+1. ✅ (17/09) Chaves Anthropic + Groq rotacionadas (novas na Vercel, validadas em
+   texto+áudio via banco); revogar as antigas nos painéis. ATENÇÃO: créditos
+   Anthropic baixos (~US$ 8 em 17/09) — ativar recarga automática.
 2. Testar no WhatsApp os fluxos da vertical (custos, RDO, foto/NF, PDF).
 3. Configurar alertas de crédito baixo nos painéis Anthropic + Groq (não há API de
    saldo; a Rosana não consegue avisar sozinha).
