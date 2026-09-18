@@ -90,6 +90,10 @@ WhatsApp. Eventos de status (sent/delivered/read/failed) são logados.
 - Exclusão de conta: `excluirDadosUsuario` (context.ts) apaga tudo por wa_id + arquivos do Storage (`removeFotos`).
 - `src/whatsapp/{client,signature,types}.ts` — envio (texto/documento/upload de mídia), HMAC, tipos.
 - `src/pdf/rdo.ts` — geração do PDF do RDO (pdf-lib).
+- `src/data/precos-referencia.ts` — base de preços de REFERÊNCIA (433 insumos,
+  média de mercado; gerada do xlsx do Ricardo). `src/precos/index.ts` = busca
+  (`buscarPrecos`). Para ATUALIZAR: reimportar a planilha e regerar o arquivo +
+  deploy (é dado estático versionado no git, não no banco).
 - `src/util/datetime.ts` — fuso e formatação de datas.
 - `supabase/schema.sql` — schema.
 - `package.json`: `"type":"module"`, deps: `@anthropic-ai/sdk, @supabase/supabase-js, googleapis, pdf-lib, zod`; **sem** script `build`.
@@ -128,7 +132,8 @@ dono é blindado), `configurar_lembrete_diario` (liga/desliga o "bom dia"),
 `registrar_rdo`, `consultar_rdo`, `registrar_foto`, `consultar_fotos`,
 `enviar_foto` (reenvia imagem arquivada), `gerar_rdo_pdf`,
 `registrar_documento`, `consultar_documentos`,
-`registrar_material`, `consultar_materiais`.
+`registrar_material`, `consultar_materiais`,
+`consultar_preco` (base de preços de referência p/ orçamentos — 433 insumos).
 
 ## Onboarding do beta (site + OAuth) — desde 07/09/2026
 - **Site de cadastro:** `GET/POST /cadastro` (`api/cadastro.ts`, rewrite no

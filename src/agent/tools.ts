@@ -46,6 +46,7 @@ import {
   type UsuarioRow,
 } from "../memory/context.js";
 import { downloadFoto } from "../memory/storage.js";
+import { buscarPrecos } from "../precos/index.js";
 import { getEnv } from "../config/env.js";
 import { addDays, daysBetween, formatDateBr, todayIsoDate, weekdayBr } from "../util/datetime.js";
 import type { MemoryKind } from "../memory/supabase.js";
@@ -257,6 +258,19 @@ export const TOOLS: Anthropic.Tool[] = [
         obra: { type: "string", description: "Filtrar por obra/local (opcional)" },
       },
       required: [],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "consultar_preco",
+    description:
+      "Consulta a base de preços de REFERÊNCIA de insumos da construção civil (média de mercado) para estimar orçamentos. Use quando o usuário perguntar quanto custa um material, ou pedir um orçamento/estimativa (ex.: 'quanto tá o saco de cimento?', 'me faz um orçamento pra levantar uma parede'). Passe o termo do material ('cimento CP II', 'vergalhão 10mm', 'tijolo 6 furos', 'tinta acrílica'). Os valores são MÉDIA DE MERCADO (referência), NÃO cotação real do fornecedor — sempre trate como ESTIMATIVA e recomende validar com cotação. Você pode multiplicar pelo quantitativo para montar o orçamento.",
+    input_schema: {
+      type: "object",
+      properties: {
+        termo: { type: "string", description: "Material a buscar (ex.: 'cimento', 'vergalhão 10mm', 'tinta acrílica')" },
+      },
+      required: ["termo"],
       additionalProperties: false,
     },
   },
@@ -818,6 +832,26 @@ export async function runTool(
               id: r.id,
               content: r.content,
               obra: r.obra,
+            })),
+          }),
+        };
+      }
+
+      case "consultar_preco": {
+        const itens = buscarPrecos(String(input.termo), 8);
+        return {
+          isError: false,
+          text: JSON.stringify({
+            ok: true,
+            encontrados: itens.length,
+            itens: itens.map((p) => ({
+              item: p.item,
+              especificacao: p.especificacao,
+              unidade: p.unidade,
+              preco_medio: p.medio,
+              faixa: { min: p.min, max: p.max },
+              categoria: p.categoria,
+              tipo: p.tipo,
             })),
           }),
         };
