@@ -989,6 +989,81 @@ export async function consultarMateriais(
   return (data ?? []) as MaterialRow[];
 }
 
+export interface PrecoDoUsuario {
+  item: string;
+  unidade: string | null;
+  obra: string | null;
+  preco: number;
+  fornecedor: string | null;
+  origem: "compra" | "cotacao";
+  quando: string | null;
+}
+
+/**
+ * Preços REAIS que ESTE usuário já praticou (histórico dele em
+ * `secretaria_materiais`), para orçamentos personalizados — a "teia de
+ * conhecimento" que retroalimenta a Rosana. Reúne o que ele comprou
+ * (valor_unitario) e o que cotou (cotacoes[]). São dados REAIS do usuário e
+ * têm prioridade sobre a base de referência (média de mercado). Isolado por
+ * user_wa (todas as variantes de wa_id). Mais recentes primeiro.
+ */
+export async function buscarPrecosDoUsuario(
+  userWa: string,
+  termo: string,
+  limite = 6,
+): Promise<PrecoDoUsuario[]> {
+  const t = (termo ?? "").trim();
+  if (!t) return [];
+
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from("secretaria_materiais")
+    .select("item, unidade, obra, fornecedor, valor_unitario, cotacoes, data_compra, updated_at")
+    .in("user_wa", waIdVariants(userWa))
+    .ilike("item", `%${t}%`)
+    .order("updated_at", { ascending: false })
+    .limit(40);
+  if (error) throw new Error(`Falha ao buscar preços do usuário: ${error.message}`);
+
+  const pontos: PrecoDoUsuario[] = [];
+  for (const row of (data ?? []) as Array<Record<string, unknown>>) {
+    const item = String(row.item ?? "");
+    const unidade = (row.unidade as string | null) ?? null;
+    const obra = (row.obra as string | null) ?? null;
+    const quando = (row.data_compra as string | null) ?? (row.updated_at as string | null) ?? null;
+
+    const vUnit = row.valor_unitario;
+    if (vUnit != null && Number(vUnit) > 0) {
+      pontos.push({
+        item,
+        unidade,
+        obra,
+        preco: Number(vUnit),
+        fornecedor: (row.fornecedor as string | null) ?? null,
+        origem: "compra",
+        quando,
+      });
+    }
+
+    const cotacoes = Array.isArray(row.cotacoes) ? (row.cotacoes as Cotacao[]) : [];
+    for (const c of cotacoes) {
+      if (c?.valor_unitario != null && Number(c.valor_unitario) > 0) {
+        pontos.push({
+          item,
+          unidade,
+          obra,
+          preco: Number(c.valor_unitario),
+          fornecedor: c.fornecedor ?? null,
+          origem: "cotacao",
+          quando,
+        });
+      }
+    }
+  }
+
+  return pontos.slice(0, limite);
+}
+
 /* ---------- Tokens do Google OAuth (calendário por usuário) ---------- */
 
 export interface OAuthTokenRow {

@@ -15,6 +15,7 @@ import {
 } from "../whatsapp/client.js";
 import {
   atualizarMemoria,
+  buscarPrecosDoUsuario,
   concluirPendencia,
   consultarDocumentos,
   consultarFotos,
@@ -264,7 +265,7 @@ export const TOOLS: Anthropic.Tool[] = [
   {
     name: "consultar_preco",
     description:
-      "Consulta a base de preços de REFERÊNCIA de insumos da construção civil (média de mercado) para estimar orçamentos. Use quando o usuário perguntar quanto custa um material, ou pedir um orçamento/estimativa (ex.: 'quanto tá o saco de cimento?', 'me faz um orçamento pra levantar uma parede'). Passe o termo do material ('cimento CP II', 'vergalhão 10mm', 'tijolo 6 furos', 'tinta acrílica'). Os valores são MÉDIA DE MERCADO (referência), NÃO cotação real do fornecedor — sempre trate como ESTIMATIVA e recomende validar com cotação. Você pode multiplicar pelo quantitativo para montar o orçamento.",
+      "Consulta preços de insumos da construção civil para estimar orçamentos. Use quando o usuário perguntar quanto custa um material, ou pedir um orçamento/estimativa (ex.: 'quanto tá o saco de cimento?', 'me faz um orçamento pra levantar uma parede'). Passe o termo do material ('cimento CP II', 'vergalhão 10mm', 'tijolo 6 furos', 'tinta acrílica'). Retorna DOIS blocos: 'seus_precos' = preços REAIS que ESTE usuário já pagou/cotou no histórico dele (PREFIRA estes, citando fornecedor e quando); 'referencia' = MÉDIA DE MERCADO (estimativa, NÃO cotação real — sempre marque como estimativa e recomende validar). Você pode multiplicar pelo quantitativo para montar o orçamento.",
     input_schema: {
       type: "object",
       properties: {
@@ -838,13 +839,27 @@ export async function runTool(
       }
 
       case "consultar_preco": {
-        const itens = buscarPrecos(String(input.termo), 8);
+        const termo = String(input.termo);
+        const seusPrecos = await buscarPrecosDoUsuario(userWa, termo, 6);
+        const itens = buscarPrecos(termo, 8);
         return {
           isError: false,
           text: JSON.stringify({
             ok: true,
-            encontrados: itens.length,
-            itens: itens.map((p) => ({
+            // Preços REAIS que ESTE usuário já praticou. PREFIRA estes: são o
+            // que ele de fato pagou/cotou. Cite fornecedor/data quando houver.
+            seus_precos: seusPrecos.map((p) => ({
+              item: p.item,
+              unidade: p.unidade,
+              obra: p.obra,
+              preco: p.preco,
+              fornecedor: p.fornecedor,
+              origem: p.origem,
+              quando: p.quando,
+            })),
+            // Base de REFERÊNCIA (média de mercado). Use como estimativa quando
+            // não houver histórico do usuário, e sempre marque como estimativa.
+            referencia: itens.map((p) => ({
               item: p.item,
               especificacao: p.especificacao,
               unidade: p.unidade,

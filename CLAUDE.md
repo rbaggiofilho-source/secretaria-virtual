@@ -133,7 +133,9 @@ dono é blindado), `configurar_lembrete_diario` (liga/desliga o "bom dia"),
 `enviar_foto` (reenvia imagem arquivada), `gerar_rdo_pdf`,
 `registrar_documento`, `consultar_documentos`,
 `registrar_material`, `consultar_materiais`,
-`consultar_preco` (base de preços de referência p/ orçamentos — 433 insumos).
+`consultar_preco` (orçamentos: devolve `seus_precos` — preços REAIS do próprio
+usuário, do histórico de `secretaria_materiais` via `buscarPrecosDoUsuario`, com
+prioridade — + `referencia` — base de mercado, 433 insumos).
 
 ## Onboarding do beta (site + OAuth) — desde 07/09/2026
 - **Site de cadastro:** `GET/POST /cadastro` (`api/cadastro.ts`, rewrite no
@@ -163,6 +165,11 @@ dono é blindado), `configurar_lembrete_diario` (liga/desliga o "bom dia"),
   (peso de aço `0,00617×d²`; quantitativos como estimativa, com ressalva de
   responsabilidade técnica ART/RRT); Diário de Obra (RDO) por voz → PDF enviado
   no WhatsApp; visão (foto de obra descrita/arquivada; nota fiscal lida → lança custo).
+- **Teia de conhecimento (1ª fibra):** a Rosana aprende os preços/fornecedores
+  REAIS de cada usuário do histórico dele (compras + cotações em
+  `secretaria_materiais`) e os usa nos orçamentos DELE, com prioridade sobre a
+  base genérica de mercado. Quanto mais ele usa, mais preciso fica o orçamento —
+  dado isolado por `user_wa`, sem treinar modelo (é recuperação, não fine-tuning).
 
 ---
 
