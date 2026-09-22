@@ -49,7 +49,7 @@ import {
 import { downloadFoto } from "../memory/storage.js";
 import { buscarPrecos } from "../precos/index.js";
 import { getEnv } from "../config/env.js";
-import { addDays, daysBetween, formatDateBr, todayIsoDate, weekdayBr } from "../util/datetime.js";
+import { addDays, addMonths, daysBetween, formatDateBr, todayIsoDate, weekdayBr } from "../util/datetime.js";
 import type { MemoryKind } from "../memory/supabase.js";
 
 /**
@@ -123,6 +123,25 @@ export const TOOLS: Anthropic.Tool[] = [
         data: { type: "string", description: "Data em YYYY-MM-DD" },
       },
       required: ["data"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "resolver_data",
+    description:
+      "Converte uma data FUTURA/relativa na data exata (YYYY-MM-DD) + dia da semana, calculada com precisão no servidor. Use SEMPRE que a data pedida estiver ALÉM dos próximos ~16 dias da tabela de referência, ou quando o usuário falar em deslocamento ('daqui a um mês', 'daqui 45 dias', 'daqui 3 semanas', 'daqui 2 meses', 'mês que vem'). Você NÃO calcula datas futuras de cabeça com confiabilidade — use esta ferramenta. Informe os deslocamentos a partir de hoje (dias, semanas e/ou meses); opcionalmente uma data-base YYYY-MM-DD (padrão = hoje). Depois use o YYYY-MM-DD retornado para montar o start_iso do evento.",
+    input_schema: {
+      type: "object",
+      properties: {
+        base: {
+          type: "string",
+          description: "Data-base YYYY-MM-DD (opcional; padrão = hoje)",
+        },
+        dias: { type: "integer", description: "Dias a somar (pode ser negativo)" },
+        semanas: { type: "integer", description: "Semanas a somar (pode ser negativo)" },
+        meses: { type: "integer", description: "Meses a somar (pode ser negativo)" },
+      },
+      required: [],
       additionalProperties: false,
     },
   },
@@ -594,6 +613,26 @@ export async function runTool(
           };
         }
         return { isError: false, text: JSON.stringify({ ok: true, data, dia_semana: dia }) };
+      }
+
+      case "resolver_data": {
+        let base = input.base ? String(input.base) : todayIsoDate();
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(base)) base = todayIsoDate();
+        const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+        let d = base;
+        if (num(input.meses)) d = addMonths(d, num(input.meses));
+        if (num(input.semanas)) d = addDays(d, num(input.semanas) * 7);
+        if (num(input.dias)) d = addDays(d, num(input.dias));
+        return {
+          isError: false,
+          text: JSON.stringify({
+            ok: true,
+            base,
+            data: d,
+            dia_semana: weekdayBr(d),
+            dias_a_partir_de_hoje: daysBetween(todayIsoDate(), d),
+          }),
+        };
       }
 
       case "conectar_agenda": {

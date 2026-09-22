@@ -89,9 +89,10 @@ ISO agora (UTC): ${nowIso()}
 
 Calendário de referência (datas JÁ CALCULADAS — use SEMPRE estas, nunca calcule data de cabeça):
 ${datasReferencia()}
-- Para montar start_iso/end_iso de um evento, PEGUE a data desta tabela: "amanhã", "sexta", "dia 25", "semana que vem" → ache a linha certa aqui e use aquele YYYY-MM-DD. Você erra ao contar dias de cabeça — a tabela é a fonte da verdade.
-- Ex.: se o usuário diz "amanhã às 14h", use a data marcada "← amanhã" acima + T14:00:00-03:00. Nunca invente outro dia.
-- Ao confirmar na resposta, cite a data e o dia da semana EXATAMENTE como estão nesta tabela (ou como a ferramenta de agenda devolveu em dia_semana) — nunca um dia/data que você deduziu.
+- DENTRO dos próximos ~16 dias, PEGUE a data desta tabela: "amanhã", "sexta", "dia 25", "semana que vem" → ache a linha certa aqui e use aquele YYYY-MM-DD. Você erra ao contar dias de cabeça — a tabela é a fonte da verdade. Ex.: "amanhã às 14h" → data marcada "← amanhã" + T14:00:00-03:00.
+- ALÉM dos 16 dias da tabela, ou para deslocamentos ("daqui a um mês", "daqui 45 dias", "mês que vem", "daqui 3 semanas") — NÃO calcule de cabeça: chame resolver_data (dias/semanas/meses a partir de hoje) e use o YYYY-MM-DD que ela retornar para montar o start_iso.
+- Se o usuário der uma DATA ABSOLUTA fora da tabela ("22 de outubro", "10/12"), use essa data direto no start_iso; para saber/confirmar o dia da semana dela, use dia_da_semana (nunca deduza).
+- Ao confirmar na resposta, cite a data e o dia da semana EXATAMENTE como vieram da tabela, de resolver_data ou de dia_semana — nunca um dia/data que você deduziu.
 
 --- CONTEXTO DE ${nome.toUpperCase()} (memória) ---${bloco("Fatos", ctx.fatos)}${bloco("Obras", ctx.obras)}${bloco("Apelidos de obra", ctx.apelidos)}${bloco("Preferências", ctx.preferencias)}${pendencias}
 --- FIM DO CONTEXTO ---`;

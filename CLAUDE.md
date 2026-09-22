@@ -122,6 +122,8 @@ WhatsApp. Eventos de status (sent/delivered/read/failed) são logados.
 ## Ferramentas do agente
 `create_calendar_event`, `update_calendar_event`, `search_calendar_events`,
 `dia_da_semana` (dia da semana correto de uma data — modelo não calcula de cabeça),
+`resolver_data` (calcula data futura exata + dia da semana a partir de deslocamento
+dias/semanas/meses — p/ "daqui um mês", "daqui 45 dias", além da tabela de 16 dias),
 `conectar_agenda` (gera link OAuth p/ o usuário conectar a própria agenda),
 `save_memory`, `get_pending`, `atualizar_memoria` (atualiza fato/obra que mudou —
 evita duplicar/contradizer), `concluir_pendencia` (marca pendência resolvida),
