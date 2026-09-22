@@ -11,7 +11,7 @@ import {
   type MaterialStatus,
   type TipoFoto,
 } from "../../src/memory/context.js";
-import { salvarObra, type ObraStatus } from "../../src/memory/obras.js";
+import { salvarObra, excluirObra, type ObraStatus } from "../../src/memory/obras.js";
 import { signedFotoUrl } from "../../src/memory/storage.js";
 import { json, preflight, readJson } from "../../src/auth/http.js";
 
@@ -102,6 +102,18 @@ export default {
             status: (str(body.status) as ObraStatus | null),
           });
           return json(request, { ok: true, obra });
+        }
+        return json(request, { error: "recurso_desconhecido" }, 400);
+      }
+
+      if (request.method === "DELETE") {
+        if (recurso === "obras") {
+          const body = await readJson(request);
+          const id = typeof body.id === "number" ? body.id : null;
+          const nome = typeof body.nome === "string" ? body.nome : null;
+          if (!id && !nome) return json(request, { error: "faltam_dados" }, 400);
+          await excluirObra(wa, { id, nome });
+          return json(request, { ok: true });
         }
         return json(request, { error: "recurso_desconhecido" }, 400);
       }

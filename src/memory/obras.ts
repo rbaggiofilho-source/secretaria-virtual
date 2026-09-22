@@ -47,6 +47,26 @@ export async function listObrasStruct(userWa: string): Promise<ObraStructRow[]> 
 }
 
 /**
+ * Busca a obra cadastrada cujo nome mais combina com o termo (case-insensitive,
+ * contém). Retorna a mais recentemente atualizada, ou null. Usada pela Rosana
+ * no WhatsApp (ex.: "ligue o gps para o island").
+ */
+export async function buscarObraPorNome(userWa: string, termo: string): Promise<ObraStructRow | null> {
+  const t = termo.trim();
+  if (!t) return null;
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from("secretaria_obras")
+    .select("*")
+    .eq("user_wa", userWa)
+    .ilike("nome", `%${t}%`)
+    .order("updated_at", { ascending: false })
+    .limit(1);
+  if (error) throw new Error(`Falha ao buscar obra: ${error.message}`);
+  return ((data ?? [])[0] as ObraStructRow | undefined) ?? null;
+}
+
+/**
  * Renomeia uma obra em TODOS os lugares que a referenciam pelo nome (cascata),
  * para não perder o vínculo dos lançamentos ao editar o nome no painel.
  */
@@ -70,6 +90,31 @@ export async function renameObraLinks(
     .eq("kind", "obra")
     .eq("content", oldNome);
   if (mErr) console.error(`[obras] rename memória: ${mErr.message}`);
+}
+
+/**
+ * Exclui o CADASTRO de uma obra (registro estruturado e a memória kind='obra'
+ * com esse nome). NÃO apaga os lançamentos vinculados (custos/RDO/materiais/
+ * documentos/fotos) — dados financeiros/operacionais não somem em silêncio.
+ */
+export async function excluirObra(
+  userWa: string,
+  opts: { id?: number | null; nome?: string | null },
+): Promise<void> {
+  const supabase = getSupabase();
+  if (opts.id) {
+    const { error } = await supabase.from("secretaria_obras").delete().eq("user_wa", userWa).eq("id", opts.id);
+    if (error) throw new Error(`Falha ao excluir obra: ${error.message}`);
+  }
+  const nome = opts.nome?.trim();
+  if (nome) {
+    await supabase
+      .from("secretaria_memories")
+      .delete()
+      .eq("user_wa", userWa)
+      .eq("kind", "obra")
+      .eq("content", nome);
+  }
 }
 
 /**

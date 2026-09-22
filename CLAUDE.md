@@ -180,6 +180,9 @@ dono é blindado), `configurar_lembrete_diario` (liga/desliga o "bom dia"),
 `registrar_rdo`, `consultar_rdo`, `registrar_foto`, `consultar_fotos`,
 `enviar_foto` (reenvia imagem arquivada), `gerar_rdo_pdf`,
 `registrar_documento`, `consultar_documentos`,
+`abrir_gps` (rota/GPS p/ o endereço de uma obra cadastrada — acha a obra por nome
+em `secretaria_obras` e devolve link `userosana.com.br/mapa?dest=...` que abre um
+chooser Google Maps/Waze/Apple Maps),
 `registrar_material`, `consultar_materiais`,
 `consultar_preco` (orçamentos: devolve `seus_precos` — preços REAIS do próprio
 usuário, do histórico de `secretaria_materiais` via `buscarPrecosDoUsuario`, com
@@ -242,9 +245,12 @@ banco; nada de novo produto. Rodando em **userosana.com.br** (projeto Vercel
   sob `/painel`) — Visão geral, Obras, Custos, Diário (RDO), Fotos (URL assinada do
   Storage), Documentos, Materiais, Configurações. Leem `/api/app/data?recurso=...`
   escopado pelo token. AÇÕES já no painel: busca + filtros por obra/status
-  (client-side), **cadastro estruturado de obra** editável (nome/cliente/endereço/
-  contexto/datas/status — POST `data?recurso=obras` → `secretaria_obras`, renomear
-  faz cascata; `web/src/components/ObraForm.tsx`),
+  (client-side), **cadastro estruturado de obra** criar/editar/**excluir**
+  (nome/cliente/endereço/contexto/datas/status — POST/DELETE `data?recurso=obras`
+  → `secretaria_obras`, renomear faz cascata, excluir remove só o cadastro;
+  `web/src/components/ObraForm.tsx`), **rota/GPS** pelo endereço (link do card e
+  tool `abrir_gps` abrem `web/src/pages/Mapa.tsx` = `/mapa?dest=` → chooser Google
+  Maps/Waze/Apple Maps),
   **baixar PDF do RDO** por obra (`/api/app/rdo-pdf`, fetch com token → download),
   **trocar senha logado** (`auth?acao=change-password`, exige senha atual).
   A ENTRADA principal de dados segue no WhatsApp.

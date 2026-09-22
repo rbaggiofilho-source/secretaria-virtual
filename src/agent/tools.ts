@@ -48,6 +48,7 @@ import {
   type UsuarioRow,
 } from "../memory/context.js";
 import { downloadFoto } from "../memory/storage.js";
+import { buscarObraPorNome } from "../memory/obras.js";
 import { buscarPrecos } from "../precos/index.js";
 import { getEnv } from "../config/env.js";
 import { addDays, addMonths, daysBetween, formatDateBr, todayIsoDate, weekdayBr } from "../util/datetime.js";
@@ -500,6 +501,19 @@ export const TOOLS: Anthropic.Tool[] = [
         },
       },
       required: [],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "abrir_gps",
+    description:
+      "Gera um link de ROTA/GPS para o endereço de uma obra cadastrada. Use quando o usuário pedir para navegar/ir até uma obra (ex.: 'liga o gps pra Island', 'como chego na obra Aurora?', 'rota pro Edifício Belém'). Ache a obra pelo nome/apelido. O link abre uma página onde a pessoa escolhe Google Maps, Waze ou Apple Maps. Se a obra não tiver endereço cadastrado, avise e peça para cadastrar no painel.",
+    input_schema: {
+      type: "object",
+      properties: {
+        obra: { type: "string", description: "Nome ou apelido da obra (ex.: 'Island', 'Aurora')" },
+      },
+      required: ["obra"],
       additionalProperties: false,
     },
   },
@@ -1246,6 +1260,42 @@ export async function runTool(
               vencimento: d.vencimento,
               situacao: situacao(d),
             })),
+          }),
+        };
+      }
+
+      case "abrir_gps": {
+        const termo = String(input.obra ?? "").trim();
+        const obra = termo ? await buscarObraPorNome(userWa, termo) : null;
+        if (!obra) {
+          return {
+            isError: false,
+            text: JSON.stringify({
+              ok: false,
+              error: `Não encontrei uma obra cadastrada parecida com "${termo}". Confira o nome ou cadastre a obra no painel.`,
+            }),
+          };
+        }
+        if (!obra.endereco) {
+          return {
+            isError: false,
+            text: JSON.stringify({
+              ok: false,
+              error: `A obra "${obra.nome}" ainda não tem endereço cadastrado. Peça para cadastrar o endereço no painel (Obras → editar).`,
+            }),
+          };
+        }
+        const WEB = "https://userosana.com.br";
+        const link = `${WEB}/mapa?dest=${encodeURIComponent(obra.endereco)}&nome=${encodeURIComponent(obra.nome)}`;
+        return {
+          isError: false,
+          text: JSON.stringify({
+            ok: true,
+            obra: obra.nome,
+            endereco: obra.endereco,
+            link,
+            instrucao:
+              "Envie este link ao usuário (mande a URL como texto). Ao abrir, ele escolhe Google Maps, Waze ou Apple Maps para navegar.",
           }),
         };
       }

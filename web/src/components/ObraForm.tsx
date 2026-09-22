@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
-import { X } from 'lucide-react'
-import { salvarObra, type ObraResumo, type ObraStatus } from '../lib/api'
+import { Trash2, X } from 'lucide-react'
+import { excluirObra, salvarObra, type ObraResumo, type ObraStatus } from '../lib/api'
 
 const STATUS: { v: ObraStatus; label: string }[] = [
   { v: 'ativa', label: 'Ativa' },
@@ -18,9 +18,26 @@ export function ObraForm({ inicial, onClose, onSaved }: { inicial?: ObraResumo |
   const [status, setStatus] = useState<ObraStatus>(inicial?.status ?? 'ativa')
   const [loading, setLoading] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
+  const [confirmarEx, setConfirmarEx] = useState(false)
+  const [excluindo, setExcluindo] = useState(false)
 
   const editando = !!inicial?.id
+  const podeExcluir = !!inicial && (inicial.id != null || !!inicial.nome)
+  const temLancamentos = !!inicial && (inicial.custos + inicial.rdos + inicial.materiais + inicial.documentos + inicial.fotos) > 0
   const renomeando = editando && inicial?.nome !== nome.trim()
+
+  async function excluir() {
+    if (!inicial) return
+    setExcluindo(true)
+    setErro(null)
+    try {
+      await excluirObra(inicial.id ?? null, inicial.nome)
+      onSaved()
+    } catch {
+      setErro('Não consegui excluir agora. Tente de novo.')
+      setExcluindo(false)
+    }
+  }
 
   async function salvar(e: FormEvent) {
     e.preventDefault()
@@ -55,7 +72,7 @@ export function ObraForm({ inicial, onClose, onSaved }: { inicial?: ObraResumo |
           <label><span>Nome da obra *</span><input autoFocus value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Ex.: Residencial Aurora" /></label>
           {renomeando && <p className="modal-note">Ao renomear, os custos, RDOs, materiais, documentos e fotos vinculados serão atualizados automaticamente.</p>}
           <div className="modal-row">
-            <label><span>Cliente</span><input value={cliente} onChange={(e) => setCliente(e.target.value)} placeholder="Nome do cliente / síndico" /></label>
+            <label><span>Cliente</span><input value={cliente} onChange={(e) => setCliente(e.target.value)} placeholder="Nome do cliente" /></label>
             <label><span>Status</span><select value={status} onChange={(e) => setStatus(e.target.value as ObraStatus)}>{STATUS.map((s) => <option key={s.v} value={s.v}>{s.label}</option>)}</select></label>
           </div>
           <label><span>Endereço</span><input value={endereco} onChange={(e) => setEndereco(e.target.value)} placeholder="Rua, número, bairro, cidade" /></label>
@@ -65,7 +82,22 @@ export function ObraForm({ inicial, onClose, onSaved }: { inicial?: ObraResumo |
           </div>
           <label><span>Contexto / observações</span><textarea rows={4} value={contexto} onChange={(e) => setContexto(e.target.value)} placeholder="Histórico, particularidades, contatos, etc." /></label>
           {erro && <p className="modal-erro">{erro}</p>}
+
+          {confirmarEx && (
+            <div className="modal-confirm">
+              <p>Excluir a obra <strong>{inicial?.nome}</strong>? Isso remove só o cadastro.{temLancamentos ? ' Os lançamentos (custos, RDOs, etc.) NÃO são apagados e continuarão no sistema.' : ''} Não dá pra desfazer.</p>
+              <div className="modal-confirm-actions">
+                <button type="button" className="btn-ghost" onClick={() => setConfirmarEx(false)} disabled={excluindo}>Voltar</button>
+                <button type="button" className="btn-danger" onClick={excluir} disabled={excluindo}>{excluindo ? 'Excluindo…' : 'Sim, excluir'}</button>
+              </div>
+            </div>
+          )}
+
           <div className="modal-actions">
+            {podeExcluir && !confirmarEx && (
+              <button type="button" className="btn-excluir" onClick={() => setConfirmarEx(true)}><Trash2 size={15} /> Excluir</button>
+            )}
+            <span className="modal-actions-spacer" />
             <button type="button" className="btn-ghost" onClick={onClose}>Cancelar</button>
             <button className="btn-primary" disabled={loading || !nome.trim()}>{loading ? 'Salvando…' : 'Salvar obra'}</button>
           </div>

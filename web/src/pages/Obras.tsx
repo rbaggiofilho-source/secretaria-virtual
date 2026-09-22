@@ -68,7 +68,11 @@ export function Obras() {
 
                 <div className="obra-meta">
                   {o.cliente && <span><User size={14} /> {o.cliente}</span>}
-                  {o.endereco && <span><MapPin size={14} /> {o.endereco}</span>}
+                  {o.endereco && (
+                    <a className="obra-mapa" href={`/mapa?dest=${encodeURIComponent(o.endereco)}&nome=${encodeURIComponent(o.nome)}`} target="_blank" rel="noopener noreferrer">
+                      <MapPin size={14} /> {o.endereco} <span className="obra-rota">rota →</span>
+                    </a>
+                  )}
                   {(o.dataInicio || o.dataFimAlvo) && (
                     <span><CalendarRange size={14} /> {formatDate(o.dataInicio)} → {formatDate(o.dataFimAlvo)}</span>
                   )}

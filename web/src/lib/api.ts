@@ -249,6 +249,14 @@ export function salvarObra(input: ObraInput) {
   })
 }
 
+/** Exclui o cadastro de uma obra (não apaga os lançamentos vinculados). */
+export function excluirObra(id: number | null, nome: string) {
+  return call<{ ok: boolean }>('/api/app/data?recurso=obras', {
+    method: 'DELETE',
+    body: JSON.stringify({ id, nome }),
+  })
+}
+
 /** Troca a senha estando logado (exige a senha atual). */
 export function trocarSenha(senhaAtual: string, novaSenha: string) {
   return call<{ ok: boolean }>('/api/app/auth?acao=change-password', {

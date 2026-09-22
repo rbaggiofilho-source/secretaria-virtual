@@ -198,3 +198,36 @@ main { padding: 31px 34px 20px; max-width: 1600px; margin: auto; }.welcome { dis
 .modal-erro { margin: 0; font-size: 12px; color: #9e4a2e; background: #f8e9e4; padding: 9px 11px; border-radius: 7px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 4px; }
 @media (max-width: 560px) { .modal-row { grid-template-columns: 1fr; } }
+
+/* ---------- Link de rota no card + tela /mapa ---------- */
+.obra-mapa { display: flex; align-items: center; gap: 7px; color: #3b665c; font-size: 11.5px; text-decoration: none; }
+.obra-mapa:hover { color: var(--orange); }
+.obra-mapa svg { color: #9aa19e; flex: 0 0 auto; }
+.obra-rota { margin-left: auto; font-weight: 700; font-size: 10px; color: var(--orange); white-space: nowrap; }
+
+.mapa-shell { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 24px 16px; background: radial-gradient(120% 120% at 50% 0%, #1c463c 0%, #12332c 45%, #0e2a24 100%); }
+.mapa-card { width: 100%; max-width: 420px; background: #fafaf7; border-radius: 16px; padding: 28px 26px; text-align: center; box-shadow: 0 24px 60px #06201a55; }
+.mapa-brand { display: flex; justify-content: center; margin-bottom: 18px; }
+.mapa-brand .logo { color: #173d35; }
+.mapa-icon { width: 54px; height: 54px; margin: 0 auto 14px; display: grid; place-items: center; border-radius: 14px; background: #e8f0ed; color: #2c7a63; }
+.mapa-card h1 { font: 700 20px Manrope; color: #21302c; margin: 0 0 10px; }
+.mapa-card h1 em { color: var(--orange); font-style: normal; }
+.mapa-end { display: inline-flex; align-items: center; gap: 7px; color: #45524e; font-size: 13px; background: #eef1ee; padding: 8px 12px; border-radius: 9px; margin: 0 auto 18px; }
+.mapa-sub { color: var(--muted); font-size: 12.5px; margin: 0 0 16px; }
+.mapa-apps { display: grid; gap: 10px; }
+.mapa-btn { display: flex; align-items: center; gap: 11px; justify-content: center; height: 50px; border: 1.5px solid; border-radius: 10px; background: #fff; color: #24312e; font-size: 15px; font-weight: 600; text-decoration: none; }
+.mapa-btn:hover { background: #f6f6f1; }
+.mapa-dot { width: 12px; height: 12px; border-radius: 50%; }
+.mapa-footer { color: #b9cbc6; font-size: 11px; }
+
+/* ---------- Excluir obra ---------- */
+.modal-actions-spacer { flex: 1; }
+.btn-excluir { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #ecccc0; background: #fff; color: #b0462c; border-radius: 8px; padding: 0 12px; height: 38px; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+.btn-excluir:hover { background: #f8e9e4; }
+.btn-danger { border: 0; border-radius: 8px; background: #b0462c; color: #fff; padding: 0 14px; height: 38px; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+.btn-danger:hover:not(:disabled) { background: #96371f; }
+.btn-danger:disabled { opacity: .6; cursor: default; }
+.modal-confirm { border: 1px solid #ecccc0; background: #f8e9e4; border-radius: 10px; padding: 14px 16px; }
+.modal-confirm p { margin: 0 0 12px; font-size: 12.5px; color: #7a3520; line-height: 1.5; }
+.modal-confirm strong { color: #5c2716; }
+.modal-confirm-actions { display: flex; justify-content: flex-end; gap: 10px; }

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import { Landing } from './pages/Landing'
 import { Cadastro } from './pages/Cadastro'
+import { Mapa } from './pages/Mapa'
 import { Login } from './pages/Login'
 import { PanelLayout } from './components/PanelLayout'
 import { VisaoGeral } from './pages/VisaoGeral'
@@ -85,6 +86,7 @@ export function App() {
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/cadastro" element={<Cadastro />} />
+        <Route path="/mapa" element={<Mapa />} />
         <Route
           path="/entrar"
           element={<RotaEntrar estado={estado} onLogin={(u) => setEstado({ fase: 'logado', usuario: u })} />}
