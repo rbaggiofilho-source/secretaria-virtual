@@ -108,10 +108,13 @@ WhatsApp. Eventos de status (sent/delivered/read/failed) são logados.
   - `src/auth/http.ts` — CORS + helpers JSON dos endpoints `/api/app/*`.
   - `src/app/dashboard.ts` — agrega o panorama real por `user_wa` (obras derivadas,
     custos por categoria, RDOs, prazos, contadores).
-  - `api/app/auth/{login,request-code,set-password}.ts` + `api/app/session.ts` — auth.
-  - `api/app/dashboard.ts` + `api/app/{obras,custos,rdo,documentos,materiais,fotos}.ts`
-    — dados de cada seção (escopo por token). `src/app/obras.ts` = agregação de obras.
-    `signedFotoUrl` (storage.ts) = URL temporária p/ exibir foto sem abrir o bucket.
+  - **Dois roteadores** (p/ caber no limite de 12 funções do Hobby — ver Armadilhas):
+    - `api/app/auth.ts` — `?acao=login|request-code|set-password|change-password` (POST)
+      e `?acao=session` (GET).
+    - `api/app/data.ts` — `?recurso=dashboard|obras|custos|rdo|documentos|materiais|fotos`
+      (GET) e `?recurso=obras` (POST cria obra). `src/app/{dashboard,obras}.ts` agregam.
+      `signedFotoUrl` (storage.ts) = URL temporária p/ exibir foto sem abrir o bucket.
+    - `api/app/rdo-pdf.ts` — download do PDF do RDO por obra (função à parte, binário).
   - `web/` — SPA Vite+React+react-router (deploy no projeto `rosana-web`).
     `web/src/App.tsx` (rotas + portão de sessão), `components/PanelLayout.tsx`
     (moldura + `Outlet`), `components/Sidebar.tsx` (NavLink), `lib/api.ts` (cliente +
@@ -202,7 +205,7 @@ Companheira do WhatsApp: o WhatsApp ALIMENTA (áudio/foto/texto), o painel
 VISUALIZA (obras, custos por categoria, RDOs, prazos). Mesmo cérebro e mesmo
 banco; nada de novo produto. Rodando em **userosana.com.br** (projeto Vercel
 `rosana-web`, pasta `web/`).
-- **Login = número do WhatsApp + senha (desde 22/09):** `api/app/auth/login`
+- **Login = número do WhatsApp + senha (desde 22/09):** `auth?acao=login`
   (`verifyLogin` em `src/auth/password.ts`) confere número+senha e devolve o token
   de sessão. Senha guardada só como HASH **scrypt** (com salt; sem dependência
   externa), em `secretaria_senhas` (uma linha por variante de wa_id). Proteção a
@@ -232,12 +235,12 @@ banco; nada de novo produto. Rodando em **userosana.com.br** (projeto Vercel
   **template de autenticação** na Meta pra o login funcionar "do nada".
 - **Telas do painel (todas no ar):** menu navegável (react-router, rotas aninhadas
   sob `/painel`) — Visão geral, Obras, Custos, Diário (RDO), Fotos (URL assinada do
-  Storage), Documentos, Materiais, Configurações. Leem `/api/app/{obras,custos,rdo,
-  documentos,materiais,fotos}` escopado pelo token. AÇÕES já no painel: busca +
-  filtros por obra/status (client-side), **criar obra** (POST `/api/app/obras` →
-  memória kind='obra'), **baixar PDF do RDO** por obra (`/api/app/rdo-pdf`, fetch
-  com token → download), **trocar senha logado** (`/api/app/auth/change-password`,
-  exige senha atual). A ENTRADA principal de dados segue no WhatsApp.
+  Storage), Documentos, Materiais, Configurações. Leem `/api/app/data?recurso=...`
+  escopado pelo token. AÇÕES já no painel: busca + filtros por obra/status
+  (client-side), **criar obra** (POST `data?recurso=obras` → memória kind='obra'),
+  **baixar PDF do RDO** por obra (`/api/app/rdo-pdf`, fetch com token → download),
+  **trocar senha logado** (`auth?acao=change-password`, exige senha atual).
+  A ENTRADA principal de dados segue no WhatsApp.
 - **Ainda mock/pendente:** **pagamento** (placeholder `iniciarCheckout` → integrar
   Mercado Pago) e **envio do cadastro** (`/cadastro`) pro backend/`secretaria_usuarios`;
   edição/registro fino no painel (RDO/custo/material são criados via WhatsApp);
@@ -265,6 +268,15 @@ banco; nada de novo produto. Rodando em **userosana.com.br** (projeto Vercel
 ## Armadilhas já resolvidas (NÃO repetir)
 - **ESM na Vercel:** `"type":"module"`, imports relativos terminam em `.js`,
   tsconfig `NodeNext`, **sem** script `build`. Não mexer.
+- **Limite de 12 funções serverless (Vercel Hobby) (22/09):** cada arquivo em
+  `/api` vira uma função; passando de 12 o DEPLOY FALHA silenciosamente (fica na
+  versão anterior). Aconteceu ao criar um endpoint por seção do painel (chegou a
+  20). Sintoma: painel novo no ar (projeto `rosana-web` é estático, sem limite),
+  mas as chamadas às rotas novas davam erro (a versão antiga do backend não as
+  tinha). Correção: **consolidar** em roteadores por querystring — `api/app/auth.ts`
+  (`?acao=`) e `api/app/data.ts` (`?recurso=`) — voltando a 10 funções. Ao criar
+  endpoint novo do painel, ESTENDER esses roteadores, NÃO criar arquivo novo em
+  `/api` (a menos que precise ser binário, como `rdo-pdf.ts`). Alternativa: Vercel Pro.
 - **Corpo bruto do webhook:** usar handler Web (`Request` + `request.text()`).
   `config.api.bodyParser` é do Next.js e NÃO vale em funções `/api` — foi a causa
   do 401 de assinatura inválida.

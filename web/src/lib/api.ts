@@ -92,7 +92,7 @@ export interface DashboardData {
 
 /** Login por número do WhatsApp + senha. Devolve o token de sessão + usuário. */
 export function login(whatsapp: string, senha: string) {
-  return call<{ ok: boolean; token: string; usuario: Usuario }>('/api/app/auth/login', {
+  return call<{ ok: boolean; token: string; usuario: Usuario }>('/api/app/auth?acao=login', {
     method: 'POST',
     body: JSON.stringify({ whatsapp, senha }),
   })
@@ -100,7 +100,7 @@ export function login(whatsapp: string, senha: string) {
 
 /** Pede um código pelo WhatsApp (usado para criar/redefinir a senha). */
 export function requestCode(whatsapp: string) {
-  return call<{ ok: boolean; nome?: string; error?: string }>('/api/app/auth/request-code', {
+  return call<{ ok: boolean; nome?: string; error?: string }>('/api/app/auth?acao=request-code', {
     method: 'POST',
     body: JSON.stringify({ whatsapp }),
   })
@@ -108,7 +108,7 @@ export function requestCode(whatsapp: string) {
 
 /** Cria/redefine a senha com o código do WhatsApp. Já devolve a sessão. */
 export function setPassword(whatsapp: string, code: string, senha: string) {
-  return call<{ ok: boolean; token: string; usuario: Usuario }>('/api/app/auth/set-password', {
+  return call<{ ok: boolean; token: string; usuario: Usuario }>('/api/app/auth?acao=set-password', {
     method: 'POST',
     body: JSON.stringify({ whatsapp, code, senha }),
   })
@@ -116,12 +116,12 @@ export function setPassword(whatsapp: string, code: string, senha: string) {
 
 /** Confirma a sessão atual (token do localStorage). */
 export function getSession() {
-  return call<{ ok: boolean; usuario: Usuario }>('/api/app/session')
+  return call<{ ok: boolean; usuario: Usuario }>('/api/app/auth?acao=session')
 }
 
 /** Carrega o panorama real do usuário logado. */
 export function getDashboard() {
-  return call<{ ok: boolean; data: DashboardData }>('/api/app/dashboard')
+  return call<{ ok: boolean; data: DashboardData }>('/api/app/data?recurso=dashboard')
 }
 
 // ---------- Seções do painel ----------
@@ -137,7 +137,7 @@ export interface ObraResumo {
   ultimaAtividade: string | null
 }
 export function getObras() {
-  return call<{ ok: boolean; obras: ObraResumo[] }>('/api/app/obras')
+  return call<{ ok: boolean; obras: ObraResumo[] }>('/api/app/data?recurso=obras')
 }
 
 export interface CustoItem {
@@ -149,9 +149,9 @@ export interface CustoItem {
   data: string
 }
 export function getCustos(obra?: string) {
-  const q = obra ? `?obra=${encodeURIComponent(obra)}` : ''
+  const q = obra ? `&obra=${encodeURIComponent(obra)}` : ''
   return call<{ ok: boolean; total: number; porCategoria: Record<string, number>; itens: CustoItem[] }>(
-    `/api/app/custos${q}`,
+    `/api/app/data?recurso=custos${q}`,
   )
 }
 
@@ -166,8 +166,8 @@ export interface RdoItem {
   materiais: string | null
 }
 export function getRdos(obra?: string) {
-  const q = obra ? `?obra=${encodeURIComponent(obra)}` : ''
-  return call<{ ok: boolean; rdos: RdoItem[] }>(`/api/app/rdo${q}`)
+  const q = obra ? `&obra=${encodeURIComponent(obra)}` : ''
+  return call<{ ok: boolean; rdos: RdoItem[] }>(`/api/app/data?recurso=rdo${q}`)
 }
 
 export interface DocumentoItem {
@@ -182,7 +182,7 @@ export interface DocumentoItem {
   status: 'ativo' | 'arquivado'
 }
 export function getDocumentos() {
-  return call<{ ok: boolean; documentos: DocumentoItem[] }>('/api/app/documentos')
+  return call<{ ok: boolean; documentos: DocumentoItem[] }>('/api/app/data?recurso=documentos')
 }
 
 export interface Cotacao {
@@ -206,8 +206,8 @@ export interface MaterialItem {
   observacoes: string | null
 }
 export function getMateriais(obra?: string) {
-  const q = obra ? `?obra=${encodeURIComponent(obra)}` : ''
-  return call<{ ok: boolean; materiais: MaterialItem[] }>(`/api/app/materiais${q}`)
+  const q = obra ? `&obra=${encodeURIComponent(obra)}` : ''
+  return call<{ ok: boolean; materiais: MaterialItem[] }>(`/api/app/data?recurso=materiais${q}`)
 }
 
 export interface FotoItem {
@@ -219,12 +219,12 @@ export interface FotoItem {
   url: string | null
 }
 export function getFotos() {
-  return call<{ ok: boolean; fotos: FotoItem[] }>('/api/app/fotos')
+  return call<{ ok: boolean; fotos: FotoItem[] }>('/api/app/data?recurso=fotos')
 }
 
 /** Registra uma nova obra (memória kind='obra'). */
 export function criarObra(nome: string) {
-  return call<{ ok: boolean; criada: boolean }>('/api/app/obras', {
+  return call<{ ok: boolean; criada: boolean }>('/api/app/data?recurso=obras', {
     method: 'POST',
     body: JSON.stringify({ nome }),
   })
@@ -232,7 +232,7 @@ export function criarObra(nome: string) {
 
 /** Troca a senha estando logado (exige a senha atual). */
 export function trocarSenha(senhaAtual: string, novaSenha: string) {
-  return call<{ ok: boolean }>('/api/app/auth/change-password', {
+  return call<{ ok: boolean }>('/api/app/auth?acao=change-password', {
     method: 'POST',
     body: JSON.stringify({ senhaAtual, novaSenha }),
   })
