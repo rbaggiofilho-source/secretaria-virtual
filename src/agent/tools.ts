@@ -557,11 +557,20 @@ export async function runTool(
   async function resolveCalAuth(): Promise<CalendarAuth | null> {
     if (calAuthCache) return calAuthCache.value;
     let value: CalendarAuth | null = null;
-    const tok = await getOAuthToken(userWa);
-    if (tok) {
-      value = { kind: "oauth", refreshToken: tok.refresh_token };
-    } else if (usuario.dono || usuario.calendar_id) {
+    // O DONO escreve pela CONTA DE SERVIÇO (GOOGLE_CALENDAR_ID → a agenda pessoal
+    // dele): esse caminho nunca expira. O refresh_token do OAuth em modo Testing
+    // do Google morre a cada ~7 dias — era a causa de "a agenda vive
+    // desconectando". Como a conta de serviço grava na MESMA agenda do dono, não
+    // há motivo pra ele depender do OAuth. Beta (não-dono) usa OAuth próprio.
+    if (usuario.dono) {
       value = { kind: "service", calendarId: usuario.calendar_id ?? null };
+    } else {
+      const tok = await getOAuthToken(userWa);
+      if (tok) {
+        value = { kind: "oauth", refreshToken: tok.refresh_token };
+      } else if (usuario.calendar_id) {
+        value = { kind: "service", calendarId: usuario.calendar_id };
+      }
     }
     calAuthCache = { value };
     return value;

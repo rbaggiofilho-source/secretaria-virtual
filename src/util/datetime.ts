@@ -76,6 +76,27 @@ export function weekdayBr(iso: string): string {
 }
 
 /**
+ * Bloco de datas de referência JÁ CALCULADAS (próximos `dias` dias a partir de
+ * hoje, no fuso do dono), com dia da semana. Serve para o modelo ANCORAR datas
+ * relativas ("amanhã", "sexta", "dia 25", "semana que vem") sem fazer conta de
+ * cabeça — ele erra tanto o dia da semana quanto a própria data. Marca hoje,
+ * amanhã e depois de amanhã explicitamente.
+ */
+export function datasReferencia(dias = 16): string {
+  const hoje = todayIsoDate();
+  const linhas: string[] = [];
+  for (let i = 0; i < dias; i++) {
+    const d = addDays(hoje, i);
+    let rotulo = "";
+    if (i === 0) rotulo = "   ← HOJE";
+    else if (i === 1) rotulo = "   ← amanhã";
+    else if (i === 2) rotulo = "   ← depois de amanhã";
+    linhas.push(`  ${d}  ${weekdayBr(d)}${rotulo}`);
+  }
+  return linhas.join("\n");
+}
+
+/**
  * Formata uma data "YYYY-MM-DD" (sem hora) de forma legível em pt-BR, ex.:
  * "terça-feira, 18/08/2026". Constrói a data ao meio-dia UTC para não sofrer
  * deslocamento de dia por fuso.

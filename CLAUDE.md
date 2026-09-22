@@ -193,6 +193,21 @@ prioridade — + `referencia` — base de mercado, 433 insumos).
   o erro era só o texto. Correção: `weekdayBr` (código) calcula o dia; a tool de
   agenda devolve `dia_semana`; tool `dia_da_semana` p/ perguntas; regra dura no
   prompt: nunca deduzir dia da semana de cabeça, conferir ao ser corrigido.
+- **Dono perdia a agenda a cada ~7 dias (22/09):** o dono tinha CONECTADO via
+  OAuth (linha em `secretaria_oauth_tokens`), então `resolveCalAuth` usava OAuth
+  pra ele. Em modo Testing do Google o refresh_token expira em ~7 dias → "a
+  agenda vive desconectando" e eventos não eram criados. Como a conta de serviço
+  já grava na MESMA agenda do dono e NUNCA expira, `resolveCalAuth` agora força
+  `service` para `usuario.dono` (OAuth só para beta/não-dono). Tokens OAuth
+  antigos do dono foram apagados. Beta ainda depende de publicar o app em
+  Produção pra não expirar.
+- **Data relativa errada — "amanhã" virava outro dia (22/09):** ex.: hoje terça
+  22/09, "agenda amanhã 14h" e a Rosana respondia "quarta, dia 25". O modelo
+  calculava a DATA de "amanhã/sexta" de cabeça (mesma classe do bug de dia da
+  semana) e errava. Correção: `datasReferencia()` injeta no prompt uma TABELA de
+  16 dias já calculados (YYYY-MM-DD + dia da semana, com hoje/amanhã/depois de
+  amanhã marcados); regra dura manda pegar a data da tabela pra montar
+  start_iso/end_iso e citar data/dia exatamente como na tabela.
 - **"Disse que salvou mas não salvou" (15/09):** o modelo confirmava "registrei a
   pendência" SEM chamar save_memory; conseguia até "mostrar a lista" porque ela
   ainda estava no histórico recente — que depois rola pra fora da janela e o item

@@ -1,5 +1,5 @@
 import type { OwnerContext, UsuarioRow } from "../memory/context.js";
-import { nowInTimezone, nowIso, timezone } from "../util/datetime.js";
+import { datasReferencia, nowInTimezone, nowIso, timezone } from "../util/datetime.js";
 
 /**
  * System prompt da secretária virtual (PT-BR). Personalizado por usuário
@@ -86,6 +86,12 @@ Apoio à obra (engenharia/construção):
 
 Data e hora atuais: ${nowInTimezone()}
 ISO agora (UTC): ${nowIso()}
+
+Calendário de referência (datas JÁ CALCULADAS — use SEMPRE estas, nunca calcule data de cabeça):
+${datasReferencia()}
+- Para montar start_iso/end_iso de um evento, PEGUE a data desta tabela: "amanhã", "sexta", "dia 25", "semana que vem" → ache a linha certa aqui e use aquele YYYY-MM-DD. Você erra ao contar dias de cabeça — a tabela é a fonte da verdade.
+- Ex.: se o usuário diz "amanhã às 14h", use a data marcada "← amanhã" acima + T14:00:00-03:00. Nunca invente outro dia.
+- Ao confirmar na resposta, cite a data e o dia da semana EXATAMENTE como estão nesta tabela (ou como a ferramenta de agenda devolveu em dia_semana) — nunca um dia/data que você deduziu.
 
 --- CONTEXTO DE ${nome.toUpperCase()} (memória) ---${bloco("Fatos", ctx.fatos)}${bloco("Obras", ctx.obras)}${bloco("Apelidos de obra", ctx.apelidos)}${bloco("Preferências", ctx.preferencias)}${pendencias}
 --- FIM DO CONTEXTO ---`;
