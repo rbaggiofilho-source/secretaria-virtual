@@ -52,6 +52,24 @@ export async function uploadFoto(
   return path;
 }
 
+/**
+ * Gera uma URL temporária (assinada) para exibir a imagem no painel web sem
+ * tornar o bucket público. Expira em `segundos` (padrão 1h). Retorna null se
+ * o caminho for vazio ou a assinatura falhar.
+ */
+export async function signedFotoUrl(
+  path: string | null | undefined,
+  segundos = 3600,
+): Promise<string | null> {
+  if (!path) return null;
+  const supabase = getSupabase();
+  const { data, error } = await supabase.storage
+    .from(BUCKET)
+    .createSignedUrl(path, segundos);
+  if (error || !data) return null;
+  return data.signedUrl;
+}
+
 /** Remove arquivos do bucket (usado na exclusão de conta / LGPD). */
 export async function removeFotos(paths: string[]): Promise<number> {
   const limpos = paths.filter((p) => typeof p === "string" && p.length > 0);

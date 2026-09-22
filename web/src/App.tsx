@@ -3,7 +3,15 @@ import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-route
 import { Landing } from './pages/Landing'
 import { Cadastro } from './pages/Cadastro'
 import { Login } from './pages/Login'
-import { Dashboard } from './pages/Dashboard'
+import { PanelLayout } from './components/PanelLayout'
+import { VisaoGeral } from './pages/VisaoGeral'
+import { Obras } from './pages/Obras'
+import { Custos } from './pages/Custos'
+import { Diario } from './pages/Diario'
+import { Fotos } from './pages/Fotos'
+import { Documentos } from './pages/Documentos'
+import { Materiais } from './pages/Materiais'
+import { Configuracoes } from './pages/Configuracoes'
 import { getSession, getToken, setToken, type Usuario } from './lib/api'
 import { Logo } from './components/Logo'
 
@@ -47,7 +55,7 @@ function RotaPainel({ estado, onLogout }: { estado: Estado; onLogout: () => void
   useNoindex()
   if (estado.fase === 'checando') return <Splash />
   if (estado.fase === 'deslogado') return <Navigate to="/entrar" replace />
-  return <Dashboard usuario={estado.usuario} onLogout={() => { onLogout(); navigate('/', { replace: true }) }} />
+  return <PanelLayout usuario={estado.usuario} onLogout={() => { onLogout(); navigate('/', { replace: true }) }} />
 }
 
 export function App() {
@@ -84,7 +92,16 @@ export function App() {
         <Route
           path="/painel"
           element={<RotaPainel estado={estado} onLogout={() => { setToken(null); setEstado({ fase: 'deslogado' }) }} />}
-        />
+        >
+          <Route index element={<VisaoGeral />} />
+          <Route path="obras" element={<Obras />} />
+          <Route path="custos" element={<Custos />} />
+          <Route path="diario" element={<Diario />} />
+          <Route path="fotos" element={<Fotos />} />
+          <Route path="documentos" element={<Documentos />} />
+          <Route path="materiais" element={<Materiais />} />
+          <Route path="config" element={<Configuracoes />} />
+        </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

@@ -109,11 +109,15 @@ WhatsApp. Eventos de status (sent/delivered/read/failed) são logados.
   - `src/app/dashboard.ts` — agrega o panorama real por `user_wa` (obras derivadas,
     custos por categoria, RDOs, prazos, contadores).
   - `api/app/auth/{login,request-code,set-password}.ts` + `api/app/session.ts` — auth.
-  - `api/app/dashboard.ts` — dados do painel (escopo por token, resolvido no servidor).
+  - `api/app/dashboard.ts` + `api/app/{obras,custos,rdo,documentos,materiais,fotos}.ts`
+    — dados de cada seção (escopo por token). `src/app/obras.ts` = agregação de obras.
+    `signedFotoUrl` (storage.ts) = URL temporária p/ exibir foto sem abrir o bucket.
   - `web/` — SPA Vite+React+react-router (deploy no projeto `rosana-web`).
-    `web/src/App.tsx` (rotas + portão de sessão), `web/src/lib/api.ts` (cliente +
-    token no localStorage), `pages/{Landing,Cadastro,Login,Dashboard}.tsx`,
-    `components/*`, `styles/{global,landing}.css`. `web/vercel.json` = SPA fallback + cache.
+    `web/src/App.tsx` (rotas + portão de sessão), `components/PanelLayout.tsx`
+    (moldura + `Outlet`), `components/Sidebar.tsx` (NavLink), `lib/api.ts` (cliente +
+    token no localStorage), `pages/{Landing,Cadastro,Login,VisaoGeral,Obras,Custos,
+    Diario,Fotos,Documentos,Materiais,Configuracoes}.tsx`, `styles/{global,landing}.css`.
+    `web/vercel.json` = SPA fallback + cache.
 - Exclusão de conta: `excluirDadosUsuario` (context.ts) apaga tudo por wa_id + arquivos do Storage (`removeFotos`).
 - `src/whatsapp/{client,signature,types}.ts` — envio (texto/documento/upload de mídia), HMAC, tipos.
 - `src/pdf/rdo.ts` — geração do PDF do RDO (pdf-lib).
@@ -226,10 +230,16 @@ banco; nada de novo produto. Rodando em **userosana.com.br** (projeto Vercel
   entrega sem TEMPLATE aprovado na Meta. Hoje, pra testar, o usuário manda algo
   pra Rosana primeiro (abre a janela) e então pede o código. Pendência: criar o
   **template de autenticação** na Meta pra o login funcionar "do nada".
+- **Telas do painel (todas no ar, só LEITURA):** menu navegável (react-router,
+  rotas aninhadas sob `/painel`) — Visão geral, Obras, Custos, Diário (RDO),
+  Fotos (URL assinada do Storage), Documentos (prazos), Materiais, Configurações.
+  Cada uma lê `/api/app/{obras,custos,rdo,documentos,materiais,fotos}` escopado
+  pelo token. A ENTRADA de dados continua no WhatsApp (o painel visualiza).
 - **Ainda mock/pendente:** **pagamento** (placeholder `iniciarCheckout` → integrar
   Mercado Pago) e **envio do cadastro** (`/cadastro`) pro backend/`secretaria_usuarios`;
-  navegação entre telas do painel (Obras/Custos/... são visuais); "orçamento/progresso"
-  de obra (não existe no modelo); e o `www` (só o apex foi configurado no registro.br).
+  AÇÕES de criar/editar no painel ("Nova obra", baixar PDF do RDO, filtros, busca)
+  e trocar senha logado; "orçamento/progresso" de obra (não existe no modelo);
+  e o `www` (só o apex foi configurado no registro.br).
 
 ## Funcionalidades (todas no ar)
 - **Base:** agenda/lembretes no Google Agenda pessoal; memória (obras/apelidos/pendências); texto e voz.

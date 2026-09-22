@@ -58,3 +58,12 @@ const TIPO_DOC_LABEL: Record<string, string> = {
   outro: 'Documento',
 }
 export const tipoDocLabel = (t: string) => TIPO_DOC_LABEL[t] ?? t
+
+const MATERIAL_STATUS: Record<string, string> = {
+  a_comprar: 'A comprar',
+  cotando: 'Cotando',
+  comprado: 'Comprado',
+  entregue: 'Entregue',
+  cancelado: 'Cancelado',
+}
+export const materialStatusLabel = (s: string) => MATERIAL_STATUS[s] ?? s

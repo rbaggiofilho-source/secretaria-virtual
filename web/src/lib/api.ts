@@ -123,3 +123,101 @@ export function getSession() {
 export function getDashboard() {
   return call<{ ok: boolean; data: DashboardData }>('/api/app/dashboard')
 }
+
+// ---------- Seções do painel ----------
+
+export interface ObraResumo {
+  nome: string
+  gasto: number
+  custos: number
+  rdos: number
+  materiais: number
+  documentos: number
+  fotos: number
+  ultimaAtividade: string | null
+}
+export function getObras() {
+  return call<{ ok: boolean; obras: ObraResumo[] }>('/api/app/obras')
+}
+
+export interface CustoItem {
+  id: number
+  obra: string | null
+  categoria: string
+  valor: number
+  descricao: string | null
+  data: string
+}
+export function getCustos(obra?: string) {
+  const q = obra ? `?obra=${encodeURIComponent(obra)}` : ''
+  return call<{ ok: boolean; total: number; porCategoria: Record<string, number>; itens: CustoItem[] }>(
+    `/api/app/custos${q}`,
+  )
+}
+
+export interface RdoItem {
+  id: number
+  data: string
+  obra: string
+  clima: string | null
+  efetivo: Array<{ funcao: string; qtd: number }>
+  atividades: string | null
+  ocorrencias: string | null
+  materiais: string | null
+}
+export function getRdos(obra?: string) {
+  const q = obra ? `?obra=${encodeURIComponent(obra)}` : ''
+  return call<{ ok: boolean; rdos: RdoItem[] }>(`/api/app/rdo${q}`)
+}
+
+export interface DocumentoItem {
+  id: number
+  obra: string | null
+  tipo: string
+  descricao: string
+  numero: string | null
+  emissao: string | null
+  vencimento: string | null
+  responsavel: string | null
+  status: 'ativo' | 'arquivado'
+}
+export function getDocumentos() {
+  return call<{ ok: boolean; documentos: DocumentoItem[] }>('/api/app/documentos')
+}
+
+export interface Cotacao {
+  fornecedor: string
+  valor_unitario: number | null
+  obs?: string | null
+}
+export interface MaterialItem {
+  id: number
+  obra: string | null
+  item: string
+  quantidade: number | null
+  unidade: string | null
+  status: string
+  fornecedor: string | null
+  valor_unitario: number | null
+  valor_total: number | null
+  cotacoes: Cotacao[]
+  previsao_entrega: string | null
+  data_compra: string | null
+  observacoes: string | null
+}
+export function getMateriais(obra?: string) {
+  const q = obra ? `?obra=${encodeURIComponent(obra)}` : ''
+  return call<{ ok: boolean; materiais: MaterialItem[] }>(`/api/app/materiais${q}`)
+}
+
+export interface FotoItem {
+  id: number
+  obra: string | null
+  tipo: string
+  descricao: string | null
+  data: string
+  url: string | null
+}
+export function getFotos() {
+  return call<{ ok: boolean; fotos: FotoItem[] }>('/api/app/fotos')
+}

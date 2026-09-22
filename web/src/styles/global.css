@@ -64,3 +64,80 @@ main { padding: 31px 34px 20px; max-width: 1600px; margin: auto; }.welcome { dis
 .empty { color: #8a938f; font-size: 12.5px; line-height: 1.5; padding: 20px; text-align: center; }
 
 .login-link--inline { display: inline; padding: 0; font-weight: 700; text-decoration: underline; }
+
+/* ---------- Páginas do painel ---------- */
+.page { max-width: 1600px; }
+.page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 24px; }
+.page-head h1 { font: 700 26px Manrope; letter-spacing: -.7px; margin: 3px 0 4px; color: #21302c; }
+.page-head small { color: var(--muted); font-size: 12px; }
+.page-head-right { display: flex; gap: 10px; align-items: center; }
+
+.card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 15px; }
+.obra-card { padding: 20px; border: 1px solid var(--border); border-radius: 12px; background: #fafaf7; box-shadow: 0 1px 2px #1f352a08; }
+.obra-top { display: flex; gap: 12px; align-items: center; margin-bottom: 16px; }
+.obra-mark { width: 40px; height: 40px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 9px; font-size: 20px; }
+.obra-top h3 { margin: 0; font: 700 15px Manrope; color: #2c3936; }
+.obra-top small { color: var(--muted); font-size: 10px; }
+.obra-invest { margin-bottom: 14px; }
+.obra-invest small { display: block; color: var(--muted); font-size: 9px; letter-spacing: .5px; }
+.obra-invest strong { font: 700 20px Manrope; color: #21302c; }
+.obra-stats { display: flex; flex-wrap: wrap; gap: 7px 14px; padding-top: 13px; border-top: 1px solid #ecebe5; }
+.obra-stats span { display: inline-flex; align-items: center; gap: 5px; color: #67716e; font-size: 11px; }
+.obra-stats svg { color: #9aa19e; }
+
+.cat-list { padding: 18px 21px; display: grid; gap: 13px; }
+.cat-row { display: grid; grid-template-columns: 10px 1fr auto; align-items: center; gap: 10px; font-size: 13px; }
+.cat-row strong { font-weight: 700; }
+
+.tag { display: inline-block; padding: 3px 9px; border-radius: 20px; font-size: 10px; font-weight: 600; background: #eef1ee; color: #55635e; white-space: nowrap; }
+.rdo-card td small { color: var(--muted); }
+
+.rdo-list { display: grid; gap: 13px; }
+.rdo-item { padding: 20px; border: 1px solid var(--border); border-radius: 11px; background: #fafaf7; }
+.rdo-item-head { display: flex; align-items: start; justify-content: space-between; gap: 14px; margin-bottom: 12px; flex-wrap: wrap; }
+.rdo-item-head strong { font: 700 15px Manrope; color: #2c3936; }
+.rdo-item-head small { display: block; color: var(--muted); font-size: 10px; margin-top: 2px; }
+.rdo-item-meta { display: flex; gap: 14px; align-items: center; }
+.rdo-clima, .rdo-efetivo { display: inline-flex; align-items: center; gap: 6px; color: #67716e; font-size: 12px; }
+.rdo-block { margin: 6px 0; font-size: 13px; color: #45524e; line-height: 1.5; }
+.rdo-block b { color: #2c3936; }
+.rdo-efetivo-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.rdo-efetivo-list span { padding: 4px 9px; border-radius: 6px; background: #eef1ee; color: #55635e; font-size: 10px; }
+
+.prazo { padding: 4px 9px; border-radius: 20px; font-size: 10px; font-weight: 700; }
+.prazo--vencido { background: #f7e3dd; color: #b0462c; }
+.prazo--proximo { background: #f7efdc; color: #9a7327; }
+.prazo--ok { background: #e7f0eb; color: #477462; }
+.prazo--neutro { background: #eeede7; color: #8a938f; }
+
+.mat-status { padding: 4px 9px; border-radius: 20px; font-size: 10px; font-weight: 700; background: #eeede7; color: #6a736f; }
+.mat-status--a_comprar { background: #f7efdc; color: #9a7327; }
+.mat-status--cotando { background: #e8f0f1; color: #46707d; }
+.mat-status--comprado { background: #e7f0eb; color: #477462; }
+.mat-status--entregue { background: #e4efe7; color: #3a7a54; }
+.mat-status--cancelado { background: #f0e3e0; color: #9a5a48; }
+
+.foto-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 15px; }
+.foto-card { margin: 0; border: 1px solid var(--border); border-radius: 11px; overflow: hidden; background: #fafaf7; }
+.foto-thumb { position: relative; aspect-ratio: 4/3; background: #ecebe5; display: grid; place-items: center; overflow: hidden; }
+.foto-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.foto-off { color: #9aa19e; font-size: 11px; }
+.foto-tag { position: absolute; top: 8px; left: 8px; padding: 3px 8px; border-radius: 5px; font-size: 9px; font-weight: 700; background: #fafaf7cc; color: #55635e; }
+.foto-tag--nota_fiscal { background: #f7efdccc; color: #9a7327; }
+.foto-card figcaption { padding: 13px; }
+.foto-card figcaption p { margin: 0 0 6px; font-size: 12px; color: #45524e; line-height: 1.45; }
+.foto-card figcaption small { color: var(--muted); font-size: 10px; }
+
+.config-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 15px; }
+.config-card { padding: 22px; border: 1px solid var(--border); border-radius: 12px; background: #fafaf7; }
+.config-card--danger { border-color: #ecccc0; }
+.config-icon { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 9px; background: #e8f0ed; color: #397164; margin-bottom: 14px; }
+.config-icon--danger { background: #f7e3dd; color: #b0462c; }
+.config-card h3 { margin: 0 0 8px; font: 700 15px Manrope; color: #2c3936; }
+.config-card p { margin: 0; color: var(--muted); font-size: 12.5px; line-height: 1.55; }
+.config-card dl { margin: 0; display: grid; gap: 10px; }
+.config-card dl div { display: flex; justify-content: space-between; gap: 12px; }
+.config-card dt { color: var(--muted); font-size: 11px; }
+.config-card dd { margin: 0; font-size: 12px; font-weight: 600; color: #2c3936; text-align: right; }
+.config-btn { margin-top: 14px; border: 1px solid #d9d8cf; background: #fff; border-radius: 8px; padding: 8px 14px; font-size: 12px; font-weight: 600; color: var(--green); }
+.config-logout { margin-top: 20px; display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--border); background: #fafaf7; border-radius: 8px; padding: 10px 16px; font-size: 13px; font-weight: 600; color: #b0462c; }
