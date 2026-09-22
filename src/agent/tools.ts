@@ -1151,7 +1151,17 @@ export async function runTool(
         }
         const periodoLabel =
           desde || ate ? `${desde ?? "início"} a ${ate ?? "hoje"}` : undefined;
-        const bytes = await buildRdoPdf({ obra, rdos, periodoLabel });
+        // Enriquece o cabeçalho do PDF com o cadastro estruturado da obra (se houver).
+        const cad = await buscarObraPorNome(userWa, obra);
+        const bytes = await buildRdoPdf({
+          obra: cad?.nome ?? obra,
+          rdos,
+          periodoLabel,
+          cliente: cad?.cliente ?? null,
+          endereco: cad?.endereco ?? null,
+          responsavel: usuario.nome,
+          emitidoPor: usuario.nome,
+        });
         const slug = obra.normalize("NFD").replace(/[^A-Za-z0-9]+/g, "_").slice(0, 40);
         const filename = `RDO_${slug || "obra"}.pdf`;
         const mediaId = await uploadMedia(bytes, "application/pdf", filename);

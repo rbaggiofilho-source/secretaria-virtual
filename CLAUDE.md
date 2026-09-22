@@ -123,7 +123,15 @@ WhatsApp. Eventos de status (sent/delivered/read/failed) são logados.
     `web/vercel.json` = SPA fallback + cache.
 - Exclusão de conta: `excluirDadosUsuario` (context.ts) apaga tudo por wa_id + arquivos do Storage (`removeFotos`).
 - `src/whatsapp/{client,signature,types}.ts` — envio (texto/documento/upload de mídia), HMAC, tipos.
-- `src/pdf/rdo.ts` — geração do PDF do RDO (pdf-lib).
+- `src/pdf/rdo.ts` — geração do PDF do RDO (pdf-lib). Layout profissional:
+  faixa de cabeçalho com a marca "Rosana" (repetida em toda página), bloco de
+  identificação da obra (cliente/endereço/período/dias — cliente+endereço vêm do
+  cadastro `secretaria_obras` via `buscarObraPorNome`), seções por dia com barra
+  de data+dia-da-semana e tabela de efetivo (função×qtd+total), bloco de
+  assinatura do **responsável técnico (ART/RRT)** + fiscalização/cliente, e
+  rodapé com numeração "Página X de Y" + emissão. Entrada `RdoPdfInput` aceita
+  `cliente/endereco/responsavel/emitidoPor` opcionais (preenchidos pelos callers
+  `gerar_rdo_pdf` em tools.ts e `api/app/rdo-pdf.ts`).
 - `src/data/precos-referencia.ts` — base de preços de REFERÊNCIA (433 insumos,
   média de mercado; gerada do xlsx do Ricardo). `src/precos/index.ts` = busca
   (`buscarPrecos`). Para ATUALIZAR: reimportar a planilha e regerar o arquivo +

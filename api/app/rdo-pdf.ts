@@ -1,5 +1,6 @@
 import { sessionFromRequest } from "../../src/auth/session.js";
-import { consultarRDO } from "../../src/memory/context.js";
+import { consultarRDO, getUsuario } from "../../src/memory/context.js";
+import { buscarObraPorNome } from "../../src/memory/obras.js";
 import { buildRdoPdf } from "../../src/pdf/rdo.js";
 import { corsHeaders, json, preflight } from "../../src/auth/http.js";
 
@@ -21,7 +22,16 @@ export default {
       const rdos = await consultarRDO(wa, { obra });
       if (rdos.length === 0) return json(request, { ok: false, error: "sem_rdo" }, 404);
 
-      const bytes = await buildRdoPdf({ obra, rdos });
+      // Enriquece o cabeçalho com o cadastro estruturado da obra + nome do usuário.
+      const [cad, usuario] = await Promise.all([buscarObraPorNome(wa, obra), getUsuario(wa)]);
+      const bytes = await buildRdoPdf({
+        obra: cad?.nome ?? obra,
+        rdos,
+        cliente: cad?.cliente ?? null,
+        endereco: cad?.endereco ?? null,
+        responsavel: usuario?.nome ?? null,
+        emitidoPor: usuario?.nome ?? null,
+      });
       const nomeArq = `RDO-${obra.replace(/[^a-zA-Z0-9]+/g, "-")}.pdf`;
       return new Response(bytes as unknown as ArrayBuffer, {
         status: 200,
