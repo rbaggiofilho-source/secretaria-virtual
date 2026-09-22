@@ -191,6 +191,10 @@ dono é blindado), `configurar_lembrete_diario` (liga/desliga o "bom dia"),
 `abrir_gps` (rota/GPS p/ o endereço de uma obra cadastrada — acha a obra por nome
 em `secretaria_obras` e devolve link `userosana.com.br/mapa?dest=...` que abre um
 chooser Google Maps/Waze/Apple Maps),
+`consultar_obras` (lista o CADASTRO estruturado — `listObrasStruct` — nome/cliente/
+endereço/status/`tem_endereco` de todas as obras; FONTE DA VERDADE p/ "quais obras
+tenho", endereços de TODAS as obras, clientes — a memória não tem endereços e pode
+ter nomes duplicados/errados),
 `registrar_material`, `consultar_materiais`,
 `consultar_preco` (orçamentos: devolve `seus_precos` — preços REAIS do próprio
 usuário, do histórico de `secretaria_materiais` via `buscarPrecosDoUsuario`, com

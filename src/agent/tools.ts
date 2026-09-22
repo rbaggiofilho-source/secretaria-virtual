@@ -48,7 +48,7 @@ import {
   type UsuarioRow,
 } from "../memory/context.js";
 import { downloadFoto } from "../memory/storage.js";
-import { buscarObraPorNome } from "../memory/obras.js";
+import { buscarObraPorNome, listObrasStruct } from "../memory/obras.js";
 import { buscarPrecos } from "../precos/index.js";
 import { getEnv } from "../config/env.js";
 import { addDays, addMonths, daysBetween, formatDateBr, todayIsoDate, weekdayBr } from "../util/datetime.js";
@@ -514,6 +514,16 @@ export const TOOLS: Anthropic.Tool[] = [
         obra: { type: "string", description: "Nome ou apelido da obra (ex.: 'Island', 'Aurora')" },
       },
       required: ["obra"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "consultar_obras",
+    description:
+      "Lista o CADASTRO das obras do usuário (fonte da verdade): nome, cliente, endereço e status de cada obra. Use SEMPRE que o usuário perguntar quais obras ele tem, os endereços/localizações das obras (uma ou várias), os clientes, ou pedir um panorama das obras (ex.: 'quais obras eu tenho?', 'você sabe o endereço de todas as obras?', 'quem é o cliente da Santa Rita?'). É a ÚNICA forma de saber os endereços cadastrados — NÃO responda de memória. Para gerar a ROTA/GPS de uma obra específica, use abrir_gps.",
+    input_schema: {
+      type: "object",
+      properties: {},
       additionalProperties: false,
     },
   },
@@ -1306,6 +1316,24 @@ export async function runTool(
             link,
             instrucao:
               "Envie este link ao usuário (mande a URL como texto). Ao abrir, ele escolhe Google Maps, Waze ou Apple Maps para navegar.",
+          }),
+        };
+      }
+
+      case "consultar_obras": {
+        const obras = await listObrasStruct(userWa);
+        return {
+          isError: false,
+          text: JSON.stringify({
+            ok: true,
+            total: obras.length,
+            obras: obras.map((o) => ({
+              nome: o.nome,
+              cliente: o.cliente,
+              endereco: o.endereco,
+              tem_endereco: !!(o.endereco && o.endereco.trim()),
+              status: o.status,
+            })),
           }),
         };
       }
