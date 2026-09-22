@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { PageHead, PageState } from '../components/Page'
+import { useEffect, useMemo, useState } from 'react'
+import { ObraSelect, PageHead, PageState } from '../components/Page'
 import { getDocumentos, type DocumentoItem } from '../lib/api'
 import { formatDate, tipoDocLabel } from '../lib/format'
 
@@ -14,6 +14,7 @@ function statusVencimento(venc: string | null): { label: string; cls: string } {
 export function Documentos() {
   const [docs, setDocs] = useState<DocumentoItem[] | null>(null)
   const [erro, setErro] = useState<string | null>(null)
+  const [obra, setObra] = useState('')
 
   useEffect(() => {
     let vivo = true
@@ -23,17 +24,21 @@ export function Documentos() {
     return () => { vivo = false }
   }, [])
 
+  const obras = useMemo(() => [...new Set((docs ?? []).map((d) => d.obra).filter(Boolean) as string[])], [docs])
+  const filtrados = useMemo(() => (obra ? (docs ?? []).filter((d) => d.obra === obra) : docs ?? []), [docs, obra])
+
   return (
     <section className="page">
-      <PageHead eyebrow="PRAZOS & DOCUMENTOS" title="Documentos" subtitle="Alvará, ART/RRT, ASO, licenças e outros prazos." />
-      <PageState loading={docs === null} error={erro} empty={!!docs && docs.length === 0}
-        emptyMsg="Nenhum documento ainda. Diga à Rosana os prazos da obra (ex.: 'alvará vence dia 30/10') que ela guarda e lembra você.">
+      <PageHead eyebrow="PRAZOS & DOCUMENTOS" title="Documentos" subtitle="Alvará, ART/RRT, ASO, licenças e outros prazos."
+        right={<ObraSelect obras={obras} value={obra} onChange={setObra} />} />
+      <PageState loading={docs === null} error={erro} empty={!!docs && filtrados.length === 0}
+        emptyMsg={obra ? 'Nenhum documento para esta obra.' : "Nenhum documento ainda. Diga à Rosana os prazos da obra (ex.: 'alvará vence dia 30/10') que ela guarda e lembra você."}>
         <section className="card rdo-card">
           <div className="table-scroll">
             <table>
               <thead><tr><th>TIPO</th><th>DESCRIÇÃO</th><th>OBRA</th><th>VENCIMENTO</th><th>SITUAÇÃO</th></tr></thead>
               <tbody>
-                {docs?.map((d) => {
+                {filtrados.map((d) => {
                   const sv = statusVencimento(d.vencimento)
                   return (
                     <tr key={d.id}>

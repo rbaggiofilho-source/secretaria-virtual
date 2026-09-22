@@ -221,3 +221,41 @@ export interface FotoItem {
 export function getFotos() {
   return call<{ ok: boolean; fotos: FotoItem[] }>('/api/app/fotos')
 }
+
+/** Registra uma nova obra (memória kind='obra'). */
+export function criarObra(nome: string) {
+  return call<{ ok: boolean; criada: boolean }>('/api/app/obras', {
+    method: 'POST',
+    body: JSON.stringify({ nome }),
+  })
+}
+
+/** Troca a senha estando logado (exige a senha atual). */
+export function trocarSenha(senhaAtual: string, novaSenha: string) {
+  return call<{ ok: boolean }>('/api/app/auth/change-password', {
+    method: 'POST',
+    body: JSON.stringify({ senhaAtual, novaSenha }),
+  })
+}
+
+/** Baixa o PDF do RDO de uma obra (fetch com token → download no navegador). */
+export async function baixarRdoPdf(obra: string): Promise<void> {
+  const token = getToken()
+  const res = await fetch(`${API_BASE}/api/app/rdo-pdf?obra=${encodeURIComponent(obra)}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  })
+  if (!res.ok) {
+    const err = new Error(String(res.status)) as Error & { status?: number }
+    err.status = res.status
+    throw err
+  }
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `RDO-${obra.replace(/[^a-zA-Z0-9]+/g, '-')}.pdf`
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 4000)
+}

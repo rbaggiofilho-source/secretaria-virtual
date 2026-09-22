@@ -230,16 +230,18 @@ banco; nada de novo produto. Rodando em **userosana.com.br** (projeto Vercel
   entrega sem TEMPLATE aprovado na Meta. Hoje, pra testar, o usuário manda algo
   pra Rosana primeiro (abre a janela) e então pede o código. Pendência: criar o
   **template de autenticação** na Meta pra o login funcionar "do nada".
-- **Telas do painel (todas no ar, só LEITURA):** menu navegável (react-router,
-  rotas aninhadas sob `/painel`) — Visão geral, Obras, Custos, Diário (RDO),
-  Fotos (URL assinada do Storage), Documentos (prazos), Materiais, Configurações.
-  Cada uma lê `/api/app/{obras,custos,rdo,documentos,materiais,fotos}` escopado
-  pelo token. A ENTRADA de dados continua no WhatsApp (o painel visualiza).
+- **Telas do painel (todas no ar):** menu navegável (react-router, rotas aninhadas
+  sob `/painel`) — Visão geral, Obras, Custos, Diário (RDO), Fotos (URL assinada do
+  Storage), Documentos, Materiais, Configurações. Leem `/api/app/{obras,custos,rdo,
+  documentos,materiais,fotos}` escopado pelo token. AÇÕES já no painel: busca +
+  filtros por obra/status (client-side), **criar obra** (POST `/api/app/obras` →
+  memória kind='obra'), **baixar PDF do RDO** por obra (`/api/app/rdo-pdf`, fetch
+  com token → download), **trocar senha logado** (`/api/app/auth/change-password`,
+  exige senha atual). A ENTRADA principal de dados segue no WhatsApp.
 - **Ainda mock/pendente:** **pagamento** (placeholder `iniciarCheckout` → integrar
   Mercado Pago) e **envio do cadastro** (`/cadastro`) pro backend/`secretaria_usuarios`;
-  AÇÕES de criar/editar no painel ("Nova obra", baixar PDF do RDO, filtros, busca)
-  e trocar senha logado; "orçamento/progresso" de obra (não existe no modelo);
-  e o `www` (só o apex foi configurado no registro.br).
+  edição/registro fino no painel (RDO/custo/material são criados via WhatsApp);
+  "orçamento/progresso" de obra (não existe no modelo); e o `www` (só o apex no registro.br).
 
 ## Funcionalidades (todas no ar)
 - **Base:** agenda/lembretes no Google Agenda pessoal; memória (obras/apelidos/pendências); texto e voz.

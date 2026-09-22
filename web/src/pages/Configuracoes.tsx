@@ -1,9 +1,41 @@
+import { useState, type FormEvent } from 'react'
 import { CalendarDays, KeyRound, LogOut, Trash2, UserRound } from 'lucide-react'
 import { PageHead } from '../components/Page'
 import { usePanel } from '../components/PanelLayout'
+import { trocarSenha } from '../lib/api'
+
+const ERRO_MSG: Record<string, string> = {
+  senha_atual_incorreta: 'A senha atual está incorreta.',
+  senha_fraca: 'A nova senha precisa ter pelo menos 8 caracteres.',
+  bloqueado: 'Muitas tentativas. Aguarde alguns minutos.',
+  faltam_dados: 'Preencha todos os campos.',
+}
 
 export function Configuracoes() {
   const { usuario, onLogout } = usePanel()
+  const [atual, setAtual] = useState('')
+  const [nova, setNova] = useState('')
+  const [confirma, setConfirma] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [msg, setMsg] = useState<{ tipo: 'ok' | 'erro'; texto: string } | null>(null)
+
+  async function salvar(e: FormEvent) {
+    e.preventDefault()
+    setMsg(null)
+    if (nova.length < 8) return setMsg({ tipo: 'erro', texto: ERRO_MSG.senha_fraca })
+    if (nova !== confirma) return setMsg({ tipo: 'erro', texto: 'As senhas não coincidem.' })
+    setLoading(true)
+    try {
+      await trocarSenha(atual, nova)
+      setMsg({ tipo: 'ok', texto: 'Senha alterada com sucesso.' })
+      setAtual(''); setNova(''); setConfirma('')
+    } catch (err) {
+      setMsg({ tipo: 'erro', texto: ERRO_MSG[String((err as Error)?.message)] ?? 'Não consegui trocar a senha.' })
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <section className="page">
       <PageHead eyebrow="SUA CONTA" title="Configurações" subtitle="Seus dados e ações da conta." />
@@ -26,11 +58,18 @@ export function Configuracoes() {
           <p>Seus compromissos são criados na sua agenda pessoal. Para conectar ou reconectar, mande <b>“conectar agenda”</b> para a Rosana no WhatsApp.</p>
         </article>
 
-        <article className="config-card">
+        <article className="config-card config-card--wide">
           <div className="config-icon"><KeyRound size={20} /></div>
-          <h3>Senha</h3>
-          <p>Para trocar sua senha, saia e use <b>“Esqueci minha senha”</b> na tela de login — você recebe um código no WhatsApp e define a nova senha.</p>
-          <button className="config-btn" onClick={onLogout}>Sair para trocar a senha</button>
+          <h3>Trocar senha</h3>
+          <form className="config-form" onSubmit={salvar}>
+            <label><span>Senha atual</span><input type="password" value={atual} onChange={(e) => setAtual(e.target.value)} autoComplete="current-password" /></label>
+            <div className="config-form-row">
+              <label><span>Nova senha (mín. 8)</span><input type="password" value={nova} onChange={(e) => setNova(e.target.value)} autoComplete="new-password" /></label>
+              <label><span>Confirmar nova senha</span><input type="password" value={confirma} onChange={(e) => setConfirma(e.target.value)} autoComplete="new-password" /></label>
+            </div>
+            {msg && <p className={`config-msg config-msg--${msg.tipo}`}>{msg.texto}</p>}
+            <button className="config-btn" disabled={loading || !atual || !nova}>{loading ? 'Salvando…' : 'Salvar nova senha'}</button>
+          </form>
         </article>
 
         <article className="config-card config-card--danger">

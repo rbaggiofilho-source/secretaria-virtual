@@ -13,6 +13,16 @@ export function PageHead({ eyebrow, title, subtitle, right }: { eyebrow: string;
   )
 }
 
+/** Seletor de obra para filtros (client-side). */
+export function ObraSelect({ obras, value, onChange }: { obras: string[]; value: string; onChange: (v: string) => void }) {
+  return (
+    <select className="filter-select" value={value} onChange={(e) => onChange(e.target.value)} aria-label="Filtrar por obra">
+      <option value="">Todas as obras</option>
+      {obras.map((o) => <option key={o} value={o}>{o}</option>)}
+    </select>
+  )
+}
+
 /** Trata carregando / erro / vazio de forma consistente. */
 export function PageState({
   loading,
