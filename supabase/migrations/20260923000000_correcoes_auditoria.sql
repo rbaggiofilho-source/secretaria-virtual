@@ -101,3 +101,24 @@ update public.secretaria_rdo r
      select 1 from public.secretaria_rdo x
       where x.user_wa = substr(r.user_wa,1,4) || substr(r.user_wa,6)
         and x.obra = r.obra and x.data = r.data);
+
+-- 10) Forma do número que a Meta ENTREGA (último `from` visto). Mensagens que
+--     partem de nós (código de login, "bom dia", aviso de agenda) vão para ela:
+--     enviar para a forma errada do nono dígito dá 200 mas não entrega.
+alter table public.secretaria_usuarios
+  add column if not exists wa_envio text;
+-- Preenche com o número das conversas já existentes (gravadas com o from cru).
+update public.secretaria_usuarios u
+   set wa_envio = (
+     select c.user_wa
+       from public.secretaria_conversations c
+      where c.user_wa in (
+              u.user_wa,
+              case when u.user_wa ~ '^55[0-9]{2}9[0-9]{8}$'
+                   then substr(u.user_wa,1,4) || substr(u.user_wa,6)
+                   when u.user_wa ~ '^55[0-9]{10}$'
+                   then substr(u.user_wa,1,4) || '9' || substr(u.user_wa,5)
+                   else u.user_wa end)
+      order by c.created_at desc
+      limit 1)
+ where u.wa_envio is null;

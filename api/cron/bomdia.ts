@@ -1,5 +1,9 @@
 import { getEnv } from "../../src/config/env.js";
-import { limparMensagensProcessadas, usuariosAtivosParaNudge } from "../../src/memory/context.js";
+import {
+  destinoDoUsuario,
+  limparMensagensProcessadas,
+  usuariosAtivosParaNudge,
+} from "../../src/memory/context.js";
 import { todayIsoDate, weekdayBr } from "../../src/util/datetime.js";
 import { sendTextMessage } from "../../src/whatsapp/client.js";
 
@@ -30,7 +34,7 @@ export default {
 
       for (const u of usuarios) {
         try {
-          await sendTextMessage(u.user_wa, montarBomDia(u.nome, dia));
+          await sendTextMessage(destinoDoUsuario(u), montarBomDia(u.nome, dia));
           enviados++;
         } catch (err) {
           console.error(

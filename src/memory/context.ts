@@ -329,16 +329,18 @@ export async function loadHistorySince(
  */
 const PROCESSING_STALE_MS = 90 * 1000;
 
-export async function claimMessageOnce(messageId: string): Promise<boolean> {
+export type ResultadoClaim = "novo" | "ja_processada" | "em_andamento";
+
+export async function claimMessageOnce(messageId: string): Promise<ResultadoClaim> {
   const supabase = getSupabase();
   const { error } = await supabase
     .from("secretaria_processed_messages")
     .insert({ wa_message_id: messageId, status: "processing", claimed_at: new Date().toISOString() });
 
-  if (!error) return true;
+  if (!error) return "novo";
   if (error.code !== "23505") {
     console.error(`Falha ao registrar dedup da mensagem ${messageId}: ${error.message}`);
-    return true; // fail-open
+    return "novo"; // fail-open
   }
 
   // Já existe: só retoma se ficou "processing" parado (a função anterior morreu).
@@ -352,13 +354,19 @@ export async function claimMessageOnce(messageId: string): Promise<boolean> {
     .select("wa_message_id");
   if (e2) {
     console.error(`Falha ao retomar mensagem ${messageId}: ${e2.message}`);
-    return false;
+    return "em_andamento";
   }
   if (data && data.length > 0) {
     console.warn(`[dedup] Mensagem ${messageId} retomada (processamento anterior não terminou).`);
-    return true;
+    return "novo";
   }
-  return false; // reentrega de algo já processado (ou em processamento agora)
+  // Não retomou: ou já está 'done', ou ainda 'processing' recente.
+  const { data: row } = await supabase
+    .from("secretaria_processed_messages")
+    .select("status")
+    .eq("wa_message_id", messageId)
+    .maybeSingle();
+  return (row as { status?: string } | null)?.status === "done" ? "ja_processada" : "em_andamento";
 }
 
 /** Marca a mensagem como concluída (reentregas futuras são ignoradas). */
@@ -398,7 +406,8 @@ export async function adquirirTravaUsuario(
 ): Promise<boolean> {
   const supabase = getSupabase();
   const inicio = Date.now();
-  while (Date.now() - inicio < esperaMs) {
+  // do/while: tenta pelo menos uma vez, mesmo com espera 0.
+  do {
     try {
       const ate = new Date(Date.now() + duracaoMs).toISOString();
       const { error } = await supabase.from("secretaria_locks").insert({ user_wa: userWa, ate });
@@ -416,8 +425,9 @@ export async function adquirirTravaUsuario(
       console.error(`[trava] falha: ${err instanceof Error ? err.message : String(err)}`);
       return false; // sem trava, mas segue
     }
+    if (Date.now() - inicio + 700 >= esperaMs) break;
     await new Promise((r) => setTimeout(r, 700));
-  }
+  } while (Date.now() - inicio < esperaMs);
   console.warn("[trava] tempo de espera esgotado; processando sem trava.");
   return false;
 }
@@ -789,6 +799,8 @@ export interface UsuarioRow {
   dono: boolean;
   ativo: boolean;
   nudge_diario: boolean;
+  /** Forma do número como a Meta entrega (para mensagens iniciadas por nós). */
+  wa_envio?: string | null;
 }
 
 /** Busca o usuário pelo wa_id. Retorna null se não cadastrado. */
@@ -796,7 +808,7 @@ export async function getUsuario(userWa: string): Promise<UsuarioRow | null> {
   const supabase = getSupabase();
   const { data, error } = await supabase
     .from("secretaria_usuarios")
-    .select("user_wa, nome, calendar_id, contextos, profissao, dono, ativo, nudge_diario")
+    .select("user_wa, nome, calendar_id, contextos, profissao, dono, ativo, nudge_diario, wa_envio")
     .eq("user_wa", userWa)
     .maybeSingle();
 
@@ -825,7 +837,9 @@ export async function setNudgeDiario(userWa: string, ativar: boolean): Promise<v
  * livre dentro da janela de 24h). Deduplica por pessoa (variantes de wa_id),
  * mantendo o wa_id que esteve ativo.
  */
-export async function usuariosAtivosParaNudge(): Promise<Array<{ user_wa: string; nome: string }>> {
+export async function usuariosAtivosParaNudge(): Promise<
+  Array<{ user_wa: string; nome: string; wa_envio: string | null }>
+> {
   const supabase = getSupabase();
   const desde = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
@@ -850,7 +864,7 @@ export async function usuariosAtivosParaNudge(): Promise<Array<{ user_wa: string
   // 2) desses, os usuários ativos com nudge ligado.
   const { data: users, error: e2 } = await supabase
     .from("secretaria_usuarios")
-    .select("user_wa, nome")
+    .select("user_wa, nome, wa_envio")
     .in("user_wa", ativos)
     .eq("ativo", true)
     .eq("nudge_diario", true);
@@ -858,8 +872,8 @@ export async function usuariosAtivosParaNudge(): Promise<Array<{ user_wa: string
 
   // 3) dedup por pessoa (variantes) — não mandar duas vezes.
   const vistos = new Set<string>();
-  const out: Array<{ user_wa: string; nome: string }> = [];
-  for (const u of (users ?? []) as Array<{ user_wa: string; nome: string }>) {
+  const out: Array<{ user_wa: string; nome: string; wa_envio: string | null }> = [];
+  for (const u of (users ?? []) as Array<{ user_wa: string; nome: string; wa_envio: string | null }>) {
     const chave = waIdVariants(u.user_wa).sort()[0] ?? u.user_wa;
     if (vistos.has(chave)) continue;
     vistos.add(chave);
@@ -897,6 +911,26 @@ export function canonicalWa(input: string): string {
   const d = input.replace(/\D/g, "");
   if (d.startsWith("55") && d.length === 13 && d[4] === "9") return d.slice(0, 4) + d.slice(5);
   return d;
+}
+
+/**
+ * Registra a forma do número que a Meta entrega (from cru) em todas as
+ * variantes do usuário. Mensagens iniciadas por NÓS (código de login, "bom
+ * dia", aviso de agenda) vão para esta forma — enviar para a forma errada do
+ * nono dígito é aceito pela API (200) mas NÃO entrega.
+ */
+export async function registrarWaEnvio(userWa: string, from: string): Promise<void> {
+  const supabase = getSupabase();
+  const { error } = await supabase
+    .from("secretaria_usuarios")
+    .update({ wa_envio: from })
+    .in("user_wa", waIdVariants(userWa));
+  if (error) console.error(`Falha ao registrar wa_envio: ${error.message}`);
+}
+
+/** Número para mensagens iniciadas por nós: o último `from` visto, ou o cadastro. */
+export function destinoDoUsuario(u: Pick<UsuarioRow, "user_wa" | "wa_envio">): string {
+  return u.wa_envio || u.user_wa;
 }
 
 /** Busca o usuário em qualquer variante do wa_id (com/sem o nono dígito). */

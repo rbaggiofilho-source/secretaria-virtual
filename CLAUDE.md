@@ -158,6 +158,8 @@ WhatsApp. Eventos de status (sent/delivered/read/failed) são logados.
 - `secretaria_rate_limits` (chave/janela/contagem), `secretaria_oauth_nonces` (link
   "conectar agenda" de uso único), `secretaria_locks` (1 mensagem por vez por usuário),
   `secretaria_leads` (interessados vindos do `/cadastro` do site).
+- `secretaria_usuarios.wa_envio` — forma do número que a Meta ENTREGA (último `from`);
+  mensagens iniciadas por nós (OTP, bom dia, aviso de agenda) vão para ela.
 - `secretaria_auth_codes` — códigos OTP do painel web, usados p/ criar/redefinir
   senha (PK `user_wa`; `code_hash`, `expires_at`, `attempts`, `last_sent_at`).
 - `secretaria_senhas` — senhas do painel (PK `user_wa`; `senha_hash` scrypt,

@@ -100,7 +100,7 @@ async function handlePost(request: Request): Promise<Response> {
   // próxima, devolve 503 e a Meta reenvia o lote — as já concluídas são
   // puladas pelo dedup.
   const inicio = Date.now();
-  const prazo = inicio + 50_000;
+  const prazo = inicio + 45_000;
   for (const message of mensagens) {
     if (Date.now() - inicio > 30_000) {
       console.warn("[webhook] Sem tempo para o restante do lote — pedindo reentrega.");
@@ -110,10 +110,18 @@ async function handlePost(request: Request): Promise<Response> {
     // primeiro a "reivindicar" o id processa. A reivindicação fica
     // "processing" até terminar: se a função morrer no meio (timeout), uma
     // reentrega posterior pode retomar — a mensagem não some em silêncio.
-    const isFirst = await claimMessageOnce(message.id);
-    if (!isFirst) {
+    const claim = await claimMessageOnce(message.id);
+    if (claim === "ja_processada") {
       console.log(`[webhook] Mensagem ${message.id} já processada — reentrega ignorada.`);
       continue;
+    }
+    if (claim === "em_andamento") {
+      // Outra execução está (ou estava) cuidando dela e ainda não terminou.
+      // 503 faz a Meta tentar de novo mais tarde: se aquela execução morreu,
+      // a próxima reentrega retoma. Com 200 a Meta pararia e a mensagem
+      // poderia ficar sem resposta para sempre.
+      console.log(`[webhook] Mensagem ${message.id} em andamento — pedindo reentrega.`);
+      return new Response("RETRY", { status: 503 });
     }
     // Processa e só então confirma. O pipeline tem prazo interno (< 60s).
     await handleIncomingMessage(message, { prazo });

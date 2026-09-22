@@ -10,6 +10,7 @@ import {
   liberarTravaUsuario,
   loadOwnerContext,
   loadRecentHistory,
+  registrarWaEnvio,
   type UsuarioRow,
 } from "./memory/context.js";
 import { uploadFoto } from "./memory/storage.js";
@@ -35,7 +36,7 @@ import type { WhatsAppMessage } from "./whatsapp/types.js";
  */
 
 /** Limite da Vercel é 60s; o agente precisa responder antes disso. */
-const PRAZO_PADRAO_MS = 50_000;
+const PRAZO_PADRAO_MS = 45_000;
 /** Claude aceita imagens de até ~5 MB. */
 const MAX_IMAGEM_BYTES = 5 * 1024 * 1024;
 
@@ -80,12 +81,16 @@ export async function handleIncomingMessage(
         dono: true,
         ativo: true,
         nudge_diario: true,
+        wa_envio: null,
       };
     } else {
       console.warn("Mensagem ignorada de número não autorizado.");
       return;
     }
   }
+  // Guarda a forma do número que a Meta ENTREGA (para mensagens que partem de
+  // nós: código de login, "bom dia", aviso de agenda conectada).
+  if (usuario.wa_envio !== from) await registrarWaEnvio(wa, from);
   // Dados SEMPRE pela chave canônica.
   usuario = { ...usuario, user_wa: wa };
 
@@ -184,7 +189,15 @@ async function processar(
       // Sem histórico = primeiro contato: dispara as boas-vindas guiadas.
       primeiroContato: history.length === 0,
       prazo,
-      mensagemAtual: { texto: userText, tipo: message.type },
+      mensagemAtual: {
+        texto: userText,
+        tipo: message.type,
+        encaminhada: Boolean(
+          (message as { context?: { forwarded?: boolean; frequently_forwarded?: boolean } }).context
+            ?.forwarded ||
+            (message as { context?: { frequently_forwarded?: boolean } }).context?.frequently_forwarded,
+        ),
+      },
       replyTo: from,
     });
   } catch (err) {

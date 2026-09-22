@@ -73,13 +73,11 @@ export default {
           return json(request, { ok: false, error: "muito_cedo" }, 429);
         }
         const r = await requestLoginCode(whatsapp);
-        if (r.ok || r.reason === "nao_autorizado") {
-          // Mesma resposta para número cadastrado ou não, e SEM o nome.
-          return json(request, { ok: true });
-        }
-        if (r.reason === "muito_cedo") return json(request, { ok: false, error: "muito_cedo" }, 429);
-        if (r.reason === "limite_diario") return json(request, { ok: false, error: "limite_diario" }, 429);
-        return json(request, { ok: false, error: "envio_falhou" }, 502);
+        // Resposta IDÊNTICA para qualquer número (cadastrado ou não, com ou sem
+        // cooldown/limite/falha de envio): nada aqui revela se o número existe.
+        // O motivo real fica só no log do servidor.
+        if (!r.ok && r.reason !== "nao_autorizado") console.warn(`[auth] request-code: ${r.reason}`);
+        return json(request, { ok: true });
       }
 
       // ---- set-password (com código do WhatsApp) ----
@@ -94,9 +92,9 @@ export default {
         }
         const check = await verifyLoginCode(whatsapp, code);
         if (!check.ok) {
-          // Número não autorizado responde como código inválido (anti-enumeração).
-          const erro = check.reason === "nao_autorizado" ? "invalido" : check.reason;
-          return json(request, { ok: false, error: erro }, erro === "limite_diario" ? 429 : 401);
+          // Qualquer falha vira "invalido" (anti-enumeração: sem código, expirado,
+          // excedeu, limite ou número não cadastrado respondem igual).
+          return json(request, { ok: false, error: "invalido" }, 401);
         }
         const versao = await setPassword(check.usuario.user_wa, senha);
         return json(request, {

@@ -25,8 +25,8 @@ function getClient(): Anthropic {
       apiKey: getEnv().ANTHROPIC_API_KEY,
       // Timeout por chamada (ms) e só 1 retry: 2 retries × 10 min estourariam
       // qualquer prazo da função serverless.
-      timeout: 25_000,
-      maxRetries: 1,
+      timeout: 20_000,
+      maxRetries: 0, // retry decidido por chamada, conforme o tempo restante
     });
   }
   return anthropic;
@@ -66,7 +66,7 @@ export async function runSecretary(params: {
   /** Instante (epoch ms) até o qual a resposta precisa estar pronta. */
   prazo?: number;
   /** Mensagem atual CRUA (texto + tipo), para checagens no servidor. */
-  mensagemAtual?: { texto: string; tipo: string };
+  mensagemAtual?: { texto: string; tipo: string; encaminhada?: boolean };
   /** Número para onde as mensagens extras (link, PDF, foto) são enviadas. */
   replyTo?: string;
 }): Promise<string> {
@@ -147,6 +147,11 @@ export async function runSecretary(params: {
     const restante = prazo - Date.now();
     if (restante < MARGEM_CHAMADA_MS) return resumoPorPrazo(feitas);
 
+    // O SDK repete a chamada após timeout/429/529: o tempo total pode chegar a
+    // timeout × (retries+1). Só permite 1 retry se AMBAS as tentativas cabem
+    // no prazo (sobrando margem para tools e para o envio da resposta).
+    const util = restante - 8_000;
+    const timeout = Math.max(5_000, Math.min(20_000, util));
     const response = await client.messages.create(
       {
         model: env.ANTHROPIC_MODEL,
@@ -155,13 +160,15 @@ export async function runSecretary(params: {
         tools: TOOLS,
         messages,
       },
-      { timeout: Math.max(5_000, restante - 5_000) },
+      { timeout, maxRetries: util >= 2 * timeout ? 1 : 0 },
     );
 
     // Guarda o turno do assistente (com blocos de tool_use, se houver).
     messages.push({ role: "assistant", content: response.content });
 
     if (response.stop_reason === "tool_use") {
+      // Sem tempo para executar as ferramentas e ainda responder: para aqui.
+      if (prazo - Date.now() < 8_000) return resumoPorPrazo(feitas);
       const toolUses = response.content.filter(
         (b): b is Anthropic.ToolUseBlock => b.type === "tool_use",
       );

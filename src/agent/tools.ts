@@ -610,7 +610,7 @@ export interface ToolCtx {
   /** Fila de caminhos das imagens já arquivadas (consumida por registrar_foto). */
   imagePaths?: string[];
   /** Mensagem atual CRUA do usuário — base das confirmações sensíveis. */
-  mensagemAtual?: { texto: string; tipo: string };
+  mensagemAtual?: { texto: string; tipo: string; encaminhada?: boolean };
   /** Número para onde enviar mensagens extras (link, PDF, foto). */
   replyTo?: string;
 }
@@ -938,7 +938,9 @@ export async function runTool(
         // conseguem disparar a exclusão.
         const msg = ctx?.mensagemAtual;
         const digitouAgora =
-          msg?.tipo === "text" && normalizarFrase(msg.texto) === FRASE_EXCLUSAO;
+          msg?.tipo === "text" &&
+          !msg.encaminhada &&
+          normalizarFrase(msg.texto) === FRASE_EXCLUSAO;
         const conf = normalizarFrase(String(input.confirmacao ?? ""));
         if (!digitouAgora || conf !== FRASE_EXCLUSAO) {
           return {

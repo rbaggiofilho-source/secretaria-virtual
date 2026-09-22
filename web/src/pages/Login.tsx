@@ -11,7 +11,7 @@ const ERRO_MSG: Record<string, string> = {
   muito_cedo: 'Já enviamos um código há pouco. Aguarde um minuto e tente de novo.',
   envio_falhou: 'Não consegui enviar o código pelo WhatsApp agora. Tente em instantes.',
   numero_invalido: 'Número inválido. Digite com DDD, ex.: (48) 98808-8057.',
-  invalido: 'Código incorreto. Confira e tente de novo.',
+  invalido: 'Código incorreto ou expirado. Confira ou peça um novo código.',
   expirado: 'O código expirou. Peça um novo.',
   excedeu: 'Muitas tentativas. Peça um novo código.',
   sem_codigo: 'Nenhum código ativo. Peça um novo.',
@@ -148,7 +148,7 @@ export function Login({ onLogin }: { onLogin: (u: Usuario) => void }) {
         {modo === 'reset_codigo' && (
           <form onSubmit={salvarSenha}>
             <h1>Defina sua senha</h1>
-            <p className="login-sub">{nome ? <>Oi, {nome}! </> : null}Se este número estiver cadastrado, enviamos um código no WhatsApp <strong>{whatsapp}</strong>. Digite-o e escolha sua nova senha.</p>
+            <p className="login-sub">{nome ? <>Oi, {nome}! </> : null}Se este número estiver cadastrado, enviamos um código no WhatsApp <strong>{whatsapp}</strong>. Digite-o e escolha sua nova senha. Se não chegar em 1 minuto, mande um “oi” para a Rosana no WhatsApp e peça o código de novo.</p>
             <label className="login-field">
               <span>Código do WhatsApp</span>
               <input type="text" inputMode="numeric" autoFocus maxLength={6} className="login-code" placeholder="000000"

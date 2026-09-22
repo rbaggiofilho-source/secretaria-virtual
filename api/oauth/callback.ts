@@ -1,4 +1,9 @@
-import { getOAuthToken, saveOAuthToken } from "../../src/memory/context.js";
+import {
+  destinoDoUsuario,
+  getOAuthToken,
+  getUsuarioVariantes,
+  saveOAuthToken,
+} from "../../src/memory/context.js";
 import { consumirNonce, exchangeCode, oauthConfigured, verifyState } from "../../src/oauth/google.js";
 import { sendTextMessage } from "../../src/whatsapp/client.js";
 import { errorPage, successPage } from "../../src/oauth/page.js";
@@ -75,8 +80,9 @@ export default {
       console.log("[oauth] agenda conectada para um usuário.");
       // Avisa no WhatsApp QUAL conta foi conectada: se não foi a pessoa, ela
       // percebe na hora (defesa contra link vazado).
+      const usuario = await getUsuarioVariantes(waId).catch(() => null);
       await sendTextMessage(
-        waId,
+        usuario ? destinoDoUsuario(usuario) : waId,
         `✅ Agenda conectada${tokens.email ? `: ${tokens.email}` : ""}. ` +
           "Se não foi você que conectou, me avise e mande “conectar agenda” para trocar.",
       ).catch((e) =>

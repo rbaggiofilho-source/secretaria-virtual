@@ -1,6 +1,12 @@
 import crypto from "node:crypto";
 import { getSupabase } from "../memory/supabase.js";
-import { canonicalWa, getUsuario, waIdVariants, type UsuarioRow } from "../memory/context.js";
+import {
+  canonicalWa,
+  destinoDoUsuario,
+  getUsuario,
+  waIdVariants,
+  type UsuarioRow,
+} from "../memory/context.js";
 import { sendTextMessage } from "../whatsapp/client.js";
 import { consumirLimite } from "./ratelimit.js";
 import { hmacB64, iguaisSeguro } from "./tokens.js";
@@ -111,9 +117,9 @@ export async function requestLoginCode(input: string): Promise<RequestResult> {
   if (error) throw new Error(`Falha ao gravar código de login: ${error.message}`);
 
   try {
-    // Responde ao número como cadastrado (a Meta entrega na forma sem o 9).
+    // Envia para a forma do número que a Meta entrega (último `from` visto).
     await sendTextMessage(
-      wa,
+      destinoDoUsuario(usuario),
       `Seu código de acesso ao painel da Rosana é ${code}.\n\n` +
         `Ele vale por 10 minutos. Se não foi você que pediu, ignore esta mensagem — ninguém entra sem o código.`,
     );

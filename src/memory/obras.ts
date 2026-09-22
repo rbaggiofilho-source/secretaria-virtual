@@ -187,7 +187,10 @@ export async function salvarObra(userWa: string, input: ObraInput): Promise<Obra
       if (conflito && conflito.length > 0) throw new Error("nome_em_uso");
     }
 
-    // Primeiro o cadastro (falha aqui não mexe nos lançamentos), depois a cascata.
+    // Cascata ANTES do cadastro (já sem risco de conflito, checado acima). Se
+    // a cascata falhar no meio, o cadastro continua com o nome antigo e uma
+    // nova tentativa renomeia o que faltou (cada passo é "old → new").
+    if (nomeAntigo && nomeAntigo !== nome) await renameObraLinks(userWa, nomeAntigo, nome);
     const { data, error } = await supabase
       .from("secretaria_obras")
       .update(campos)
@@ -196,7 +199,6 @@ export async function salvarObra(userWa: string, input: ObraInput): Promise<Obra
       .select("*")
       .single();
     if (error) throw new Error(`Falha ao atualizar obra: ${error.message}`);
-    if (nomeAntigo && nomeAntigo !== nome) await renameObraLinks(userWa, nomeAntigo, nome);
     return data as ObraStructRow;
   }
 

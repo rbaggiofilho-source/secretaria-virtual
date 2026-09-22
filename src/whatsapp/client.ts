@@ -9,7 +9,7 @@ function graphBase(): string {
 }
 
 /** Timeouts das chamadas à Meta: nenhuma chamada pode "pendurar" a função. */
-const TIMEOUT_MS = 15000;
+const TIMEOUT_MS = 10000;
 const TIMEOUT_MIDIA_MS = 25000;
 
 function comTimeout(init: RequestInit, ms = TIMEOUT_MS): RequestInit {
@@ -75,8 +75,11 @@ export async function sendTextMessage(to: string, body: string): Promise<void> {
         ultimoErro = null;
         break;
       } catch (err) {
-        // Erro de validação (4xx) sobe direto; rede/timeout tenta mais uma vez.
+        // Erro de validação (4xx) sobe direto. Timeout também NÃO repete: a Meta
+        // pode ter aceitado a primeira tentativa (repetir duplicaria a mensagem).
+        // Só falha de conexão (sem resposta) tenta mais uma vez.
         if (err instanceof Error && /\((4\d\d)\)/.test(err.message) && !/\(429\)/.test(err.message)) throw err;
+        if (err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError")) throw err;
         ultimoErro = err;
       }
     }
