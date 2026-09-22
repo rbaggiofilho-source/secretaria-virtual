@@ -64,7 +64,9 @@ beta; opcionais — sem eles só o caminho da conta de serviço funciona),
 `PUBLIC_BASE_URL` (default `https://secretaria-virtual-seven.vercel.app`),
 `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `TIMEZONE` (default `America/Sao_Paulo`),
 `CRON_SECRET` (protege o cron do "bom dia"; a Vercel manda como `Authorization: Bearer`),
-`WEB_APP_ORIGIN` (opcional; trava o CORS de `/api/app/*` numa origem — sem ele é `*`).
+`WEB_APP_ORIGIN` (opcional; trava o CORS de `/api/app/*` numa origem — sem ele é `*`),
+`MERCADOPAGO_ACCESS_TOKEN` (opcional; Access Token de PRODUÇÃO do Mercado Pago —
+sem ele o cadastro/checkout fica inerte: grava o lead e mostra "em breve", sem cobrar).
 Validadas via `zod` em `src/config/env.ts` (faz `trim`; STT_PROVIDER tolerante a maiúsculas).
 - **Projeto `rosana-web` (site):** `VITE_API_BASE` = `https://secretaria-virtual-seven.vercel.app`
   (URL do backend; lida em build pelo `web/src/lib/api.ts`, com fallback pra essa mesma URL).
@@ -115,6 +117,13 @@ WhatsApp. Eventos de status (sent/delivered/read/failed) são logados.
       (GET) e `?recurso=obras` (POST cria obra). `src/app/{dashboard,obras}.ts` agregam.
       `signedFotoUrl` (storage.ts) = URL temporária p/ exibir foto sem abrir o bucket.
     - `api/app/rdo-pdf.ts` — download do PDF do RDO por obra (função à parte, binário).
+    - `api/app/pay.ts` — pagamento/assinatura (Mercado Pago), PÚBLICO (sem token):
+      `?acao=assinar` (POST: grava lead em `secretaria_usuarios` como pendente +
+      cria preapproval no MP + devolve `init_point`; sem token do MP devolve
+      `aguardandoIntegracao`) e `?acao=webhook` (notificação do MP → ativa/desativa
+      o usuário). Módulos: `src/pay/planos.ts` (preços), `src/pay/mercadopago.ts`
+      (API preapproval), `src/memory/assinaturas.ts` (`registrarLeadPagamento`,
+      `atualizarAssinatura`, `normalizarWaBR`; dono é blindado).
   - `web/` — SPA Vite+React+react-router (deploy no projeto `rosana-web`).
     `web/src/App.tsx` (rotas + portão de sessão), `components/PanelLayout.tsx`
     (moldura + `Outlet`), `components/Sidebar.tsx` (NavLink), `lib/api.ts` (cliente +
@@ -158,7 +167,10 @@ WhatsApp. Eventos de status (sent/delivered/read/failed) são logados.
 - `secretaria_fotos` — registro fotográfico (tipo: foto_obra/nota_fiscal/outro; descrição da IA; obra; data; caminho).
 - `secretaria_usuarios` — usuários autorizados (PK user_wa; nome, calendar_id,
   contextos, dono, ativo, nudge_diario; + nome_completo, cpf, endereco, profissao,
-  status do cadastro do beta). Fonte da verdade da autorização.
+  status do cadastro do beta; + email, plano, assinatura_status (nenhuma/pendente/
+  authorized/paused/cancelled), mp_preapproval_id, assinatura_em — onboarding pago).
+  Fonte da verdade da autorização. Lead pago entra com ativo=false/status
+  'pendente_pagamento'; o webhook do MP liga ativo=true quando 'authorized'.
 - `secretaria_oauth_tokens` — tokens do Google OAuth por usuário (PK user_wa;
   refresh_token, access_token, expiry, scope, google_email). Uma linha por
   variante de wa_id.
@@ -240,8 +252,8 @@ banco; nada de novo produto. Rodando em **userosana.com.br** (projeto Vercel
   "(48) 98808-8057" e casa com o `554888088057` salvo. Só na resolução de login;
   gravações (cadastro/tokens/senha) seguem usando `waIdVariants`.
 - **Funil de vendas (desde 22/09):** SPA com `react-router-dom` — `/` landing de
-  vendas, `/cadastro` (cadastro+pagamento, pagamento é PLACEHOLDER `iniciarCheckout`
-  → TODO Mercado Pago), `/entrar` login, `/painel` dashboard (protegido). SEO:
+  vendas, `/cadastro` (cadastro+pagamento real via Mercado Pago; ver seção
+  Pagamento), `/entrar` login, `/painel` dashboard (protegido). SEO:
   landing indexável; `/entrar` e `/painel` recebem `noindex` via efeito.
 - **Isolamento:** todo endpoint `/api/app/*` resolve o `user_wa` no SERVIDOR a
   partir do token assinado; o cliente nunca escolhe de quem são os dados. Mantém
@@ -266,10 +278,17 @@ banco; nada de novo produto. Rodando em **userosana.com.br** (projeto Vercel
   **baixar PDF do RDO** por obra (`/api/app/rdo-pdf`, fetch com token → download),
   **trocar senha logado** (`auth?acao=change-password`, exige senha atual).
   A ENTRADA principal de dados segue no WhatsApp.
-- **Ainda mock/pendente:** **pagamento** (placeholder `iniciarCheckout` → integrar
-  Mercado Pago) e **envio do cadastro** (`/cadastro`) pro backend/`secretaria_usuarios`;
-  edição/registro fino no painel (RDO/custo/material são criados via WhatsApp);
-  "orçamento/progresso" de obra (não existe no modelo); e o `www` (só o apex no registro.br).
+- **Pagamento (Mercado Pago) — feito, inerte até a chave (22/09):** o `/cadastro`
+  (SPA) agora GRAVA o lead no backend e inicia a ASSINATURA recorrente via
+  `api/app/pay?acao=assinar` → cria preapproval no MP → redireciona pro `init_point`
+  (checkout). O webhook `?acao=webhook` ativa o usuário (`ativo=true`) quando o MP
+  confirma ('authorized'). SEM `MERCADOPAGO_ACCESS_TOKEN` na Vercel, o fluxo grava
+  o lead e mostra "em breve" (não cobra). Falta: criar a conta MP + colar o Access
+  Token de produção na Vercel; back_url manda pro `/entrar` (o usuário cria a senha
+  pelo fluxo de OTP — que ainda depende da janela de 24h da Meta).
+- **Ainda mock/pendente:** edição/registro fino no painel (RDO/custo/material são
+  criados via WhatsApp); "orçamento/progresso" de obra (não existe no modelo); e o
+  `www` (só o apex no registro.br).
 
 ## Funcionalidades (todas no ar)
 - **Base:** agenda/lembretes no Google Agenda pessoal; memória (obras/apelidos/pendências); texto e voz.
@@ -301,7 +320,8 @@ banco; nada de novo produto. Rodando em **userosana.com.br** (projeto Vercel
   tinha). Correção: **consolidar** em roteadores por querystring — `api/app/auth.ts`
   (`?acao=`) e `api/app/data.ts` (`?recurso=`) — voltando a 10 funções. Ao criar
   endpoint novo do painel, ESTENDER esses roteadores, NÃO criar arquivo novo em
-  `/api` (a menos que precise ser binário, como `rdo-pdf.ts`). Alternativa: Vercel Pro.
+  `/api` (a menos que precise ser binário como `rdo-pdf.ts`, ou público/sem token
+  como `pay.ts`). Contagem atual: 11 funções. Alternativa: Vercel Pro.
 - **Corpo bruto do webhook:** usar handler Web (`Request` + `request.text()`).
   `config.api.bodyParser` é do Next.js e NÃO vale em funções `/api` — foi a causa
   do 401 de assinatura inválida.
@@ -372,10 +392,11 @@ banco; nada de novo produto. Rodando em **userosana.com.br** (projeto Vercel
    documentos alvará/ART/ASO com lembrete; materiais/compras/cotações.)
 6. (Grande) Virada multi-inquilino para virar SaaS. PARCIAL (22/09): já há
    **landing de vendas + login por senha + painel** (userosana.com.br) com dados
-   reais por usuário. Falta: **integrar pagamento (Mercado Pago)** e **ligar o
-   cadastro `/cadastro` ao backend** (hoje o cadastro/pagamento são placeholder);
-   template de auth na Meta (OTP p/ criar senha "do nada", hoje depende da janela
-   de 24h); telas do painel além do dashboard; onboarding self-service; multi-número.
+   reais por usuário, e **cadastro + assinatura Mercado Pago** ligados ao backend
+   (inertes até colar `MERCADOPAGO_ACCESS_TOKEN` na Vercel — criar a conta MP é o
+   próximo passo). Falta: template de auth na Meta (OTP p/ criar senha "do nada",
+   hoje depende da janela de 24h); pós-pagamento fluir pra criação de senha;
+   multi-número na Meta (teto de 5 no modo dev).
 7. (Backlog memória) CONSOLIDAÇÃO da memória de longo prazo (resumir/fundir
    quando o volume crescer — o análogo de "compactar contexto"). Hoje já dá p/
    ATUALIZAR (atualizar_memoria) e CONCLUIR pendência; falta o resumo em massa.

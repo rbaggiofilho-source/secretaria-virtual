@@ -90,6 +90,30 @@ export interface DashboardData {
   contadores: { fotos: number; materiais: number; pendencias: number }
 }
 
+// ---------- Cadastro + assinatura (público, sem token) ----------
+
+export interface DadosAssinatura {
+  nome: string
+  email: string
+  whatsapp: string
+  cpf?: string
+  endereco?: string
+  profissao?: string
+  plano: string
+}
+
+/**
+ * Grava o cadastro e inicia a assinatura no Mercado Pago. Se o MP estiver
+ * configurado, devolve `init_point` (URL do checkout p/ redirecionar); senão
+ * devolve `aguardandoIntegracao` (mostra "em breve", nenhuma cobrança).
+ */
+export function assinar(dados: DadosAssinatura) {
+  return call<{ ok: boolean; init_point?: string; aguardandoIntegracao?: boolean }>(
+    '/api/app/pay?acao=assinar',
+    { method: 'POST', body: JSON.stringify(dados) },
+  )
+}
+
 /** Login por número do WhatsApp + senha. Devolve o token de sessão + usuário. */
 export function login(whatsapp: string, senha: string) {
   return call<{ ok: boolean; token: string; usuario: Usuario }>('/api/app/auth?acao=login', {
