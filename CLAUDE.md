@@ -32,10 +32,17 @@ não escolhe calendarId — forçado no código.
 - **GitHub:** `rbaggiofilho-source/secretaria-virtual`
   - Branch de desenvolvimento e de produção: **`claude/virtual-secretary-whatsapp-r360w0`**
     (espelhada em `claude/whatsapp-webhook-delivery-15qtaz`).
-- **Vercel:** time `baggio-s-projects2` (`team_oYrVOPPoKBfN3L8T5IzQyPbJ`), projeto `secretaria-virtual`.
-  - Production Branch = `claude/virtual-secretary-whatsapp-r360w0` (deploy automático a cada push).
-  - URL webhook (prod): `https://secretaria-virtual-seven.vercel.app/api/webhook`
-  - `vercel.json`: `api/webhook.ts` com `maxDuration: 60`.
+- **Vercel:** time `baggio-s-projects2` (`team_oYrVOPPoKBfN3L8T5IzQyPbJ`). DOIS projetos, mesmo repo/branch:
+  - **`secretaria-virtual`** (backend/motor) — Root = raiz. Production Branch =
+    `claude/virtual-secretary-whatsapp-r360w0` (deploy automático a cada push).
+    URL webhook (prod): `https://secretaria-virtual-seven.vercel.app/api/webhook`.
+    `vercel.json`: `api/webhook.ts` com `maxDuration: 60`. **A home `/` mostra
+    "page doesn't exist" — normal, o motor não é site.**
+  - **`rosana-web`** (plataforma/painel) — Root = **`web/`** (Vite+React), mesma
+    branch de produção. Domínio próprio **`userosana.com.br`** (registrado no
+    registro.br; DNS grátis do registro.br → registro **A** do apex apontando
+    pro IP da Vercel `216.198.79.1`; apex e `www` como "Connect to environment →
+    Production", servem direto). Consome o backend por `VITE_API_BASE`.
 - **Supabase:** projeto `secretaria-virtual`, ref `cwixwbimdogyshwjwyhv`.
 - **Meta/WhatsApp:** app "Secretaria virtual", App ID `1023509723789911` (tipo Empresa, modo desenvolvimento).
   - WABA ID: `1996415661077852` (inscrita no app via `subscribed_apps`).
@@ -56,8 +63,11 @@ não escolhe calendarId — forçado no código.
 beta; opcionais — sem eles só o caminho da conta de serviço funciona),
 `PUBLIC_BASE_URL` (default `https://secretaria-virtual-seven.vercel.app`),
 `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `TIMEZONE` (default `America/Sao_Paulo`),
-`CRON_SECRET` (protege o cron do "bom dia"; a Vercel manda como `Authorization: Bearer`).
+`CRON_SECRET` (protege o cron do "bom dia"; a Vercel manda como `Authorization: Bearer`),
+`WEB_APP_ORIGIN` (opcional; trava o CORS de `/api/app/*` numa origem — sem ele é `*`).
 Validadas via `zod` em `src/config/env.ts` (faz `trim`; STT_PROVIDER tolerante a maiúsculas).
+- **Projeto `rosana-web` (site):** `VITE_API_BASE` = `https://secretaria-virtual-seven.vercel.app`
+  (URL do backend; lida em build pelo `web/src/lib/api.ts`, com fallback pra essa mesma URL).
 
 ---
 
@@ -87,6 +97,20 @@ WhatsApp. Eventos de status (sent/delivered/read/failed) são logados.
   Envia SÓ para quem mandou mensagem nas últimas 24h (janela da Meta) e com
   `nudge_diario=true`. Protegido por `CRON_SECRET`. Não recupera quem sumiu (fora da janela).
 - `api/privacidade.ts` (/privacidade) e `api/termos.ts` (/termos) — páginas legais (LGPD).
+- **Plataforma web (painel):**
+  - `src/auth/session.ts` — token de sessão assinado (HMAC com `WHATSAPP_APP_SECRET`,
+    TTL 30d; `sessionFromRequest` lê `Authorization: Bearer`).
+  - `src/auth/codes.ts` — login OTP por WhatsApp (código de 6 díg.; guarda só o
+    HASH; TTL 10min; cooldown 1min; máx 5 tentativas; uso único). Só usuário
+    autorizado e ativo recebe.
+  - `src/auth/http.ts` — CORS + helpers JSON dos endpoints `/api/app/*`.
+  - `src/app/dashboard.ts` — agrega o panorama real por `user_wa` (obras derivadas,
+    custos por categoria, RDOs, prazos, contadores).
+  - `api/app/auth/{request-code,verify-code}.ts` + `api/app/session.ts` — fluxo de login.
+  - `api/app/dashboard.ts` — dados do painel (escopo por token, resolvido no servidor).
+  - `web/` — SPA Vite+React (deploy no projeto `rosana-web`). `web/src/lib/api.ts`
+    (cliente + token no localStorage), `pages/Login.tsx`, `pages/Dashboard.tsx`,
+    `components/*`. `web/vercel.json` = SPA fallback + cache de assets.
 - Exclusão de conta: `excluirDadosUsuario` (context.ts) apaga tudo por wa_id + arquivos do Storage (`removeFotos`).
 - `src/whatsapp/{client,signature,types}.ts` — envio (texto/documento/upload de mídia), HMAC, tipos.
 - `src/pdf/rdo.ts` — geração do PDF do RDO (pdf-lib).
@@ -102,6 +126,8 @@ WhatsApp. Eventos de status (sent/delivered/read/failed) são logados.
 - `secretaria_memories` — fatos, obras, apelidos, pendências, preferências (por `user_wa`).
 - `secretaria_conversations` — histórico (role user/assistant).
 - `secretaria_processed_messages` — dedup (PK `wa_message_id`).
+- `secretaria_auth_codes` — códigos de login do painel web (PK `user_wa`; só o
+  `code_hash`, `expires_at`, `attempts`, `last_sent_at`). Um código ativo por pessoa.
 - `secretaria_custos` — custos por obra (categoria: material/mao_de_obra/equipamento/servico/outro; valor; descrição; data).
 - `secretaria_rdo` — Diário de Obra (unique por user_wa+obra+data; clima, efetivo jsonb, atividades, ocorrências, materiais).
 - `secretaria_fotos` — registro fotográfico (tipo: foto_obra/nota_fiscal/outro; descrição da IA; obra; data; caminho).
@@ -162,6 +188,31 @@ prioridade — + `referencia` — base de mercado, 433 insumos).
   - Console Google: publicar o app em **Produção** evita a expiração de ~7 dias do
     refresh_token do modo Testing (usuário vê aviso "app não verificado" — ok p/ ≤5).
 
+## Plataforma web (painel) — desde 22/09/2026
+Companheira do WhatsApp: o WhatsApp ALIMENTA (áudio/foto/texto), o painel
+VISUALIZA (obras, custos por categoria, RDOs, prazos). Mesmo cérebro e mesmo
+banco; nada de novo produto. Rodando em **userosana.com.br** (projeto Vercel
+`rosana-web`, pasta `web/`).
+- **Login por código no WhatsApp (OTP), sem senha:** usuário digita o número →
+  `requestLoginCode` confere que é autorizado/ativo em `secretaria_usuarios`,
+  gera código, guarda só o hash e a Rosana envia pelo WhatsApp (`sendTextMessage`)
+  → usuário digita → `verifyLoginCode` valida e devolve o token de sessão.
+  Escolhido o OTP (e não Google/e-mail) porque o número JÁ é a chave de tudo no
+  banco — o mapeamento identidade→dados é exato, sem risco de vazar entre usuários.
+- **Isolamento:** todo endpoint `/api/app/*` resolve o `user_wa` no SERVIDOR a
+  partir do token assinado; o cliente nunca escolhe de quem são os dados. Mantém
+  o modelo seguro (service key só no backend, nunca no browser).
+- **Arquitetura:** SPA (`rosana-web`) e backend (`secretaria-virtual`) são DOIS
+  projetos Vercel do MESMO repo/branch. A SPA fala com o backend por
+  `VITE_API_BASE` + Bearer token; CORS liberado (sem cookie → sem CSRF).
+- **⚠️ Entrega do OTP (modo dev):** mensagem de negócio fora da janela de 24h não
+  entrega sem TEMPLATE aprovado na Meta. Hoje, pra testar, o usuário manda algo
+  pra Rosana primeiro (abre a janela) e então pede o código. Pendência: criar o
+  **template de autenticação** na Meta pra o login funcionar "do nada".
+- **Ainda mock/pendente:** navegação entre telas (Obras/Custos/... são visuais),
+  "orçamento/progresso" de obra (não existe no modelo hoje), e o `www` (só o apex
+  foi configurado no registro.br).
+
 ## Funcionalidades (todas no ar)
 - **Base:** agenda/lembretes no Google Agenda pessoal; memória (obras/apelidos/pendências); texto e voz.
 - **Voz:** transcrição automática (Groq) + **modo transcrição** (devolve o texto
@@ -170,6 +221,8 @@ prioridade — + `referencia` — base de mercado, 433 insumos).
   (peso de aço `0,00617×d²`; quantitativos como estimativa, com ressalva de
   responsabilidade técnica ART/RRT); Diário de Obra (RDO) por voz → PDF enviado
   no WhatsApp; visão (foto de obra descrita/arquivada; nota fiscal lida → lança custo).
+- **Painel web (userosana.com.br):** login por código no WhatsApp + dashboard
+  com os dados reais do usuário (custos por categoria, RDOs, obras, prazos).
 - **Teia de conhecimento (1ª fibra):** a Rosana aprende os preços/fornecedores
   REAIS de cada usuário do histórico dele (compras + cotações em
   `secretaria_materiais`) e os usa nos orçamentos DELE, com prioridade sobre a
@@ -249,8 +302,11 @@ prioridade — + `referencia` — base de mercado, 433 insumos).
 4. (Opcional) Verificação da empresa na Meta + número brasileiro próprio (produção).
 5. (Backlog) DDS/EPI. (Feito: arquivo da foto no Storage + reenvio; prazos de
    documentos alvará/ART/ASO com lembrete; materiais/compras/cotações.)
-6. (Grande) Virada multi-inquilino para virar SaaS (contas, login, Google via
-   OAuth por cliente, cobrança, onboarding self-service, roteamento multi-número).
+6. (Grande) Virada multi-inquilino para virar SaaS (contas, cobrança, onboarding
+   self-service, roteamento multi-número). PARCIAL (22/09): já há **painel web
+   com login** (userosana.com.br, OTP por WhatsApp) e dados reais por usuário.
+   Falta: template de auth na Meta (OTP "do nada"), telas além do dashboard,
+   cobrança e multi-número.
 7. (Backlog memória) CONSOLIDAÇÃO da memória de longo prazo (resumir/fundir
    quando o volume crescer — o análogo de "compactar contexto"). Hoje já dá p/
    ATUALIZAR (atualizar_memoria) e CONCLUIR pendência; falta o resumo em massa.
