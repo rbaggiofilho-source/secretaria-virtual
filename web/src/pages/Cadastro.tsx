@@ -1,5 +1,5 @@
-import { FormEvent, useMemo, useState } from 'react'
-import { assinar } from '../lib/api'
+import { FormEvent, useEffect, useMemo, useState } from 'react'
+import { assinar, getPlanosPublicos, formatarBRL } from '../lib/api'
 import '../styles/landing.css'
 
 type PlanoId = 'essencial' | 'profissional'
@@ -13,10 +13,9 @@ interface DadosCadastro {
   profissao: string
 }
 
-const planos: Record<PlanoId, { nome: string; preco: string; descricao: string }> = {
-  // TODO: preço a confirmar
+type PlanoInfo = { nome: string; preco: string; descricao: string }
+const planosPadrao: Record<PlanoId, PlanoInfo> = {
   essencial: { nome: 'Essencial', preco: 'R$ 89,90/mês', descricao: 'Organização prática para começar.' },
-  // TODO: preço a confirmar
   profissional: { nome: 'Profissional', preco: 'R$ 169,90/mês', descricao: 'A operação completa da sua obra.' },
 }
 
@@ -46,10 +45,25 @@ export function Cadastro() {
   const planoInicial = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('plano') === 'essencial' ? 'essencial' : 'profissional'
   const [dados, setDados] = useState<DadosCadastro>(dadosIniciais)
   const [plano, setPlano] = useState<PlanoId>(planoInicial)
+  const [planos, setPlanos] = useState<Record<PlanoId, PlanoInfo>>(planosPadrao)
   const [etapa, setEtapa] = useState<'cadastro' | 'pagamento'>('cadastro')
   const [erros, setErros] = useState<Partial<Record<keyof DadosCadastro, string>>>({})
   const [checkout, setCheckout] = useState<'pronto' | 'processando' | 'em-breve' | 'erro'>('pronto')
-  const planoAtual = useMemo(() => planos[plano], [plano])
+  const planoAtual = useMemo(() => planos[plano], [planos, plano])
+
+  useEffect(() => {
+    getPlanosPublicos()
+      .then((r) => {
+        const m = { ...planosPadrao }
+        for (const p of r.planos) {
+          if (p.id === 'essencial' || p.id === 'profissional') {
+            m[p.id] = { nome: p.nome, preco: `${formatarBRL(p.valor)}/mês`, descricao: p.descricao ?? planosPadrao[p.id].descricao }
+          }
+        }
+        setPlanos(m)
+      })
+      .catch(() => {})
+  }, [])
 
   const atualizar = (campo: keyof DadosCadastro, valor: string) => {
     setDados((anterior) => ({ ...anterior, [campo]: valor }))

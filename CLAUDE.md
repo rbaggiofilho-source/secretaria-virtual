@@ -66,7 +66,10 @@ beta; opcionais — sem eles só o caminho da conta de serviço funciona),
 `CRON_SECRET` (protege o cron do "bom dia"; a Vercel manda como `Authorization: Bearer`),
 `WEB_APP_ORIGIN` (opcional; trava o CORS de `/api/app/*` numa origem — sem ele é `*`),
 `MERCADOPAGO_ACCESS_TOKEN` (opcional; Access Token de PRODUÇÃO do Mercado Pago —
-sem ele o cadastro/checkout fica inerte: grava o lead e mostra "em breve", sem cobrar).
+sem ele o cadastro/checkout fica inerte: grava o lead e mostra "em breve", sem cobrar),
+`ADMIN_BOOTSTRAP_TOKEN` (opcional; segredo p/ criar o 1º acesso do admin em
+`/admin` → "Criar meu login". Sem ele o bootstrap fica desativado; depois de criar
+o admin pode remover).
 Validadas via `zod` em `src/config/env.ts` (faz `trim`; STT_PROVIDER tolerante a maiúsculas).
 - **Projeto `rosana-web` (site):** `VITE_API_BASE` = `https://secretaria-virtual-seven.vercel.app`
   (URL do backend; lida em build pelo `web/src/lib/api.ts`, com fallback pra essa mesma URL).
@@ -123,7 +126,19 @@ WhatsApp. Eventos de status (sent/delivered/read/failed) são logados.
       `aguardandoIntegracao`) e `?acao=webhook` (notificação do MP → ativa/desativa
       o usuário). Módulos: `src/pay/planos.ts` (preços), `src/pay/mercadopago.ts`
       (API preapproval), `src/memory/assinaturas.ts` (`registrarLeadPagamento`,
-      `atualizarAssinatura`, `normalizarWaBR`; dono é blindado).
+      `atualizarAssinatura`, `normalizarWaBR`; dono é blindado). Preço cobrado vem
+      do BANCO (`src/pay/planos-db.ts`), não do estático.
+    - `api/app/admin.ts` — PAINEL DE ADMINISTRAÇÃO (endpoint único; público só em
+      `?recurso=planos-public` e `?acao=bootstrap|login`; o resto exige token admin).
+      Auth admin em `src/auth/admin.ts` (login por e-mail+senha em
+      `secretaria_admins`, token HMAC com rótulo `adm1`/role admin, TTL 12h,
+      bootstrap via `ADMIN_BOOTSTRAP_TOKEN`) — INDEPENDENTE do número de WhatsApp.
+      `src/auth/hash.ts` (scrypt reutilizável). Métricas em `src/admin/metrics.ts`
+      (overview/KPIs, lista de usuários dedup por email/wa, ativar/desativar;
+      "consumo" = PROXY por nº de mensagens em `secretaria_conversations`, não há
+      API de saldo dos provedores). Planos editáveis em `secretaria_planos`.
+      **São 12 funções serverless — no LIMITE do Hobby; não criar mais arquivos em
+      /api (estender roteadores).**
   - `web/` — SPA Vite+React+react-router (deploy no projeto `rosana-web`).
     `web/src/App.tsx` (rotas + portão de sessão), `components/PanelLayout.tsx`
     (moldura + `Outlet`), `components/Sidebar.tsx` (NavLink), `lib/api.ts` (cliente +
@@ -171,6 +186,11 @@ WhatsApp. Eventos de status (sent/delivered/read/failed) são logados.
   authorized/paused/cancelled), mp_preapproval_id, assinatura_em — onboarding pago).
   Fonte da verdade da autorização. Lead pago entra com ativo=false/status
   'pendente_pagamento'; o webhook do MP liga ativo=true quando 'authorized'.
+- `secretaria_admins` — administradores do painel `/admin` (PK email; nome,
+  senha_hash scrypt, ultimo_login). INDEPENDENTE de `secretaria_usuarios`/wa.
+- `secretaria_planos` — planos vendáveis (PK id essencial/profissional; nome,
+  valor, descricao, ativo, ordem). Fonte da verdade dos PREÇOS (pay + landing +
+  cadastro + admin leem daqui; fallback estático em `src/pay/planos.ts`).
 - `secretaria_oauth_tokens` — tokens do Google OAuth por usuário (PK user_wa;
   refresh_token, access_token, expiry, scope, google_email). Uma linha por
   variante de wa_id.
@@ -286,9 +306,19 @@ banco; nada de novo produto. Rodando em **userosana.com.br** (projeto Vercel
   o lead e mostra "em breve" (não cobra). Falta: criar a conta MP + colar o Access
   Token de produção na Vercel; back_url manda pro `/entrar` (o usuário cria a senha
   pelo fluxo de OTP — que ainda depende da janela de 24h da Meta).
-- **Ainda mock/pendente:** edição/registro fino no painel (RDO/custo/material são
-  criados via WhatsApp); "orçamento/progresso" de obra (não existe no modelo); e o
-  `www` (só o apex no registro.br).
+- **Painel de administração (`/admin`) — desde 22/09:** área separada com LOGIN
+  PRÓPRIO (e-mail+senha, `secretaria_admins`), INDEPENDENTE do número de WhatsApp
+  do dono como usuário. SPA em `web/src/pages/Admin.tsx` (rota `/admin/*`, noindex,
+  token próprio `rosana.admin.token`), cliente em `web/src/lib/admin.ts`. Abas:
+  Visão geral (KPIs: usuários/ativos/pendentes/cancelados/novos/saídas, série de
+  novos 30d, índices por plano, consumo por usuário = proxy por mensagens),
+  Usuários (busca + ativar/desativar; dono blindado), Planos (editar nome/valor/
+  descrição/ativo — muda o preço cobrado E o site), Conta (trocar senha). 1º acesso
+  via `ADMIN_BOOTSTRAP_TOKEN`.
+- **Ainda mock/pendente:** edição/registro fino no painel do usuário (RDO/custo/
+  material são criados via WhatsApp); "orçamento/progresso" de obra (não existe no
+  modelo); "consumo de créditos" real em R$ (hoje é proxy por volume de mensagens —
+  não há API de saldo Anthropic/Groq); e o `www` (só o apex no registro.br).
 
 ## Funcionalidades (todas no ar)
 - **Base:** agenda/lembretes no Google Agenda pessoal; memória (obras/apelidos/pendências); texto e voz.
@@ -321,7 +351,8 @@ banco; nada de novo produto. Rodando em **userosana.com.br** (projeto Vercel
   (`?acao=`) e `api/app/data.ts` (`?recurso=`) — voltando a 10 funções. Ao criar
   endpoint novo do painel, ESTENDER esses roteadores, NÃO criar arquivo novo em
   `/api` (a menos que precise ser binário como `rdo-pdf.ts`, ou público/sem token
-  como `pay.ts`). Contagem atual: 11 funções. Alternativa: Vercel Pro.
+  como `pay.ts`/`admin.ts`). Contagem atual: 12 funções — NO LIMITE. Próximo
+  endpoint OBRIGA consolidar num roteador existente ou migrar pra Vercel Pro.
 - **Corpo bruto do webhook:** usar handler Web (`Request` + `request.text()`).
   `config.api.bodyParser` é do Next.js e NÃO vale em funções `/api` — foi a causa
   do 401 de assinatura inválida.

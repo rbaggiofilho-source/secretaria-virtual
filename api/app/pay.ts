@@ -1,6 +1,6 @@
 import { getEnv } from "../../src/config/env.js";
 import { json, preflight, readJson } from "../../src/auth/http.js";
-import { resolvePlano } from "../../src/pay/planos.js";
+import { getPlanoDb } from "../../src/pay/planos-db.js";
 import { mpConfigured, criarAssinatura, consultarAssinatura } from "../../src/pay/mercadopago.js";
 import {
   registrarLeadPagamento,
@@ -44,7 +44,7 @@ async function assinar(request: Request): Promise<Response> {
   const cpf = String(body.cpf ?? "").trim();
   const endereco = String(body.endereco ?? "").trim();
   const profissao = String(body.profissao ?? "").trim();
-  const plano = resolvePlano(String(body.plano ?? ""));
+  const plano = await getPlanoDb(String(body.plano ?? "profissional"));
 
   if (!nome || nome.split(/\s+/).length < 2) return json(request, { ok: false, error: "nome_invalido" }, 400);
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json(request, { ok: false, error: "email_invalido" }, 400);

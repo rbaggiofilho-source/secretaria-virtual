@@ -90,6 +90,27 @@ export interface DashboardData {
   contadores: { fotos: number; materiais: number; pendencias: number }
 }
 
+// ---------- Planos públicos (landing/cadastro) ----------
+
+export interface PlanoPublico {
+  id: string
+  nome: string
+  valor: number
+  descricao: string | null
+  ativo: boolean
+  ordem: number
+}
+
+/** Planos ativos (preços atuais definidos pelo admin). Público, sem token. */
+export function getPlanosPublicos() {
+  return call<{ ok: boolean; planos: PlanoPublico[] }>('/api/app/admin?recurso=planos-public')
+}
+
+/** Formata um valor em reais: 89.9 → "R$ 89,90". */
+export function formatarBRL(valor: number): string {
+  return `R$ ${valor.toFixed(2).replace('.', ',')}`
+}
+
 // ---------- Cadastro + assinatura (público, sem token) ----------
 
 export interface DadosAssinatura {

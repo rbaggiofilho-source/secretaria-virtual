@@ -13,6 +13,7 @@ import { Fotos } from './pages/Fotos'
 import { Documentos } from './pages/Documentos'
 import { Materiais } from './pages/Materiais'
 import { Configuracoes } from './pages/Configuracoes'
+import { AdminApp } from './pages/Admin'
 import { getSession, getToken, setToken, type Usuario } from './lib/api'
 import { Logo } from './components/Logo'
 
@@ -87,6 +88,7 @@ export function App() {
         <Route path="/" element={<Landing />} />
         <Route path="/cadastro" element={<Cadastro />} />
         <Route path="/mapa" element={<Mapa />} />
+        <Route path="/admin/*" element={<AdminApp />} />
         <Route
           path="/entrar"
           element={<RotaEntrar estado={estado} onLogin={(u) => setEstado({ fase: 'logado', usuario: u })} />}
