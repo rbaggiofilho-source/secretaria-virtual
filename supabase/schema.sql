@@ -137,6 +137,30 @@ create table if not exists public.secretaria_senhas (
 
 alter table public.secretaria_senhas enable row level security;
 
+-- Cadastro estruturado das obras (nome, cliente, endereço, contexto, datas).
+-- Fonte editável pelo painel; os lançamentos (custos/RDO/materiais/docs/fotos)
+-- continuam referenciando a obra pelo NOME (string), então renomear uma obra
+-- faz cascata no código (renameObraLinks). unique(user_wa, nome) evita duplicar.
+create table if not exists public.secretaria_obras (
+  id            bigint generated always as identity primary key,
+  user_wa       text        not null,
+  nome          text        not null,
+  cliente       text,
+  endereco      text,
+  contexto      text,
+  data_inicio   date,
+  data_fim_alvo date,
+  status        text        not null default 'ativa'
+                check (status in ('ativa','pausada','concluida')),
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now(),
+  unique (user_wa, nome)
+);
+
+create index if not exists secretaria_obras_user_idx on public.secretaria_obras (user_wa);
+
+alter table public.secretaria_obras enable row level security;
+
 -- Observação sobre RLS:
 -- O backend acessa o Postgres com a SERVICE ROLE KEY, que ignora Row Level
 -- Security. Estas tabelas nunca são expostas ao cliente/browser, então RLS

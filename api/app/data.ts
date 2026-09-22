@@ -8,11 +8,10 @@ import {
   consultarDocumentos,
   consultarMateriais,
   consultarFotos,
-  loadOwnerContext,
-  saveMemory,
   type MaterialStatus,
   type TipoFoto,
 } from "../../src/memory/context.js";
+import { salvarObra, type ObraStatus } from "../../src/memory/obras.js";
 import { signedFotoUrl } from "../../src/memory/storage.js";
 import { json, preflight, readJson } from "../../src/auth/http.js";
 
@@ -91,10 +90,18 @@ export default {
           const body = await readJson(request);
           const nome = (typeof body.nome === "string" ? body.nome : "").trim();
           if (!nome) return json(request, { ok: false, error: "nome_obrigatorio" }, 400);
-          const ctx = await loadOwnerContext(wa);
-          const jaExiste = ctx.obras.some((o) => o.trim().toLowerCase() === nome.toLowerCase());
-          if (!jaExiste) await saveMemory(wa, "obra", nome);
-          return json(request, { ok: true, criada: !jaExiste });
+          const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
+          const obra = await salvarObra(wa, {
+            id: typeof body.id === "number" ? body.id : null,
+            nome,
+            cliente: str(body.cliente),
+            endereco: str(body.endereco),
+            contexto: str(body.contexto),
+            data_inicio: str(body.data_inicio),
+            data_fim_alvo: str(body.data_fim_alvo),
+            status: (str(body.status) as ObraStatus | null),
+          });
+          return json(request, { ok: true, obra });
         }
         return json(request, { error: "recurso_desconhecido" }, 400);
       }

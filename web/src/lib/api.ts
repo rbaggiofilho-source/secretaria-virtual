@@ -126,8 +126,16 @@ export function getDashboard() {
 
 // ---------- Seções do painel ----------
 
+export type ObraStatus = 'ativa' | 'pausada' | 'concluida'
 export interface ObraResumo {
+  id: number | null
   nome: string
+  cliente: string | null
+  endereco: string | null
+  contexto: string | null
+  dataInicio: string | null
+  dataFimAlvo: string | null
+  status: ObraStatus | null
   gasto: number
   custos: number
   rdos: number
@@ -138,6 +146,17 @@ export interface ObraResumo {
 }
 export function getObras() {
   return call<{ ok: boolean; obras: ObraResumo[] }>('/api/app/data?recurso=obras')
+}
+
+export interface ObraInput {
+  id?: number | null
+  nome: string
+  cliente?: string | null
+  endereco?: string | null
+  contexto?: string | null
+  data_inicio?: string | null
+  data_fim_alvo?: string | null
+  status?: ObraStatus | null
 }
 
 export interface CustoItem {
@@ -222,11 +241,11 @@ export function getFotos() {
   return call<{ ok: boolean; fotos: FotoItem[] }>('/api/app/data?recurso=fotos')
 }
 
-/** Registra uma nova obra (memória kind='obra'). */
-export function criarObra(nome: string) {
-  return call<{ ok: boolean; criada: boolean }>('/api/app/data?recurso=obras', {
+/** Cria ou edita o cadastro estruturado de uma obra. */
+export function salvarObra(input: ObraInput) {
+  return call<{ ok: boolean; obra: ObraResumo }>('/api/app/data?recurso=obras', {
     method: 'POST',
-    body: JSON.stringify({ nome }),
+    body: JSON.stringify(input),
   })
 }
 

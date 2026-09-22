@@ -167,3 +167,34 @@ main { padding: 31px 34px 20px; max-width: 1600px; margin: auto; }.welcome { dis
 .config-msg--ok { background: #e7f0eb; color: #396a5b; }
 .config-msg--erro { background: #f8e9e4; color: #9e4a2e; }
 @media (max-width: 760px) { .config-form-row { grid-template-columns: 1fr; } .page-head { flex-direction: column; align-items: stretch; } .page-head-right { flex-wrap: wrap; } }
+
+/* ---------- Cadastro de obra: card + modal ---------- */
+.obra-top { position: relative; }
+.obra-title { display: flex; flex-direction: column; gap: 5px; }
+.obra-badge { align-self: flex-start; padding: 2px 8px; border-radius: 20px; font-size: 9px; font-weight: 700; background: #e7f0eb; color: #477462; }
+.obra-badge--pausada { background: #f7efdc; color: #9a7327; }
+.obra-badge--concluida { background: #e8f0f1; color: #46707d; }
+.obra-edit { position: absolute; top: -2px; right: -2px; width: 30px; height: 30px; display: grid; place-items: center; border: 1px solid var(--border); border-radius: 7px; background: #fafaf7; color: #58635f; cursor: pointer; }
+.obra-edit:hover { color: var(--green); border-color: #bcd; }
+.obra-meta { display: grid; gap: 6px; margin-bottom: 12px; }
+.obra-meta span { display: flex; align-items: center; gap: 7px; color: #58635f; font-size: 11.5px; }
+.obra-meta svg { color: #9aa19e; flex: 0 0 auto; }
+.obra-contexto { margin: 0 0 12px; color: var(--muted); font-size: 11.5px; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.obra-organizar { margin: 0 0 12px; padding: 8px 10px; border-radius: 7px; background: #f7f0de; color: #8a6a2c; font-size: 10.5px; line-height: 1.45; }
+
+.modal-backdrop { position: fixed; inset: 0; z-index: 50; background: #102d2866; display: grid; place-items: center; padding: 20px; overflow-y: auto; }
+.modal { width: 100%; max-width: 560px; background: #fafaf7; border-radius: 14px; box-shadow: 0 30px 70px #06201a55; }
+.modal-head { display: flex; align-items: center; justify-content: space-between; padding: 20px 24px; border-bottom: 1px solid var(--border); }
+.modal-head h2 { margin: 0; font: 700 18px Manrope; color: #21302c; }
+.modal-x { width: 32px; height: 32px; display: grid; place-items: center; border: 0; border-radius: 7px; background: #eeede7; color: #58635f; cursor: pointer; }
+.modal-form { padding: 22px 24px; display: grid; gap: 14px; }
+.modal-form label { display: flex; flex-direction: column; gap: 6px; }
+.modal-form label span { font-size: 10.5px; font-weight: 700; color: #4c5a56; }
+.modal-form input, .modal-form select, .modal-form textarea { border: 1px solid #dcdcd4; border-radius: 8px; padding: 10px 12px; font-size: 13px; outline: 0; background: #fff; font-family: inherit; }
+.modal-form input:focus, .modal-form select:focus, .modal-form textarea:focus { border-color: #6d9086; box-shadow: 0 0 0 3px #dce8e4; }
+.modal-form textarea { resize: vertical; }
+.modal-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.modal-note { margin: -4px 0 0; font-size: 10.5px; color: #8a6a2c; background: #f7f0de; padding: 8px 10px; border-radius: 7px; }
+.modal-erro { margin: 0; font-size: 12px; color: #9e4a2e; background: #f8e9e4; padding: 9px 11px; border-radius: 7px; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 4px; }
+@media (max-width: 560px) { .modal-row { grid-template-columns: 1fr; } }

@@ -140,6 +140,11 @@ WhatsApp. Eventos de status (sent/delivered/read/failed) são logados.
   senha (PK `user_wa`; `code_hash`, `expires_at`, `attempts`, `last_sent_at`).
 - `secretaria_senhas` — senhas do painel (PK `user_wa`; `senha_hash` scrypt,
   `falhas`, `bloqueado_ate`). Uma linha por variante de wa_id.
+- `secretaria_obras` — cadastro ESTRUTURADO e editável da obra (id; nome; cliente;
+  endereco; contexto; data_inicio; data_fim_alvo; status ativa/pausada/concluida).
+  unique(user_wa,nome). Os lançamentos referenciam a obra pelo NOME, então
+  renomear faz cascata (`renameObraLinks` em `src/memory/obras.ts`). Editado pelo
+  painel; obras vindas só do WhatsApp aparecem como "não organizadas" até editar.
 - `secretaria_custos` — custos por obra (categoria: material/mao_de_obra/equipamento/servico/outro; valor; descrição; data).
 - `secretaria_rdo` — Diário de Obra (unique por user_wa+obra+data; clima, efetivo jsonb, atividades, ocorrências, materiais).
 - `secretaria_fotos` — registro fotográfico (tipo: foto_obra/nota_fiscal/outro; descrição da IA; obra; data; caminho).
@@ -237,7 +242,9 @@ banco; nada de novo produto. Rodando em **userosana.com.br** (projeto Vercel
   sob `/painel`) — Visão geral, Obras, Custos, Diário (RDO), Fotos (URL assinada do
   Storage), Documentos, Materiais, Configurações. Leem `/api/app/data?recurso=...`
   escopado pelo token. AÇÕES já no painel: busca + filtros por obra/status
-  (client-side), **criar obra** (POST `data?recurso=obras` → memória kind='obra'),
+  (client-side), **cadastro estruturado de obra** editável (nome/cliente/endereço/
+  contexto/datas/status — POST `data?recurso=obras` → `secretaria_obras`, renomear
+  faz cascata; `web/src/components/ObraForm.tsx`),
   **baixar PDF do RDO** por obra (`/api/app/rdo-pdf`, fetch com token → download),
   **trocar senha logado** (`auth?acao=change-password`, exige senha atual).
   A ENTRADA principal de dados segue no WhatsApp.
