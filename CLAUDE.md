@@ -125,6 +125,9 @@ WhatsApp. Eventos de status (sent/delivered/read/failed) são logados.
 `resolver_data` (calcula data futura exata + dia da semana a partir de deslocamento
 dias/semanas/meses — p/ "daqui um mês", "daqui 45 dias", além da tabela de 16 dias),
 `conectar_agenda` (gera link OAuth p/ o usuário conectar a própria agenda),
+`revisar_conversa` (puxa sob demanda um trecho maior do histórico — últimos N dias,
+padrão 7 — p/ revisar a semana e caçar compromissos não agendados; o contexto de
+toda requisição carrega só as últimas 30 msgs, por custo),
 `save_memory`, `get_pending`, `atualizar_memoria` (atualiza fato/obra que mudou —
 evita duplicar/contradizer), `concluir_pendencia` (marca pendência resolvida),
 `resumo_geral` (panorama/export de tudo salvo),

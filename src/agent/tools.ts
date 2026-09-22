@@ -25,6 +25,7 @@ import {
   getFoto,
   getOAuthToken,
   getPending,
+  loadHistorySince,
   panoramaUsuario,
   registrarCusto,
   registrarDocumento,
@@ -110,6 +111,19 @@ export const TOOLS: Anthropic.Tool[] = [
         end_iso: { type: "string", description: "Fim da janela ISO 8601" },
       },
       required: ["start_iso", "end_iso"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "revisar_conversa",
+    description:
+      "Recupera um trecho MAIOR do histórico de conversa de vocês (além das últimas mensagens que você já tem em contexto), para revisar o que foi conversado nos últimos dias. Use quando o usuário pedir para 'revisar a semana', 'ver o que a gente falou', 'o que ficou pendente', 'o que ainda não agendei'. Depois de ler, CRUZE com a agenda (search_calendar_events) e com as pendências salvas, e proponha/agende o que faltou. Informe quantos DIAS voltar (padrão 7, máx 30). NUNCA responda que 'só vê a sessão atual' — você consegue puxar os últimos dias aqui.",
+    input_schema: {
+      type: "object",
+      properties: {
+        dias: { type: "integer", description: "Dias a revisar (padrão 7, máx 30)" },
+      },
+      required: [],
       additionalProperties: false,
     },
   },
@@ -603,6 +617,29 @@ export async function runTool(
 
   try {
     switch (name) {
+      case "revisar_conversa": {
+        const dias =
+          typeof input.dias === "number" && input.dias > 0 ? Math.min(input.dias, 30) : 7;
+        const msgs = await loadHistorySince(userWa, dias);
+        return {
+          isError: false,
+          text: JSON.stringify({
+            ok: true,
+            dias,
+            total: msgs.length,
+            aviso:
+              msgs.length >= 300
+                ? "Trecho no limite — pode haver mensagens ainda mais antigas fora deste recorte."
+                : undefined,
+            mensagens: msgs.map((m) => ({
+              quando: m.created_at,
+              quem: m.role === "user" ? "usuario" : "rosana",
+              texto: m.content,
+            })),
+          }),
+        };
+      }
+
       case "dia_da_semana": {
         const data = String(input.data);
         const dia = weekdayBr(data);

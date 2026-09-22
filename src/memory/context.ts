@@ -6,7 +6,10 @@ import { removeFotos } from "./storage.js";
  * (o número do dono) para nunca misturar contexto entre pessoas.
  */
 
-const RECENT_HISTORY_LIMIT = 12;
+// Mensagens carregadas em TODA requisição (coerência de curto prazo). Pequeno de
+// propósito: histórico grande em cada chamada explode o custo do Claude. Para
+// revisar dias anteriores sob demanda, existe loadHistorySince + tool revisar_conversa.
+const RECENT_HISTORY_LIMIT = 30;
 
 export interface OwnerContext {
   fatos: string[];
@@ -247,6 +250,32 @@ export async function loadRecentHistory(
   const rows = (data ?? []) as Array<{ role: "user" | "assistant"; content: string }>;
   // Vieram do mais recente para o mais antigo; invertemos para ordem cronológica.
   return rows.reverse().map((r) => ({ role: r.role, content: r.content }));
+}
+
+/**
+ * Carrega um trecho MAIOR do histórico (últimos `dias` dias), SOB DEMANDA — para
+ * a Rosana revisar o que foi conversado e caçar compromissos que não foram
+ * agendados. Não entra em toda requisição (custo); só quando a tool
+ * revisar_conversa é chamada. Ordem cronológica; teto de linhas p/ não estourar.
+ */
+export async function loadHistorySince(
+  userWa: string,
+  dias: number,
+  maxRows = 300,
+): Promise<Array<{ role: "user" | "assistant"; content: string; created_at: string }>> {
+  const janela = Math.max(1, Math.min(Math.floor(dias) || 7, 30));
+  const desde = new Date(Date.now() - janela * 86400000).toISOString();
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from("secretaria_conversations")
+    .select("role, content, created_at")
+    .eq("user_wa", userWa)
+    .gte("created_at", desde)
+    .order("created_at", { ascending: true })
+    .limit(maxRows);
+
+  if (error) throw new Error(`Falha ao carregar histórico do período: ${error.message}`);
+  return (data ?? []) as Array<{ role: "user" | "assistant"; content: string; created_at: string }>;
 }
 
 /**
