@@ -62,3 +62,5 @@ main { padding: 31px 34px 20px; max-width: 1600px; margin: auto; }.welcome { dis
 .board-msg { background: #fafaf7; border: 1px solid var(--border); border-radius: 10px; padding: 22px; color: var(--muted); font-size: 13px; text-align: center; }
 .board-msg.erro { background: #f8e9e4; border-color: #ecccc0; color: #9e4a2e; }
 .empty { color: #8a938f; font-size: 12.5px; line-height: 1.5; padding: 20px; text-align: center; }
+
+.login-link--inline { display: inline; padding: 0; font-weight: 700; text-decoration: underline; }

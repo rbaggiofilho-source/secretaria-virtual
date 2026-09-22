@@ -122,6 +122,21 @@ create table if not exists public.secretaria_auth_codes (
 
 alter table public.secretaria_auth_codes enable row level security;
 
+-- Senhas do painel web. Login = número do WhatsApp + senha; a senha é criada/
+-- redefinida por fluxo verificado por OTP (secretaria_auth_codes). Guardamos só
+-- o HASH (scrypt com salt). Uma linha por variante de wa_id. `falhas` +
+-- `bloqueado_ate` protegem contra força bruta.
+create table if not exists public.secretaria_senhas (
+  user_wa       text        primary key,
+  senha_hash    text        not null,
+  falhas        integer     not null default 0,
+  bloqueado_ate timestamptz,
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now()
+);
+
+alter table public.secretaria_senhas enable row level security;
+
 -- Observação sobre RLS:
 -- O backend acessa o Postgres com a SERVICE ROLE KEY, que ignora Row Level
 -- Security. Estas tabelas nunca são expostas ao cliente/browser, então RLS

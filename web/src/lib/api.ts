@@ -90,7 +90,15 @@ export interface DashboardData {
   contadores: { fotos: number; materiais: number; pendencias: number }
 }
 
-/** Pede um código de acesso via WhatsApp. */
+/** Login por número do WhatsApp + senha. Devolve o token de sessão + usuário. */
+export function login(whatsapp: string, senha: string) {
+  return call<{ ok: boolean; token: string; usuario: Usuario }>('/api/app/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ whatsapp, senha }),
+  })
+}
+
+/** Pede um código pelo WhatsApp (usado para criar/redefinir a senha). */
 export function requestCode(whatsapp: string) {
   return call<{ ok: boolean; nome?: string; error?: string }>('/api/app/auth/request-code', {
     method: 'POST',
@@ -98,11 +106,11 @@ export function requestCode(whatsapp: string) {
   })
 }
 
-/** Verifica o código e devolve o token de sessão + usuário. */
-export function verifyCode(whatsapp: string, code: string) {
-  return call<{ ok: boolean; token: string; usuario: Usuario }>('/api/app/auth/verify-code', {
+/** Cria/redefine a senha com o código do WhatsApp. Já devolve a sessão. */
+export function setPassword(whatsapp: string, code: string, senha: string) {
+  return call<{ ok: boolean; token: string; usuario: Usuario }>('/api/app/auth/set-password', {
     method: 'POST',
-    body: JSON.stringify({ whatsapp, code }),
+    body: JSON.stringify({ whatsapp, code, senha }),
   })
 }
 

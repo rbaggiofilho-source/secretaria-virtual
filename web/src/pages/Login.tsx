@@ -1,30 +1,69 @@
 import { useState, type FormEvent } from 'react'
-import { ArrowRight, MessageCircle, ShieldCheck } from 'lucide-react'
+import { ArrowRight, KeyRound, MessageCircle, ShieldCheck } from 'lucide-react'
 import { Logo } from '../components/Logo'
-import { requestCode, verifyCode, setToken, type Usuario } from '../lib/api'
+import { login, requestCode, setPassword, setToken, type Usuario } from '../lib/api'
 
 const ERRO_MSG: Record<string, string> = {
+  credenciais: 'Número ou senha incorretos. Confira e tente de novo.',
+  bloqueado: 'Muitas tentativas. Aguarde 15 minutos e tente novamente.',
   nao_autorizado: 'Este número não está autorizado. Fale com o Ricardo para liberar seu acesso.',
   muito_cedo: 'Já enviamos um código há pouco. Aguarde um minuto e tente de novo.',
-  envio_falhou: 'Não consegui enviar o código pelo WhatsApp agora. Tente novamente em instantes.',
+  envio_falhou: 'Não consegui enviar o código pelo WhatsApp agora. Tente em instantes.',
   numero_invalido: 'Número inválido. Digite com DDD, ex.: (48) 98808-8057.',
   invalido: 'Código incorreto. Confira e tente de novo.',
   expirado: 'O código expirou. Peça um novo.',
   excedeu: 'Muitas tentativas. Peça um novo código.',
   sem_codigo: 'Nenhum código ativo. Peça um novo.',
-  faltam_dados: 'Preencha o código.',
+  senha_fraca: 'A senha precisa ter pelo menos 8 caracteres.',
+  faltam_dados: 'Preencha todos os campos.',
   erro_interno: 'Tivemos um problema aqui. Tente novamente.',
 }
 
+type Modo = 'login' | 'reset_numero' | 'reset_codigo'
+
 export function Login({ onLogin }: { onLogin: (u: Usuario) => void }) {
-  const [step, setStep] = useState<'numero' | 'codigo'>('numero')
+  const [modo, setModo] = useState<Modo>('login')
   const [whatsapp, setWhatsapp] = useState('')
+  const [senha, setSenha] = useState('')
   const [code, setCode] = useState('')
+  const [novaSenha, setNovaSenha] = useState('')
+  const [confirma, setConfirma] = useState('')
   const [nome, setNome] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
+  const [semSenha, setSemSenha] = useState(false)
 
   const msg = (e: unknown) => ERRO_MSG[String((e as Error)?.message)] ?? 'Algo deu errado. Tente de novo.'
+
+  function irParaReset() {
+    setModo('reset_numero')
+    setErro(null)
+    setSemSenha(false)
+    setCode('')
+    setNovaSenha('')
+    setConfirma('')
+  }
+
+  async function entrar(e?: FormEvent) {
+    e?.preventDefault()
+    setErro(null)
+    setSemSenha(false)
+    setLoading(true)
+    try {
+      const r = await login(whatsapp, senha)
+      setToken(r.token)
+      onLogin(r.usuario)
+    } catch (err) {
+      if (String((err as Error)?.message) === 'sem_senha') {
+        setSemSenha(true)
+        setErro('Você ainda não criou uma senha para este número.')
+      } else {
+        setErro(msg(err))
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
 
   async function enviarCodigo(e?: FormEvent) {
     e?.preventDefault()
@@ -33,7 +72,7 @@ export function Login({ onLogin }: { onLogin: (u: Usuario) => void }) {
     try {
       const r = await requestCode(whatsapp)
       setNome(r.nome ?? null)
-      setStep('codigo')
+      setModo('reset_codigo')
     } catch (err) {
       setErro(msg(err))
     } finally {
@@ -41,12 +80,14 @@ export function Login({ onLogin }: { onLogin: (u: Usuario) => void }) {
     }
   }
 
-  async function entrar(e?: FormEvent) {
+  async function salvarSenha(e?: FormEvent) {
     e?.preventDefault()
     setErro(null)
+    if (novaSenha.length < 8) return setErro(ERRO_MSG.senha_fraca)
+    if (novaSenha !== confirma) return setErro('As senhas não coincidem.')
     setLoading(true)
     try {
-      const r = await verifyCode(whatsapp, code)
+      const r = await setPassword(whatsapp, code, novaSenha)
       setToken(r.token)
       onLogin(r.usuario)
     } catch (err) {
@@ -61,63 +102,81 @@ export function Login({ onLogin }: { onLogin: (u: Usuario) => void }) {
       <div className="login-card">
         <div className="login-brand"><Logo /></div>
 
-        {step === 'numero' ? (
-          <form onSubmit={enviarCodigo}>
+        {modo === 'login' && (
+          <form onSubmit={entrar}>
             <h1>Entrar no painel</h1>
-            <p className="login-sub">
-              Digite o número de WhatsApp que você usa com a Rosana. Vamos te enviar um código de acesso por lá.
-            </p>
+            <p className="login-sub">Acesse com o número de WhatsApp e a sua senha.</p>
             <label className="login-field">
               <span>WhatsApp</span>
-              <input
-                type="tel"
-                inputMode="tel"
-                autoFocus
-                placeholder="(48) 98808-8057"
-                value={whatsapp}
-                onChange={(ev) => setWhatsapp(ev.target.value)}
-              />
+              <input type="tel" inputMode="tel" autoFocus placeholder="(48) 98808-8057"
+                value={whatsapp} onChange={(ev) => setWhatsapp(ev.target.value)} autoComplete="username" />
+            </label>
+            <label className="login-field">
+              <span>Senha</span>
+              <input type="password" placeholder="Sua senha"
+                value={senha} onChange={(ev) => setSenha(ev.target.value)} autoComplete="current-password" />
+            </label>
+            {erro && <p className="login-erro">{erro}{semSenha && <> <button type="button" className="login-link login-link--inline" onClick={irParaReset}>Criar senha agora →</button></>}</p>}
+            <button className="login-btn" disabled={loading || !whatsapp.replace(/\D/g, '') || !senha}>
+              {loading ? 'Entrando…' : <>Entrar <ArrowRight size={18} /></>}
+            </button>
+            <div className="login-actions">
+              <button type="button" className="login-link" onClick={irParaReset}><KeyRound size={14} /> Esqueci minha senha</button>
+              <button type="button" className="login-link" onClick={irParaReset}>Primeiro acesso? Criar senha</button>
+            </div>
+          </form>
+        )}
+
+        {modo === 'reset_numero' && (
+          <form onSubmit={enviarCodigo}>
+            <h1>Criar / redefinir senha</h1>
+            <p className="login-sub">Digite seu número. Vamos enviar um código pelo WhatsApp para confirmar que é você.</p>
+            <label className="login-field">
+              <span>WhatsApp</span>
+              <input type="tel" inputMode="tel" autoFocus placeholder="(48) 98808-8057"
+                value={whatsapp} onChange={(ev) => setWhatsapp(ev.target.value)} />
             </label>
             {erro && <p className="login-erro">{erro}</p>}
             <button className="login-btn" disabled={loading || !whatsapp.replace(/\D/g, '')}>
               {loading ? 'Enviando…' : <>Enviar código <ArrowRight size={18} /></>}
             </button>
-            <p className="login-note"><ShieldCheck size={15} /> Sem senha. O código chega no seu WhatsApp.</p>
-          </form>
-        ) : (
-          <form onSubmit={entrar}>
-            <h1>Digite o código</h1>
-            <p className="login-sub">
-              {nome ? <>Oi, {nome}! </> : null}
-              Enviamos um código de 6 dígitos no WhatsApp <strong>{whatsapp}</strong>.
-            </p>
-            <label className="login-field">
-              <span>Código</span>
-              <input
-                type="text"
-                inputMode="numeric"
-                autoFocus
-                maxLength={6}
-                className="login-code"
-                placeholder="000000"
-                value={code}
-                onChange={(ev) => setCode(ev.target.value.replace(/\D/g, '').slice(0, 6))}
-              />
-            </label>
-            {erro && <p className="login-erro">{erro}</p>}
-            <button className="login-btn" disabled={loading || code.length < 6}>
-              {loading ? 'Entrando…' : <>Entrar <ArrowRight size={18} /></>}
-            </button>
             <div className="login-actions">
-              <button type="button" className="login-link" onClick={() => { setStep('numero'); setCode(''); setErro(null) }}>
-                ← Trocar número
-              </button>
-              <button type="button" className="login-link" onClick={() => enviarCodigo()} disabled={loading}>
-                <MessageCircle size={14} /> Reenviar código
-              </button>
+              <button type="button" className="login-link" onClick={() => { setModo('login'); setErro(null) }}>← Voltar ao login</button>
             </div>
           </form>
         )}
+
+        {modo === 'reset_codigo' && (
+          <form onSubmit={salvarSenha}>
+            <h1>Defina sua senha</h1>
+            <p className="login-sub">{nome ? <>Oi, {nome}! </> : null}Enviamos um código no WhatsApp <strong>{whatsapp}</strong>. Digite-o e escolha sua nova senha.</p>
+            <label className="login-field">
+              <span>Código do WhatsApp</span>
+              <input type="text" inputMode="numeric" autoFocus maxLength={6} className="login-code" placeholder="000000"
+                value={code} onChange={(ev) => setCode(ev.target.value.replace(/\D/g, '').slice(0, 6))} />
+            </label>
+            <label className="login-field">
+              <span>Nova senha (mín. 8 caracteres)</span>
+              <input type="password" placeholder="Crie uma senha"
+                value={novaSenha} onChange={(ev) => setNovaSenha(ev.target.value)} autoComplete="new-password" />
+            </label>
+            <label className="login-field">
+              <span>Confirmar senha</span>
+              <input type="password" placeholder="Repita a senha"
+                value={confirma} onChange={(ev) => setConfirma(ev.target.value)} autoComplete="new-password" />
+            </label>
+            {erro && <p className="login-erro">{erro}</p>}
+            <button className="login-btn" disabled={loading || code.length < 6 || !novaSenha}>
+              {loading ? 'Salvando…' : <>Salvar e entrar <ArrowRight size={18} /></>}
+            </button>
+            <div className="login-actions">
+              <button type="button" className="login-link" onClick={() => { setModo('reset_numero'); setCode(''); setErro(null) }}>← Trocar número</button>
+              <button type="button" className="login-link" onClick={() => enviarCodigo()} disabled={loading}><MessageCircle size={14} /> Reenviar código</button>
+            </div>
+          </form>
+        )}
+
+        <p className="login-note"><ShieldCheck size={15} /> A senha só é criada/redefinida com o código enviado ao seu WhatsApp.</p>
       </div>
       <p className="login-footer">Rosana • Secretária virtual para obras</p>
     </div>

@@ -1,11 +1,12 @@
-import { verifyLoginCode } from "../../../src/auth/codes.js";
+import { verifyLogin } from "../../../src/auth/password.js";
 import { signSession } from "../../../src/auth/session.js";
 import { json, preflight, readJson } from "../../../src/auth/http.js";
 
 /**
- * POST /api/app/auth/verify-code  { whatsapp, code }
- * Confere o código. Se bater, devolve o token de sessão (crachá) + dados
- * básicos do usuário para a tela montar o cabeçalho.
+ * POST /api/app/auth/login  { whatsapp, senha }
+ * Login por número do WhatsApp + senha. Devolve o token de sessão + usuário.
+ * Se o usuário existe mas ainda não criou senha, responde 'sem_senha' (a tela
+ * oferece criar a senha via código no WhatsApp).
  */
 export default {
   async fetch(request: Request): Promise<Response> {
@@ -14,16 +15,17 @@ export default {
 
     const body = await readJson(request);
     const whatsapp = typeof body.whatsapp === "string" ? body.whatsapp : "";
-    const code = typeof body.code === "string" ? body.code : "";
-    if (!whatsapp || !code) return json(request, { error: "faltam_dados" }, 400);
+    const senha = typeof body.senha === "string" ? body.senha : "";
+    if (!whatsapp.replace(/\D/g, "") || !senha) {
+      return json(request, { ok: false, error: "faltam_dados" }, 400);
+    }
 
     try {
-      const result = await verifyLoginCode(whatsapp, code);
+      const result = await verifyLogin(whatsapp, senha);
       if (!result.ok) {
-        const status = result.reason === "nao_autorizado" ? 403 : 401;
+        const status = result.reason === "bloqueado" ? 429 : 401;
         return json(request, { ok: false, error: result.reason }, status);
       }
-
       const { usuario } = result;
       return json(request, {
         ok: true,
@@ -36,7 +38,7 @@ export default {
         },
       });
     } catch (err) {
-      console.error("[auth] verify-code:", err instanceof Error ? err.message : err);
+      console.error("[auth] login:", err instanceof Error ? err.message : err);
       return json(request, { error: "erro_interno" }, 500);
     }
   },

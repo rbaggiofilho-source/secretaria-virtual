@@ -41,7 +41,7 @@ function hashCode(waId: string, code: string): string {
  * Resolve o usuário autorizado ATIVO a partir do número digitado, tolerando as
  * variantes do nono dígito. Retorna a linha (com o user_wa canônico) ou null.
  */
-async function resolveUsuarioAtivo(input: string): Promise<UsuarioRow | null> {
+export async function resolveUsuarioAtivo(input: string): Promise<UsuarioRow | null> {
   for (const wa of waIdVariants(input)) {
     const u = await getUsuario(wa);
     if (u && u.ativo) return u;
