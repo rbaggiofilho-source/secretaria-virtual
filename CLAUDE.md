@@ -100,17 +100,20 @@ WhatsApp. Eventos de status (sent/delivered/read/failed) são logados.
 - **Plataforma web (painel):**
   - `src/auth/session.ts` — token de sessão assinado (HMAC com `WHATSAPP_APP_SECRET`,
     TTL 30d; `sessionFromRequest` lê `Authorization: Bearer`).
-  - `src/auth/codes.ts` — login OTP por WhatsApp (código de 6 díg.; guarda só o
-    HASH; TTL 10min; cooldown 1min; máx 5 tentativas; uso único). Só usuário
-    autorizado e ativo recebe.
+  - `src/auth/codes.ts` — OTP por WhatsApp (6 díg.; só HASH; TTL 10min; cooldown
+    1min; máx 5 tentativas; uso único), p/ criar/redefinir senha. `resolveUsuarioAtivo`
+    + `candidatosWa` (tolerante ao formato do número).
+  - `src/auth/password.ts` — senha (hash scrypt, `verifyLogin` com anti-brute-force,
+    `setPassword`, `validarSenha`).
   - `src/auth/http.ts` — CORS + helpers JSON dos endpoints `/api/app/*`.
   - `src/app/dashboard.ts` — agrega o panorama real por `user_wa` (obras derivadas,
     custos por categoria, RDOs, prazos, contadores).
-  - `api/app/auth/{request-code,verify-code}.ts` + `api/app/session.ts` — fluxo de login.
+  - `api/app/auth/{login,request-code,set-password}.ts` + `api/app/session.ts` — auth.
   - `api/app/dashboard.ts` — dados do painel (escopo por token, resolvido no servidor).
-  - `web/` — SPA Vite+React (deploy no projeto `rosana-web`). `web/src/lib/api.ts`
-    (cliente + token no localStorage), `pages/Login.tsx`, `pages/Dashboard.tsx`,
-    `components/*`. `web/vercel.json` = SPA fallback + cache de assets.
+  - `web/` — SPA Vite+React+react-router (deploy no projeto `rosana-web`).
+    `web/src/App.tsx` (rotas + portão de sessão), `web/src/lib/api.ts` (cliente +
+    token no localStorage), `pages/{Landing,Cadastro,Login,Dashboard}.tsx`,
+    `components/*`, `styles/{global,landing}.css`. `web/vercel.json` = SPA fallback + cache.
 - Exclusão de conta: `excluirDadosUsuario` (context.ts) apaga tudo por wa_id + arquivos do Storage (`removeFotos`).
 - `src/whatsapp/{client,signature,types}.ts` — envio (texto/documento/upload de mídia), HMAC, tipos.
 - `src/pdf/rdo.ts` — geração do PDF do RDO (pdf-lib).
@@ -126,8 +129,10 @@ WhatsApp. Eventos de status (sent/delivered/read/failed) são logados.
 - `secretaria_memories` — fatos, obras, apelidos, pendências, preferências (por `user_wa`).
 - `secretaria_conversations` — histórico (role user/assistant).
 - `secretaria_processed_messages` — dedup (PK `wa_message_id`).
-- `secretaria_auth_codes` — códigos de login do painel web (PK `user_wa`; só o
-  `code_hash`, `expires_at`, `attempts`, `last_sent_at`). Um código ativo por pessoa.
+- `secretaria_auth_codes` — códigos OTP do painel web, usados p/ criar/redefinir
+  senha (PK `user_wa`; `code_hash`, `expires_at`, `attempts`, `last_sent_at`).
+- `secretaria_senhas` — senhas do painel (PK `user_wa`; `senha_hash` scrypt,
+  `falhas`, `bloqueado_ate`). Uma linha por variante de wa_id.
 - `secretaria_custos` — custos por obra (categoria: material/mao_de_obra/equipamento/servico/outro; valor; descrição; data).
 - `secretaria_rdo` — Diário de Obra (unique por user_wa+obra+data; clima, efetivo jsonb, atividades, ocorrências, materiais).
 - `secretaria_fotos` — registro fotográfico (tipo: foto_obra/nota_fiscal/outro; descrição da IA; obra; data; caminho).
@@ -193,12 +198,24 @@ Companheira do WhatsApp: o WhatsApp ALIMENTA (áudio/foto/texto), o painel
 VISUALIZA (obras, custos por categoria, RDOs, prazos). Mesmo cérebro e mesmo
 banco; nada de novo produto. Rodando em **userosana.com.br** (projeto Vercel
 `rosana-web`, pasta `web/`).
-- **Login por código no WhatsApp (OTP), sem senha:** usuário digita o número →
-  `requestLoginCode` confere que é autorizado/ativo em `secretaria_usuarios`,
-  gera código, guarda só o hash e a Rosana envia pelo WhatsApp (`sendTextMessage`)
-  → usuário digita → `verifyLoginCode` valida e devolve o token de sessão.
-  Escolhido o OTP (e não Google/e-mail) porque o número JÁ é a chave de tudo no
-  banco — o mapeamento identidade→dados é exato, sem risco de vazar entre usuários.
+- **Login = número do WhatsApp + senha (desde 22/09):** `api/app/auth/login`
+  (`verifyLogin` em `src/auth/password.ts`) confere número+senha e devolve o token
+  de sessão. Senha guardada só como HASH **scrypt** (com salt; sem dependência
+  externa), em `secretaria_senhas` (uma linha por variante de wa_id). Proteção a
+  força bruta: 8 falhas → bloqueio de 15min; acerto zera. O número é a chave do
+  banco, então o mapeamento identidade→dados é exato.
+- **Criar (1º acesso) / redefinir senha ("esqueci"):** MESMO fluxo, verificado por
+  OTP no WhatsApp — `request-code` (reusa `secretaria_auth_codes`) → `set-password`
+  (`verifyLoginCode` + `setPassword`), que já devolve a sessão. Removido o antigo
+  `verify-code` (login sem senha) pra não haver bypass.
+- **Formato do número tolerante:** `resolveUsuarioAtivo` (codes.ts, helper
+  `candidatosWa`) aceita com/sem o 55 e com/sem o nono dígito — o usuário digita
+  "(48) 98808-8057" e casa com o `554888088057` salvo. Só na resolução de login;
+  gravações (cadastro/tokens/senha) seguem usando `waIdVariants`.
+- **Funil de vendas (desde 22/09):** SPA com `react-router-dom` — `/` landing de
+  vendas, `/cadastro` (cadastro+pagamento, pagamento é PLACEHOLDER `iniciarCheckout`
+  → TODO Mercado Pago), `/entrar` login, `/painel` dashboard (protegido). SEO:
+  landing indexável; `/entrar` e `/painel` recebem `noindex` via efeito.
 - **Isolamento:** todo endpoint `/api/app/*` resolve o `user_wa` no SERVIDOR a
   partir do token assinado; o cliente nunca escolhe de quem são os dados. Mantém
   o modelo seguro (service key só no backend, nunca no browser).
@@ -209,9 +226,10 @@ banco; nada de novo produto. Rodando em **userosana.com.br** (projeto Vercel
   entrega sem TEMPLATE aprovado na Meta. Hoje, pra testar, o usuário manda algo
   pra Rosana primeiro (abre a janela) e então pede o código. Pendência: criar o
   **template de autenticação** na Meta pra o login funcionar "do nada".
-- **Ainda mock/pendente:** navegação entre telas (Obras/Custos/... são visuais),
-  "orçamento/progresso" de obra (não existe no modelo hoje), e o `www` (só o apex
-  foi configurado no registro.br).
+- **Ainda mock/pendente:** **pagamento** (placeholder `iniciarCheckout` → integrar
+  Mercado Pago) e **envio do cadastro** (`/cadastro`) pro backend/`secretaria_usuarios`;
+  navegação entre telas do painel (Obras/Custos/... são visuais); "orçamento/progresso"
+  de obra (não existe no modelo); e o `www` (só o apex foi configurado no registro.br).
 
 ## Funcionalidades (todas no ar)
 - **Base:** agenda/lembretes no Google Agenda pessoal; memória (obras/apelidos/pendências); texto e voz.
@@ -221,8 +239,9 @@ banco; nada de novo produto. Rodando em **userosana.com.br** (projeto Vercel
   (peso de aço `0,00617×d²`; quantitativos como estimativa, com ressalva de
   responsabilidade técnica ART/RRT); Diário de Obra (RDO) por voz → PDF enviado
   no WhatsApp; visão (foto de obra descrita/arquivada; nota fiscal lida → lança custo).
-- **Painel web (userosana.com.br):** login por código no WhatsApp + dashboard
-  com os dados reais do usuário (custos por categoria, RDOs, obras, prazos).
+- **Painel web (userosana.com.br):** landing de vendas + login (número+senha,
+  senha criada/redefinida por código no WhatsApp) + dashboard com os dados reais
+  do usuário (custos por categoria, RDOs, obras, prazos).
 - **Teia de conhecimento (1ª fibra):** a Rosana aprende os preços/fornecedores
   REAIS de cada usuário do histórico dele (compras + cotações em
   `secretaria_materiais`) e os usa nos orçamentos DELE, com prioridade sobre a
@@ -302,11 +321,12 @@ banco; nada de novo produto. Rodando em **userosana.com.br** (projeto Vercel
 4. (Opcional) Verificação da empresa na Meta + número brasileiro próprio (produção).
 5. (Backlog) DDS/EPI. (Feito: arquivo da foto no Storage + reenvio; prazos de
    documentos alvará/ART/ASO com lembrete; materiais/compras/cotações.)
-6. (Grande) Virada multi-inquilino para virar SaaS (contas, cobrança, onboarding
-   self-service, roteamento multi-número). PARCIAL (22/09): já há **painel web
-   com login** (userosana.com.br, OTP por WhatsApp) e dados reais por usuário.
-   Falta: template de auth na Meta (OTP "do nada"), telas além do dashboard,
-   cobrança e multi-número.
+6. (Grande) Virada multi-inquilino para virar SaaS. PARCIAL (22/09): já há
+   **landing de vendas + login por senha + painel** (userosana.com.br) com dados
+   reais por usuário. Falta: **integrar pagamento (Mercado Pago)** e **ligar o
+   cadastro `/cadastro` ao backend** (hoje o cadastro/pagamento são placeholder);
+   template de auth na Meta (OTP p/ criar senha "do nada", hoje depende da janela
+   de 24h); telas do painel além do dashboard; onboarding self-service; multi-número.
 7. (Backlog memória) CONSOLIDAÇÃO da memória de longo prazo (resumir/fundir
    quando o volume crescer — o análogo de "compactar contexto"). Hoje já dá p/
    ATUALIZAR (atualizar_memoria) e CONCLUIR pendência; falta o resumo em massa.

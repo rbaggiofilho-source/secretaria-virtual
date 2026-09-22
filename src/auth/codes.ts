@@ -41,8 +41,26 @@ function hashCode(waId: string, code: string): string {
  * Resolve o usuário autorizado ATIVO a partir do número digitado, tolerando as
  * variantes do nono dígito. Retorna a linha (com o user_wa canônico) ou null.
  */
+/**
+ * Candidatos de wa_id a partir do que o usuário digitou, sendo TOLERANTE ao
+ * formato: aceita com/sem código do país 55 e com/sem o nono dígito. Assim a
+ * pessoa pode digitar "(48) 98808-8057" (sem o 55) e ainda casar com o número
+ * salvo no formato da Meta ("554888088057"). Usado só na resolução de login —
+ * não afeta a gravação (cadastro/tokens continuam usando waIdVariants).
+ */
+function candidatosWa(input: string): string[] {
+  const d = input.replace(/\D/g, "");
+  const bases = new Set<string>();
+  if (d) bases.add(d);
+  // Número BR sem código do país (10 = fixo/sem 9; 11 = com 9): tenta com 55.
+  if ((d.length === 10 || d.length === 11) && !d.startsWith("55")) bases.add("55" + d);
+  const out = new Set<string>();
+  for (const b of bases) for (const v of waIdVariants(b)) out.add(v);
+  return [...out];
+}
+
 export async function resolveUsuarioAtivo(input: string): Promise<UsuarioRow | null> {
-  for (const wa of waIdVariants(input)) {
+  for (const wa of candidatosWa(input)) {
     const u = await getUsuario(wa);
     if (u && u.ativo) return u;
   }
