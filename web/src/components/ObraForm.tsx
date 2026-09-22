@@ -54,8 +54,12 @@ export function ObraForm({ inicial, onClose, onSaved }: { inicial?: ObraResumo |
         status,
       })
       onSaved()
-    } catch {
-      setErro('Não consegui salvar agora. Tente de novo.')
+    } catch (err) {
+      setErro(
+        String((err as Error)?.message) === 'nome_em_uso'
+          ? 'Já existe outra obra com esse nome. Escolha um nome diferente.'
+          : 'Não consegui salvar agora. Tente de novo.',
+      )
     } finally {
       setLoading(false)
     }

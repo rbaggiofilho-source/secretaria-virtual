@@ -57,6 +57,20 @@ const EnvSchema = z
     // Segredo do Cron da Vercel (protege o endpoint do "bom dia"). Opcional,
     // mas o endpoint recusa rodar sem ele (evita disparo aberto de mensagens).
     CRON_SECRET: z.string().optional(),
+
+    // Segredo-mestre dos tokens do painel/OAuth/OTP. Opcional: sem ele, cai no
+    // WHATSAPP_APP_SECRET (legado). Recomendado definir um próprio, para que
+    // rotacionar o segredo da Meta não derrube as sessões (e vice-versa).
+    SESSION_SECRET: z.string().optional(),
+    // Chave para criptografar os tokens do Google em repouso (AES-256-GCM).
+    // Opcional: sem ela os tokens novos são gravados em claro (legado).
+    TOKEN_ENC_KEY: z.string().optional(),
+    // Versão da Graph API da Meta (ex.: "v21.0"). Configurável para subir de
+    // versão sem deploy de código quando a Meta descontinuar a atual.
+    WHATSAPP_GRAPH_VERSION: z.string().regex(/^v\d+\.\d+$/).default("v21.0"),
+    // Código de convite do cadastro beta. SEM default: sem a variável o
+    // cadastro fica FECHADO (antes havia um código fixo no código-fonte).
+    BETA_INVITE_CODE: z.string().optional(),
   })
   .superRefine((env, ctx) => {
     // A chave do provedor de STT escolhido precisa existir.

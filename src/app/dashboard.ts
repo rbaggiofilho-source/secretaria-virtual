@@ -1,3 +1,4 @@
+import { addDays } from "../util/datetime.js";
 import {
   loadOwnerContext,
   relatorioCustos,
@@ -124,13 +125,18 @@ export async function buildDashboard(
   const obras = [...obrasMap.values()].sort((a, b) => b.gasto - a.gasto);
 
   // ----- Prazos próximos: documentos vencendo nos próximos 15 dias -----
-  const hoje = new Date();
-  const limite = new Date(hoje.getTime() + 15 * 24 * 60 * 60 * 1000);
-  const prazosProximos = docs.filter((d) => {
-    if (!d.vencimento) return false;
-    const v = new Date(d.vencimento);
-    return v >= new Date(hoje.toDateString()) && v <= limite;
-  }).length;
+  // Compara datas YYYY-MM-DD no fuso do usuário (antes usava o relógio UTC do
+  // servidor e errava o "hoje" entre 21h e 0h em Brasília).
+  const hojeIso = new Intl.DateTimeFormat("en-CA", {
+    timeZone: tz,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+  const limiteIso = addDays(hojeIso, 15);
+  const prazosProximos = docs.filter(
+    (d) => d.vencimento != null && d.vencimento >= hojeIso && d.vencimento <= limiteIso,
+  ).length;
 
   // RDOs do mês corrente
   const rdosMes = rdos.filter((r) => r.data >= mesInicio).length;

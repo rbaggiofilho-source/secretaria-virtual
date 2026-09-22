@@ -1,5 +1,5 @@
 import { getEnv } from "../../src/config/env.js";
-import { usuariosAtivosParaNudge } from "../../src/memory/context.js";
+import { limparMensagensProcessadas, usuariosAtivosParaNudge } from "../../src/memory/context.js";
 import { todayIsoDate, weekdayBr } from "../../src/util/datetime.js";
 import { sendTextMessage } from "../../src/whatsapp/client.js";
 
@@ -40,6 +40,8 @@ export default {
       }
 
       console.log(`[bomdia] elegíveis=${usuarios.length} enviados=${enviados}`);
+      // Faxina diária: registros de dedup com mais de 30 dias não servem mais.
+      await limparMensagensProcessadas(30);
       return new Response(JSON.stringify({ ok: true, elegiveis: usuarios.length, enviados }), {
         status: 200,
         headers: { "Content-Type": "application/json" },

@@ -70,13 +70,41 @@ export async function signedFotoUrl(
   return data.signedUrl;
 }
 
+/**
+ * Lista TODOS os arquivos sob a pasta do usuário (`<wa>/<yyyymm>/<arquivo>`).
+ * Usado na exclusão de conta para não deixar arquivo órfão no bucket.
+ */
+export async function listarArquivosDoUsuario(userWa: string): Promise<string[]> {
+  const supabase = getSupabase();
+  const bucket = supabase.storage.from(BUCKET);
+  const out: string[] = [];
+  const { data: pastas, error } = await bucket.list(userWa, { limit: 1000 });
+  if (error) throw new Error(`Falha ao listar pasta do usuário: ${error.message}`);
+  for (const p of pastas ?? []) {
+    // Pasta (sem id) = mês; arquivo solto na raiz do usuário também conta.
+    if (p.id) {
+      out.push(`${userWa}/${p.name}`);
+      continue;
+    }
+    for (let offset = 0; ; offset += 1000) {
+      const { data: arqs, error: e2 } = await bucket.list(`${userWa}/${p.name}`, { limit: 1000, offset });
+      if (e2) throw new Error(`Falha ao listar arquivos: ${e2.message}`);
+      for (const a of arqs ?? []) if (a.id) out.push(`${userWa}/${p.name}/${a.name}`);
+      if (!arqs || arqs.length < 1000) break;
+    }
+  }
+  return out;
+}
+
 /** Remove arquivos do bucket (usado na exclusão de conta / LGPD). */
 export async function removeFotos(paths: string[]): Promise<number> {
   const limpos = paths.filter((p) => typeof p === "string" && p.length > 0);
   if (limpos.length === 0) return 0;
   const supabase = getSupabase();
-  const { error } = await supabase.storage.from(BUCKET).remove(limpos);
-  if (error) throw new Error(`Falha ao remover arquivos do Storage: ${error.message}`);
+  for (let i = 0; i < limpos.length; i += 1000) {
+    const { error } = await supabase.storage.from(BUCKET).remove(limpos.slice(i, i + 1000));
+    if (error) throw new Error(`Falha ao remover arquivos do Storage: ${error.message}`);
+  }
   return limpos.length;
 }
 

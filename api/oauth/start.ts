@@ -1,4 +1,4 @@
-import { buildAuthUrl, oauthConfigured, verifyState } from "../../src/oauth/google.js";
+import { buildAuthUrl, nonceDisponivel, oauthConfigured, verifyState } from "../../src/oauth/google.js";
 import { errorPage } from "../../src/oauth/page.js";
 
 /**
@@ -23,8 +23,16 @@ export default {
     // Limpa o `s`: apps de mensagem às vezes grudam pontuação (ex.: markdown
     // "**") no fim do link clicável. Só existem no token base64url + ".".
     const state = (url.searchParams.get("s") ?? "").replace(/[^A-Za-z0-9._-]/g, "");
-    const waId = verifyState(state);
-    if (!waId) {
+    const st = verifyState(state);
+    let disponivel = false;
+    try {
+      // Link já usado (agenda conectada com ele) também é recusado.
+      disponivel = st ? await nonceDisponivel(st.n, st.wa) : false;
+    } catch (e) {
+      console.error(`[oauth] start: ${e instanceof Error ? e.message : String(e)}`);
+      return errorPage("Ops!", "Tive um problema ao abrir a conexão. Tente de novo em instantes.", 500);
+    }
+    if (!st || !disponivel) {
       return errorPage(
         "Link expirado",
         "Este link de conexão expirou ou é inválido. Peça um novo para a Rosana no WhatsApp (mande “conectar agenda”).",
@@ -33,6 +41,6 @@ export default {
     }
 
     // Redireciona para o consentimento do Google (leg do Google, state fresco).
-    return new Response(null, { status: 302, headers: { Location: buildAuthUrl(waId) } });
+    return new Response(null, { status: 302, headers: { Location: buildAuthUrl(st.wa, st.n) } });
   },
 };

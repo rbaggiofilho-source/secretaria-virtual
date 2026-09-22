@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      # Vercel Hobby: mais de 12 funções em /api faz o DEPLOY FALHAR em
+      # silêncio (fica no ar a versão antiga). Barra aqui antes.
+      - name: Limite de 12 funções serverless
+        run: |
+          n=$(find api -name '*.ts' ! -name '_*' | wc -l)
+          echo "Funções em /api: $n"
+          if [ "$n" -gt 12 ]; then
+            echo "::error::$n funções em /api (limite do plano Hobby da Vercel é 12). Estenda os roteadores api/app/auth.ts ou api/app/data.ts."
+            exit 1
+          fi
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Lint (informativo)
+        run: npm run lint
+        continue-on-error: true

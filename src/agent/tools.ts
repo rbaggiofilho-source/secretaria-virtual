@@ -5,7 +5,7 @@ import {
   updateCalendarEvent,
   type CalendarAuth,
 } from "../calendar/google.js";
-import { oauthConfigured, signState } from "../oauth/google.js";
+import { isTokenRevogado, oauthConfigured, signState } from "../oauth/google.js";
 import { buildRdoPdf } from "../pdf/rdo.js";
 import {
   sendDocumentMessage,
@@ -15,7 +15,10 @@ import {
 } from "../whatsapp/client.js";
 import {
   atualizarMemoria,
+  buscarCustoRecente,
   buscarPrecosDoUsuario,
+  deleteOAuthToken,
+  setMaterialCusto,
   concluirPendencia,
   consultarDocumentos,
   consultarFotos,
@@ -225,7 +228,7 @@ export const TOOLS: Anthropic.Tool[] = [
   {
     name: "excluir_meus_dados",
     description:
-      "Exclui PERMANENTEMENTE a conta e TODOS os dados do usuário (memória, obras, custos, RDO, documentos, materiais, fotos, agenda conectada e a autorização de acesso). Ação IRREVERSÍVEL (LGPD/direito ao esquecimento). Fluxo OBRIGATÓRIO: (1) quando o usuário pedir para excluir a conta/apagar os dados, PRIMEIRO explique o que será apagado e que é irreversível, e peça para ele digitar EXATAMENTE a frase: EXCLUIR MEUS DADOS; (2) só chame esta tool DEPOIS que ele enviar essa frase, passando-a em 'confirmacao'. Se ele não confirmou com a frase exata, NÃO chame — apenas peça a confirmação.",
+      "Exclui PERMANENTEMENTE a conta e TODOS os dados do usuário (memória, obras, custos, RDO, documentos, materiais, fotos, agenda conectada e a autorização de acesso). Ação IRREVERSÍVEL (LGPD/direito ao esquecimento). Fluxo OBRIGATÓRIO: (1) quando o usuário pedir para excluir a conta/apagar os dados, PRIMEIRO explique o que será apagado e que é irreversível, e peça para ele digitar EXATAMENTE a frase: EXCLUIR MEUS DADOS; (2) só chame esta tool DEPOIS que ele enviar essa frase, passando-a em 'confirmacao'. Se ele não confirmou com a frase exata, NÃO chame — apenas peça a confirmação. A frase precisa vir DIGITADA pelo próprio usuário numa mensagem de TEXTO só com ela (áudio, foto ou texto encaminhado não valem — o sistema confere).",
     input_schema: {
       type: "object",
       properties: {
@@ -325,6 +328,11 @@ export const TOOLS: Anthropic.Tool[] = [
         },
         descricao: { type: "string", description: "Descrição curta (opcional)" },
         data: { type: "string", description: "Data do gasto em YYYY-MM-DD (opcional)" },
+        forcar: {
+          type: "boolean",
+          description:
+            "Use true SÓ se o sistema avisou que já existe um lançamento igual e o usuário CONFIRMOU que é um gasto novo (não repetido).",
+        },
       },
       required: ["valor"],
       additionalProperties: false,
@@ -348,7 +356,7 @@ export const TOOLS: Anthropic.Tool[] = [
   {
     name: "registrar_rdo",
     description:
-      "Registra o Relatório Diário de Obra (RDO) de uma obra num dia, a partir do relato do usuário (geralmente um áudio no fim do dia). Extraia clima, efetivo (mão de obra por função), atividades executadas, ocorrências e materiais recebidos. Envie SEMPRE o conteúdo completo do dia — reenviar substitui o RDO daquele dia. data em YYYY-MM-DD só se ele mencionar outro dia que não hoje. Se a obra não estiver clara, pergunte antes.",
+      "Registra o Relatório Diário de Obra (RDO) de uma obra num dia, a partir do relato do usuário (geralmente um áudio no fim do dia). Extraia clima, efetivo (mão de obra por função), atividades executadas, ocorrências e materiais recebidos. Se o dia já tiver RDO, o padrão (modo complementar) JUNTA o novo relato ao que já existe (anexa atividades/ocorrências/materiais e atualiza o efetivo por função) — mande só o que é novo. Use modo substituir apenas quando o usuário pedir para CORRIGIR/refazer o RDO do dia (aí mande o conteúdo completo). data em YYYY-MM-DD só se ele mencionar outro dia que não hoje. Se a obra não estiver clara, pergunte antes.",
     input_schema: {
       type: "object",
       properties: {
@@ -371,6 +379,11 @@ export const TOOLS: Anthropic.Tool[] = [
         atividades: { type: "string", description: "Atividades/serviços executados no dia" },
         ocorrencias: { type: "string", description: "Ocorrências, atrasos, problemas (opcional)" },
         materiais: { type: "string", description: "Materiais recebidos/entregas (opcional)" },
+        modo: {
+          type: "string",
+          enum: ["complementar", "substituir"],
+          description: "complementar (padrão) junta ao RDO do dia; substituir troca tudo (correção).",
+        },
       },
       required: ["obra"],
       additionalProperties: false,
@@ -592,6 +605,46 @@ export const TOOLS: Anthropic.Tool[] = [
   },
 ];
 
+/** Contexto do turno repassado às tools pelo loop do agente. */
+export interface ToolCtx {
+  /** Fila de caminhos das imagens já arquivadas (consumida por registrar_foto). */
+  imagePaths?: string[];
+  /** Mensagem atual CRUA do usuário — base das confirmações sensíveis. */
+  mensagemAtual?: { texto: string; tipo: string };
+  /** Número para onde enviar mensagens extras (link, PDF, foto). */
+  replyTo?: string;
+}
+
+const FRASE_EXCLUSAO = "EXCLUIR MEUS DADOS";
+
+/** Normaliza para comparar a frase de confirmação (acentos/caixa/espaços). */
+function normalizarFrase(t: string): string {
+  return t
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[.!"'“”]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toUpperCase();
+}
+
+/**
+ * Resolve ambiguidade de obra numa busca parcial: se as linhas trazem mais de
+ * uma obra e nenhuma tem o nome exato do termo, devolve as candidatas (o
+ * modelo pergunta qual). Se uma bate exatamente, filtra só ela.
+ */
+function desambiguarObra<T extends { obra: string | null }>(
+  rows: T[],
+  termo: string,
+): { rows: T[]; candidatas?: string[] } {
+  const nomes = [...new Set(rows.map((r) => r.obra ?? ""))].filter(Boolean);
+  if (nomes.length <= 1) return { rows };
+  const alvo = termo.trim().toLowerCase();
+  const exata = nomes.find((n) => n.trim().toLowerCase() === alvo);
+  if (exata) return { rows: rows.filter((r) => r.obra === exata) };
+  return { rows, candidatas: nomes };
+}
+
 /**
  * Executa uma tool call. Retorna { text, isError }.
  * Nunca lança: erros viram tool_result com is_error para o modelo avisar o dono.
@@ -600,9 +653,11 @@ export async function runTool(
   usuario: UsuarioRow,
   name: string,
   input: Record<string, unknown>,
-  ctx?: { imagePaths?: string[] },
+  ctx?: ToolCtx,
 ): Promise<{ text: string; isError: boolean }> {
   const userWa = usuario.user_wa;
+  // Mensagens extras (link, PDF, foto) vão para o número que escreveu.
+  const destino = ctx?.replyTo ?? userWa;
 
   // Auth de calendário resolvida pelo SERVIDOR (nunca pelo modelo), sob demanda:
   // - OAuth: usuário conectou a própria conta Google -> escreve no "primary" dele;
@@ -632,6 +687,32 @@ export async function runTool(
     calAuthCache = { value };
     return value;
   }
+  /**
+   * Token do Google revogado/expirado (invalid_grant): apaga o token morto e
+   * devolve a instrução de reconectar — antes o erro chegava genérico e a
+   * Rosana não sabia oferecer a reconexão.
+   */
+  async function tratarErroAgenda(err: unknown): Promise<{ text: string; isError: boolean } | null> {
+    const auth = calAuthCache?.value;
+    if (!auth || auth.kind !== "oauth" || !isTokenRevogado(err)) return null;
+    try {
+      await deleteOAuthToken(userWa);
+    } catch (e) {
+      console.error(`[agenda] falha ao remover token revogado: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    calAuthCache = { value: null };
+    return {
+      isError: true,
+      text: JSON.stringify({
+        ok: false,
+        agenda_desconectada: true,
+        error:
+          `A conexão com a agenda do Google de ${usuario.nome} expirou ou foi revogada. ` +
+          "NADA foi agendado. Avise o usuário e chame conectar_agenda para enviar um link novo.",
+      }),
+    };
+  }
+
   const SEM_CALENDARIO = JSON.stringify({
     ok: false,
     error:
@@ -710,9 +791,9 @@ export async function runTool(
         // O SERVIDOR envia o link (não o modelo): a assinatura do state tem 43
         // caracteres aleatórios e o modelo corromperia ao transcrever de memória.
         // O state já é URL-safe (base64url + "."), então vai cru, sem encode.
-        const url = `${getEnv().PUBLIC_BASE_URL.replace(/\/+$/, "")}/api/oauth/start?s=${signState(userWa)}`;
+        const url = `${getEnv().PUBLIC_BASE_URL.replace(/\/+$/, "")}/api/oauth/start?s=${await signState(userWa)}`;
         await sendTextMessage(
-          userWa,
+          destino,
           "Para conectar sua agenda do Google, toque no link abaixo, escolha sua conta e autorize:\n\n" +
             url,
         );
@@ -851,21 +932,22 @@ export async function runTool(
             }),
           };
         }
-        // Confirmação literal obrigatória (normaliza acentos/caixa/espaços).
-        const conf = String(input.confirmacao ?? "")
-          .normalize("NFD")
-          .replace(/[̀-ͯ]/g, "")
-          .replace(/\s+/g, " ")
-          .trim()
-          .toUpperCase();
-        if (conf !== "EXCLUIR MEUS DADOS") {
+        // Confirmação conferida NO SERVIDOR contra a mensagem que o usuário
+        // DIGITOU agora — não contra o argumento do modelo. Assim um áudio
+        // encaminhado, o texto de uma foto ou uma instrução injetada não
+        // conseguem disparar a exclusão.
+        const msg = ctx?.mensagemAtual;
+        const digitouAgora =
+          msg?.tipo === "text" && normalizarFrase(msg.texto) === FRASE_EXCLUSAO;
+        const conf = normalizarFrase(String(input.confirmacao ?? ""));
+        if (!digitouAgora || conf !== FRASE_EXCLUSAO) {
           return {
             isError: false,
             text: JSON.stringify({
               ok: false,
               precisa_confirmar: true,
               error:
-                "Confirmação ausente ou incorreta. NÃO exclua. Peça ao usuário para digitar EXATAMENTE: EXCLUIR MEUS DADOS",
+                "Confirmação ausente ou incorreta. NADA foi excluído. Peça ao usuário para DIGITAR (texto, numa mensagem só com a frase) exatamente: EXCLUIR MEUS DADOS",
             }),
           };
         }
@@ -982,6 +1064,27 @@ export async function runTool(
       }
 
       case "registrar_custo": {
+        // Anti-duplicata: mesmo valor na mesma obra/dia há poucos minutos
+        // (nota fiscal reenviada, pedido repetido) pede confirmação.
+        if (input.forcar !== true) {
+          const dup = await buscarCustoRecente(userWa, {
+            valor: Number(input.valor),
+            obra: input.obra ? String(input.obra) : null,
+            data: input.data ? String(input.data) : null,
+          });
+          if (dup) {
+            return {
+              isError: false,
+              text: JSON.stringify({
+                ok: false,
+                possivel_duplicata: true,
+                existente: dup,
+                error:
+                  "Já existe um lançamento IGUAL (mesmo valor/obra/dia) feito há poucos minutos. NÃO lancei de novo. Pergunte ao usuário se é um gasto novo; se ele confirmar, chame de novo com forcar=true.",
+              }),
+            };
+          }
+        }
         const row = await registrarCusto(userWa, {
           valor: Number(input.valor),
           obra: input.obra ? String(input.obra) : null,
@@ -1028,6 +1131,7 @@ export async function runTool(
           atividades: input.atividades ? String(input.atividades) : null,
           ocorrencias: input.ocorrencias ? String(input.ocorrencias) : null,
           materiais: input.materiais ? String(input.materiais) : null,
+          modo: input.modo === "substituir" ? "substituir" : "complementar",
         });
         const totalEfetivo = row.efetivo.reduce((s, e) => s + (Number(e.qtd) || 0), 0);
         return {
@@ -1043,15 +1147,23 @@ export async function runTool(
       }
 
       case "consultar_rdo": {
-        const rows = await consultarRDO(userWa, {
+        const todas = await consultarRDO(userWa, {
           obra: input.obra ? String(input.obra) : null,
           desde: input.desde ? String(input.desde) : null,
           ate: input.ate ? String(input.ate) : null,
         });
+        const { rows, candidatas } = input.obra
+          ? desambiguarObra(todas, String(input.obra))
+          : { rows: todas, candidatas: undefined };
         return {
           isError: false,
           text: JSON.stringify({
             ok: true,
+            ...(candidatas
+              ? {
+                  aviso: `O termo casa com mais de uma obra (${candidatas.join(", ")}). Se o usuário quis uma só, pergunte qual.`,
+                }
+              : {}),
             rdos: rows.map((r) => ({
               data: r.data,
               obra: r.obra,
@@ -1138,7 +1250,7 @@ export async function runTool(
         const caption = foto.descricao
           ? `${foto.descricao}${foto.obra ? ` — ${foto.obra}` : ""}`
           : undefined;
-        await sendImageMessage(userWa, mediaId, caption);
+        await sendImageMessage(destino, mediaId, caption);
         return {
           isError: false,
           text: JSON.stringify({ ok: true, enviado: true, id: foto.id }),
@@ -1149,7 +1261,20 @@ export async function runTool(
         const obra = String(input.obra);
         const desde = input.desde ? String(input.desde) : null;
         const ate = input.ate ? String(input.ate) : null;
-        const rdos = await consultarRDO(userWa, { obra, desde, ate });
+        const encontrados = await consultarRDO(userWa, { obra, desde, ate });
+        // O PDF vai para o CLIENTE: nunca misturar obras de nome parecido.
+        const { rows: rdos, candidatas } = desambiguarObra(encontrados, obra);
+        if (candidatas) {
+          return {
+            isError: false,
+            text: JSON.stringify({
+              ok: false,
+              ambiguo: true,
+              obras: candidatas,
+              error: `"${obra}" casa com mais de uma obra: ${candidatas.join(", ")}. NÃO gerei o PDF. Pergunte ao usuário qual é e chame de novo com o nome exato.`,
+            }),
+          };
+        }
         if (rdos.length === 0) {
           return {
             isError: false,
@@ -1162,9 +1287,10 @@ export async function runTool(
         const periodoLabel =
           desde || ate ? `${desde ?? "início"} a ${ate ?? "hoje"}` : undefined;
         // Enriquece o cabeçalho do PDF com o cadastro estruturado da obra (se houver).
-        const cad = await buscarObraPorNome(userWa, obra);
+        const nomeObra = rdos[0]!.obra;
+        const cad = await buscarObraPorNome(userWa, nomeObra, { exata: true });
         const bytes = await buildRdoPdf({
-          obra: cad?.nome ?? obra,
+          obra: cad?.nome ?? nomeObra,
           rdos,
           periodoLabel,
           cliente: cad?.cliente ?? null,
@@ -1175,7 +1301,7 @@ export async function runTool(
         const slug = obra.normalize("NFD").replace(/[^A-Za-z0-9]+/g, "_").slice(0, 40);
         const filename = `RDO_${slug || "obra"}.pdf`;
         const mediaId = await uploadMedia(bytes, "application/pdf", filename);
-        await sendDocumentMessage(userWa, mediaId, filename, `RDO — ${obra}`);
+        await sendDocumentMessage(destino, mediaId, filename, `RDO — ${nomeObra}`);
         return {
           isError: false,
           text: JSON.stringify({ ok: true, enviado: true, dias: rdos.length }),
@@ -1235,7 +1361,8 @@ export async function runTool(
                 console.error(
                   `[documento] falha ao criar lembrete: ${e instanceof Error ? e.message : String(e)}`,
                 );
-                lembrete = "falha_lembrete";
+                // Token do Google morto: limpa e sinaliza para oferecer reconexão.
+                lembrete = (await tratarErroAgenda(e)) ? "agenda_desconectada" : "falha_lembrete";
               }
             }
           }
@@ -1384,14 +1511,19 @@ export async function runTool(
 
         // Opcional: lançar no custo da obra (categoria material).
         let custoLancado = false;
-        if (input.lancar_custo === true && row.valor_total != null) {
-          await registrarCusto(userWa, {
+        let custoJaLancado = false;
+        if (input.lancar_custo === true && row.valor_total != null && row.custo_id != null) {
+          // Esse material já virou custo antes: não lança de novo (duplicava).
+          custoJaLancado = true;
+        } else if (input.lancar_custo === true && row.valor_total != null) {
+          const custo = await registrarCusto(userWa, {
             valor: Number(row.valor_total),
             obra: row.obra,
             categoria: "material",
             descricao: [row.quantidade, row.unidade, row.item].filter(Boolean).join(" ").trim(),
             data: row.data_compra,
           });
+          await setMaterialCusto(userWa, row.id, custo.id);
           custoLancado = true;
         }
 
@@ -1408,6 +1540,9 @@ export async function runTool(
             valor_total: row.valor_total,
             cotacoes: row.cotacoes.length,
             custo_lancado: custoLancado,
+            ...(custoJaLancado
+              ? { aviso: "Este material JÁ tinha sido lançado no custo antes — não lancei de novo." }
+              : {}),
           }),
         };
       }
@@ -1450,6 +1585,9 @@ export async function runTool(
         return { isError: true, text: `Tool desconhecida: ${name}` };
     }
   } catch (err) {
+    // Agenda com token revogado: limpa e orienta a reconectar.
+    const agenda = await tratarErroAgenda(err);
+    if (agenda) return agenda;
     const message = err instanceof Error ? err.message : String(err);
     // Marcado como erro para o modelo AVISAR o dono (regra: nada em silêncio).
     return { isError: true, text: JSON.stringify({ ok: false, error: message }) };

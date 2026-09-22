@@ -1,4 +1,5 @@
-import process from "node:process";
+import { getEnv } from "../src/config/env.js";
+import { consumirLimite, ipDaRequisicao } from "../src/auth/ratelimit.js";
 import { registrarCadastro } from "../src/memory/context.js";
 
 /**
@@ -28,6 +29,10 @@ export default {
 };
 
 async function handleSubmit(request: Request): Promise<Response> {
+  // Anti-abuso: poucas tentativas por IP (inclusive para adivinhar o convite).
+  if (!(await consumirLimite(`cadastro_ip:${ipDaRequisicao(request)}`, 5, 60 * 60 * 1000))) {
+    return html(mensagemPage("Muitas tentativas", "Aguarde um pouco e tente de novo mais tarde."), 429);
+  }
   const body = new URLSearchParams(await request.text());
   const codigo = (body.get("codigo") ?? "").trim();
   const nomeCompleto = (body.get("nome_completo") ?? "").trim();
@@ -37,7 +42,12 @@ async function handleSubmit(request: Request): Promise<Response> {
   const whatsapp = (body.get("whatsapp") ?? "").trim();
   const consent = body.get("consent");
 
-  const codigoEsperado = process.env.BETA_INVITE_CODE || "ENGETEC2026";
+  // Sem BETA_INVITE_CODE configurado, o cadastro fica FECHADO (antes havia um
+  // código fixo no código-fonte, visível para quem lesse o repositório).
+  const codigoEsperado = getEnv().BETA_INVITE_CODE;
+  if (!codigoEsperado) {
+    return html(mensagemPage("Cadastro fechado", "As inscrições do beta estão fechadas no momento. Fale com o Ricardo."), 403);
+  }
   if (codigo !== codigoEsperado) {
     return html(mensagemPage("Código inválido", "O código de convite não confere. Fale com o Ricardo para receber o seu."), 403);
   }
@@ -49,7 +59,17 @@ async function handleSubmit(request: Request): Promise<Response> {
     return html(mensagemPage("WhatsApp inválido", "Informe o número com DDD, no formato +55 48 99999-9999."), 400);
   }
 
-  await registrarCadastro({ nomeCompleto, cpf, endereco, profissao, whatsappInput: whatsapp });
+  const r = await registrarCadastro({ nomeCompleto, cpf, endereco, profissao, whatsappInput: whatsapp });
+  if (r.jaExistia) {
+    // Nunca sobrescreve um cadastro existente (antes dava para rebaixar o dono).
+    return html(
+      mensagemPage(
+        "Número já cadastrado",
+        "Este WhatsApp já tem cadastro. É só mandar uma mensagem para a Rosana. Se precisar alterar seus dados, fale com o Ricardo.",
+      ),
+      409,
+    );
+  }
   console.log("[cadastro] novo cadastro gravado.");
   return html(sucessoPage(nomeCompleto.split(/\s+/)[0] || nomeCompleto));
 }

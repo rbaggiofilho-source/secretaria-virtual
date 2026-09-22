@@ -100,7 +100,7 @@ export function login(whatsapp: string, senha: string) {
 
 /** Pede um código pelo WhatsApp (usado para criar/redefinir a senha). */
 export function requestCode(whatsapp: string) {
-  return call<{ ok: boolean; nome?: string; error?: string }>('/api/app/auth?acao=request-code', {
+  return call<{ ok: boolean; error?: string }>('/api/app/auth?acao=request-code', {
     method: 'POST',
     body: JSON.stringify({ whatsapp }),
   })
@@ -258,10 +258,29 @@ export function excluirObra(id: number | null, nome: string) {
 }
 
 /** Troca a senha estando logado (exige a senha atual). */
-export function trocarSenha(senhaAtual: string, novaSenha: string) {
-  return call<{ ok: boolean }>('/api/app/auth?acao=change-password', {
+export async function trocarSenha(senhaAtual: string, novaSenha: string) {
+  const r = await call<{ ok: boolean; token?: string }>('/api/app/auth?acao=change-password', {
     method: 'POST',
     body: JSON.stringify({ senhaAtual, novaSenha }),
+  })
+  // Trocar a senha derruba as sessões antigas; esta recebe um token novo.
+  if (r.token) setToken(r.token)
+  return r
+}
+
+/** Registra o interesse (lead) do /cadastro enquanto o pagamento não está no ar. */
+export function registrarInteresse(dados: {
+  nome: string
+  telefone: string
+  email?: string
+  cpf?: string
+  endereco?: string
+  profissao?: string
+  plano?: string
+}) {
+  return call<{ ok: boolean }>('/api/app/auth?acao=lead', {
+    method: 'POST',
+    body: JSON.stringify(dados),
   })
 }
 

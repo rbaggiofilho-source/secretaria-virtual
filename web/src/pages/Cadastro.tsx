@@ -1,3 +1,4 @@
+import { registrarInteresse } from '../lib/api'
 import { FormEvent, useMemo, useState } from 'react'
 import '../styles/landing.css'
 
@@ -41,9 +42,23 @@ function cpfValido(cpfFormatado: string) {
   return digito(9) === Number(cpf[9]) && digito(10) === Number(cpf[10])
 }
 
-function iniciarCheckout(dados: DadosCadastro, plano: PlanoId) {
-  // TODO: integrar Mercado Pago no backend
-  return Promise.resolve({ aguardandoIntegracao: true, cliente: dados.nome, plano })
+async function iniciarCheckout(dados: DadosCadastro, plano: PlanoId) {
+  // TODO: integrar Mercado Pago no backend. Enquanto isso, o interesse é
+  // GUARDADO no backend (antes os dados eram descartados e o lead se perdia).
+  try {
+    await registrarInteresse({
+      nome: dados.nome,
+      telefone: dados.telefone,
+      email: dados.email,
+      cpf: dados.cpf,
+      endereco: dados.endereco,
+      profissao: dados.profissao,
+      plano,
+    })
+  } catch {
+    /* segue para a tela de "em breve" mesmo se o registro falhar */
+  }
+  return { aguardandoIntegracao: true, cliente: dados.nome, plano }
 }
 
 export function Cadastro() {

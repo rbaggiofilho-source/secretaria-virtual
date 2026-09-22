@@ -1,8 +1,13 @@
+import Anthropic from "@anthropic-ai/sdk";
 import { runSecretary } from "./agent/secretary.js";
 import { getEnv } from "./config/env.js";
+import { consumirLimite } from "./auth/ratelimit.js";
 import {
+  adquirirTravaUsuario,
   appendConversation,
+  canonicalWa,
   getUsuario,
+  liberarTravaUsuario,
   loadOwnerContext,
   loadRecentHistory,
   type UsuarioRow,
@@ -22,10 +27,36 @@ import type { WhatsAppMessage } from "./whatsapp/types.js";
  *   responde no WhatsApp
  *
  * Cada etapa tem tratamento de erro para NÃO derrubar o processo e para
- * garantir que o dono seja avisado (nada é descartado em silêncio).
+ * garantir que o usuário seja avisado (nada é descartado em silêncio).
+ *
+ * Duas identidades do número:
+ *   - `from` (cru, como a Meta entregou) → usado para RESPONDER;
+ *   - `wa` (canônico, ver canonicalWa) → chave dos DADOS em todas as tabelas.
  */
-export async function handleIncomingMessage(message: WhatsAppMessage): Promise<void> {
+
+/** Limite da Vercel é 60s; o agente precisa responder antes disso. */
+const PRAZO_PADRAO_MS = 50_000;
+/** Claude aceita imagens de até ~5 MB. */
+const MAX_IMAGEM_BYTES = 5 * 1024 * 1024;
+
+const TIPOS_SEM_SUPORTE: Record<string, string> = {
+  document:
+    "Recebi um arquivo, mas ainda não consigo ler documentos (PDF, planilhas). Se for uma nota fiscal ou foto de obra, me manda como FOTO que eu leio. 📄",
+  video: "Ainda não consigo assistir vídeos. 🎥 Se puder, me manda uma foto ou um áudio explicando.",
+  sticker: "", // figurinha: ignora em silêncio
+  reaction: "", // reação (👍): ignora em silêncio
+  location:
+    "Recebi a localização, mas ainda não consigo usá-la direto. Se for o endereço de uma obra, me escreve o endereço que eu anoto. 📍",
+  contacts: "Recebi o contato, mas ainda não consigo salvá-lo sozinha. Me escreve nome e telefone que eu anoto. 👤",
+};
+
+export async function handleIncomingMessage(
+  message: WhatsAppMessage,
+  opts: { prazo?: number } = {},
+): Promise<void> {
   const from = message.from;
+  const wa = canonicalWa(from);
+  const prazo = opts.prazo ?? Date.now() + PRAZO_PADRAO_MS;
 
   // Autorização: a tabela secretaria_usuarios é a fonte da verdade (uma linha
   // ativa = número autorizado). ALLOWED_WHATSAPP_NUMBER fica como rede de
@@ -33,15 +64,15 @@ export async function handleIncomingMessage(message: WhatsAppMessage): Promise<v
   // como dono (evita lockout do Ricardo por falha de seed).
   let usuario: UsuarioRow | null = null;
   try {
-    usuario = await getUsuario(from);
+    usuario = (await getUsuario(from)) ?? (from !== wa ? await getUsuario(wa) : null);
   } catch (err) {
     logError("buscar usuário", err);
   }
   if (!usuario || !usuario.ativo) {
     const allowed = getEnv().ALLOWED_WHATSAPP_NUMBER;
-    if (allowed && from === allowed) {
+    if (allowed && (from === allowed || wa === canonicalWa(allowed))) {
       usuario = {
-        user_wa: from,
+        user_wa: wa,
         nome: "Ricardo",
         calendar_id: null,
         contextos: null,
@@ -51,11 +82,39 @@ export async function handleIncomingMessage(message: WhatsAppMessage): Promise<v
         nudge_diario: true,
       };
     } else {
-      console.warn(`Mensagem ignorada de número não autorizado: ${from}`);
+      console.warn("Mensagem ignorada de número não autorizado.");
       return;
     }
   }
+  // Dados SEMPRE pela chave canônica.
+  usuario = { ...usuario, user_wa: wa };
 
+  // Tipos sem suporte: resposta específica (antes: "falha ao processar o
+  // áudio/imagem", que confundia). Reações/figurinhas são ignoradas.
+  if (message.type !== "text" && message.type !== "audio" && message.type !== "image") {
+    const aviso =
+      TIPOS_SEM_SUPORTE[message.type] ??
+      "Ainda não consigo ler esse tipo de mensagem. Pode me mandar em texto, áudio ou foto?";
+    if (aviso) await safeReply(from, aviso);
+    return;
+  }
+
+  // Uma mensagem por vez por usuário (áudio + foto seguidos não se cruzam).
+  const travou = await adquirirTravaUsuario(wa, Math.max(0, Math.min(20_000, prazo - Date.now() - 30_000)));
+  try {
+    await processar(message, usuario, from, prazo);
+  } finally {
+    if (travou) await liberarTravaUsuario(wa);
+  }
+}
+
+async function processar(
+  message: WhatsAppMessage,
+  usuario: UsuarioRow,
+  from: string,
+  prazo: number,
+): Promise<void> {
+  const wa = usuario.user_wa;
   let userText: string;
   let images: Array<{ base64: string; mimeType: string }> = [];
   // Caminhos dos arquivos já arquivados no Storage (para o registrar_foto ligar
@@ -70,12 +129,21 @@ export async function handleIncomingMessage(message: WhatsAppMessage): Promise<v
       console.log(`[image] Baixando imagem ${img.id}...`);
       const { buffer, mimeType } = await downloadMedia(img.id);
       console.log(`[image] Imagem baixada: ${buffer.length} bytes (${mimeType}).`);
-      images = [{ base64: buffer.toString("base64"), mimeType }];
+      const mime = mimeType.split(";")[0]!.trim().toLowerCase();
+      if (!["image/jpeg", "image/png", "image/webp", "image/gif"].includes(mime)) {
+        await safeReply(from, "Não consegui abrir esse formato de imagem. Pode mandar como foto normal (JPG/PNG)?");
+        return;
+      }
+      if (buffer.length > MAX_IMAGEM_BYTES) {
+        await safeReply(from, "Essa imagem é grande demais pra eu ler (acima de 5 MB). Pode mandar de novo como foto comum do WhatsApp?");
+        return;
+      }
+      images = [{ base64: buffer.toString("base64"), mimeType: mime }];
       userText = img.caption ?? "";
       // Arquiva o arquivo no Storage (não crítico): se falhar, seguimos com a
       // visão/descrição normalmente, só sem guardar o arquivo.
       try {
-        imagePaths.push(await uploadFoto(from, buffer, mimeType));
+        imagePaths.push(await uploadFoto(wa, buffer, mime));
       } catch (err) {
         logError("arquivar imagem no Storage", err);
       }
@@ -86,7 +154,9 @@ export async function handleIncomingMessage(message: WhatsAppMessage): Promise<v
     logError("resolver entrada (STT/imagem/tipo)", err);
     await safeReply(
       from,
-      "Não consegui entender sua mensagem (falha ao processar o áudio/imagem). Pode mandar de novo, por favor?",
+      message.type === "audio"
+        ? "Não consegui entender o áudio (falha na transcrição). Pode mandar de novo ou escrever, por favor?"
+        : "Não consegui abrir a imagem. Pode mandar de novo, por favor?",
     );
     return;
   }
@@ -96,13 +166,14 @@ export async function handleIncomingMessage(message: WhatsAppMessage): Promise<v
     return;
   }
 
+  let reply: string;
   try {
     const [context, history] = await Promise.all([
-      loadOwnerContext(from),
-      loadRecentHistory(from),
+      loadOwnerContext(wa),
+      loadRecentHistory(wa),
     ]);
 
-    const reply = await runSecretary({
+    reply = await runSecretary({
       usuario,
       userText,
       images,
@@ -112,23 +183,76 @@ export async function handleIncomingMessage(message: WhatsAppMessage): Promise<v
       wasAudio: message.type === "audio",
       // Sem histórico = primeiro contato: dispara as boas-vindas guiadas.
       primeiroContato: history.length === 0,
+      prazo,
+      mensagemAtual: { texto: userText, tipo: message.type },
+      replyTo: from,
     });
+  } catch (err) {
+    logError("agente", err);
+    await avisarFalhaIA(err);
+    await safeReply(from, mensagemDeFalha(err));
+    return;
+  }
 
-    // Persiste histórico (não crítico) e responde (crítico). Para imagem sem
-    // legenda, registra um marcador legível no histórico.
-    await appendConversation(
-      from,
-      "user",
-      userText.trim() || (images.length ? "[imagem enviada]" : userText),
-    );
-    await appendConversation(from, "assistant", reply);
+  // Persiste histórico (não crítico). Para imagem sem legenda, registra um
+  // marcador legível no histórico.
+  await appendConversation(
+    wa,
+    "user",
+    userText.trim() || (images.length ? "[imagem enviada]" : userText),
+  );
+  await appendConversation(wa, "assistant", reply);
+
+  // Envio da resposta: falha AQUI não significa que as ações falharam (o
+  // agendamento/registro já foi feito). Antes, a mensagem de erro dizia
+  // "talvez nada tenha sido agendado" e o usuário repetia → duplicava.
+  try {
     await sendTextMessage(from, reply);
   } catch (err) {
-    logError("agente/calendar/resposta", err);
+    logError("envio da resposta", err);
     await safeReply(
       from,
-      "Tive um problema ao processar sua solicitação e talvez nada tenha sido agendado. Pode repetir a última mensagem?",
+      "Fiz o que você pediu, mas não consegui te mandar a resposta completa. Pergunte de novo que eu te mostro — não precisa repetir o pedido.",
     );
+  }
+}
+
+/** Mensagem ao usuário conforme o tipo de falha do agente. */
+function mensagemDeFalha(err: unknown): string {
+  if (erroDeCreditoOuChave(err)) {
+    return "Estou com uma instabilidade técnica agora e não consigo processar sua mensagem. Já avisei o responsável — tente de novo em alguns minutos. 🙏";
+  }
+  if (err instanceof Anthropic.RateLimitError || err instanceof Anthropic.InternalServerError) {
+    return "Estou sobrecarregada neste momento. Pode repetir sua mensagem em um minutinho?";
+  }
+  return "Tive um problema ao processar sua solicitação. Algumas ações podem ter ficado pela metade — me pergunte o que ficou registrado antes de repetir.";
+}
+
+/** Crédito esgotado / chave inválida na Anthropic: tudo para até alguém agir. */
+function erroDeCreditoOuChave(err: unknown): boolean {
+  if (err instanceof Anthropic.AuthenticationError || err instanceof Anthropic.PermissionDeniedError) {
+    return true;
+  }
+  return err instanceof Anthropic.BadRequestError && /credit balance/i.test(err.message);
+}
+
+/**
+ * Avisa o dono (no máximo 1x a cada 3h) quando a IA está fora por crédito ou
+ * chave — não há API de saldo, então este é o alarme.
+ */
+async function avisarFalhaIA(err: unknown): Promise<void> {
+  if (!erroDeCreditoOuChave(err)) return;
+  const dono = getEnv().ALLOWED_WHATSAPP_NUMBER;
+  if (!dono) return;
+  try {
+    if (!(await consumirLimite("alerta_ia", 1, 3 * 60 * 60 * 1000))) return;
+    await sendTextMessage(
+      dono,
+      "🚨 ALERTA: a IA da Rosana está recusando as chamadas (crédito esgotado ou chave inválida na Anthropic). " +
+        "Os usuários estão recebendo aviso de instabilidade. Verifique o saldo/chave no console da Anthropic.",
+    );
+  } catch (e) {
+    logError("alerta de falha da IA", e);
   }
 }
 
@@ -146,12 +270,11 @@ async function resolveUserText(message: WhatsAppMessage): Promise<string> {
       `[audio] Mídia baixada: ${buffer.length} bytes (${mimeType}). Transcrevendo...`,
     );
     const text = await transcribe({ buffer, mimeType });
-    // Nunca logamos o conteúdo transcrito (é dado do dono) — só o tamanho.
+    // Nunca logamos o conteúdo transcrito (é dado do usuário) — só o tamanho.
     console.log(`[audio] Transcrição concluída (${text.length} caracteres).`);
     return text;
   }
 
-  // Tipos não suportados (imagem, documento, etc.)
   throw new Error(`Tipo de mensagem não suportado: ${message.type}`);
 }
 

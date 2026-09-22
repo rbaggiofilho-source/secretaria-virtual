@@ -1,4 +1,4 @@
-import { sessionFromRequest } from "../../src/auth/session.js";
+import { autenticar } from "../../src/auth/session.js";
 import { getEnv } from "../../src/config/env.js";
 import { buildDashboard } from "../../src/app/dashboard.js";
 import { buildObras } from "../../src/app/obras.js";
@@ -23,14 +23,16 @@ import { json, preflight, readJson } from "../../src/auth/http.js";
 export default {
   async fetch(request: Request): Promise<Response> {
     if (request.method === "OPTIONS") return preflight(request);
-    const wa = sessionFromRequest(request);
-    if (!wa) return json(request, { ok: false, error: "nao_autenticado" }, 401);
-
     const url = new URL(request.url);
     const recurso = url.searchParams.get("recurso") ?? "";
     const p = url.searchParams;
 
     try {
+      // Token válido + versão da sessão atual + usuário ativo (revogável).
+      const sessao = await autenticar(request);
+      if (!sessao) return json(request, { ok: false, error: "nao_autenticado" }, 401);
+      const wa = sessao.wa;
+
       if (request.method === "GET") {
         switch (recurso) {
           case "dashboard":
@@ -40,18 +42,20 @@ export default {
           case "custos": {
             const rel = await relatorioCustos(wa, {
               obra: p.get("obra"),
+              obraExata: true,
               desde: p.get("desde"),
               ate: p.get("ate"),
             });
             return json(request, { ok: true, ...rel });
           }
           case "rdo":
-            return json(request, { ok: true, rdos: await consultarRDO(wa, { obra: p.get("obra") }) });
+            return json(request, { ok: true, rdos: await consultarRDO(wa, { obra: p.get("obra"), obraExata: true }) });
           case "documentos":
             return json(request, {
               ok: true,
               documentos: await consultarDocumentos(wa, {
                 obra: p.get("obra"),
+                obraExata: true,
                 incluirArquivados: p.get("arquivados") === "1",
               }),
             });
@@ -60,12 +64,14 @@ export default {
               ok: true,
               materiais: await consultarMateriais(wa, {
                 obra: p.get("obra"),
+                obraExata: true,
                 status: (p.get("status") as MaterialStatus | null) || null,
               }),
             });
           case "fotos": {
             const fotos = await consultarFotos(wa, {
               obra: p.get("obra"),
+              obraExata: true,
               tipo: (p.get("tipo") as TipoFoto | null) || null,
             });
             const comUrl = await Promise.all(
@@ -91,6 +97,7 @@ export default {
           const nome = (typeof body.nome === "string" ? body.nome : "").trim();
           if (!nome) return json(request, { ok: false, error: "nome_obrigatorio" }, 400);
           const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
+          try {
           const obra = await salvarObra(wa, {
             id: typeof body.id === "number" ? body.id : null,
             nome,
@@ -102,6 +109,14 @@ export default {
             status: (str(body.status) as ObraStatus | null),
           });
           return json(request, { ok: true, obra });
+          } catch (err) {
+            // Renomear para um nome que já existe: recusa (antes migrava os
+            // lançamentos da obra para a outra em silêncio).
+            if (err instanceof Error && err.message === "nome_em_uso") {
+              return json(request, { ok: false, error: "nome_em_uso" }, 409);
+            }
+            throw err;
+          }
         }
         return json(request, { error: "recurso_desconhecido" }, 400);
       }

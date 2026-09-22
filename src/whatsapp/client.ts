@@ -1,7 +1,20 @@
 import { getEnv } from "../config/env.js";
 
-const GRAPH_VERSION = "v21.0";
-const GRAPH_BASE = `https://graph.facebook.com/${GRAPH_VERSION}`;
+/**
+ * Base da Graph API. A versão vem de WHATSAPP_GRAPH_VERSION (default v21.0)
+ * para poder subir sem mexer no código quando a Meta descontinuar a atual.
+ */
+function graphBase(): string {
+  return `https://graph.facebook.com/${getEnv().WHATSAPP_GRAPH_VERSION}`;
+}
+
+/** Timeouts das chamadas à Meta: nenhuma chamada pode "pendurar" a função. */
+const TIMEOUT_MS = 15000;
+const TIMEOUT_MIDIA_MS = 25000;
+
+function comTimeout(init: RequestInit, ms = TIMEOUT_MS): RequestInit {
+  return { ...init, signal: AbortSignal.timeout(ms) };
+}
 
 /**
  * Envia uma mensagem de texto de volta para o usuário no WhatsApp.
@@ -10,39 +23,82 @@ const GRAPH_BASE = `https://graph.facebook.com/${GRAPH_VERSION}`;
  */
 export async function sendTextMessage(to: string, body: string): Promise<void> {
   const env = getEnv();
-  const url = `${GRAPH_BASE}/${env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
+  const url = `${graphBase()}/${env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
+  // O WhatsApp limita o corpo do texto a 4096 caracteres: divide em partes.
+  const partes = dividirTexto(body, 4000);
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${env.WHATSAPP_TOKEN}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      messaging_product: "whatsapp",
-      recipient_type: "individual",
-      // Responde ao wa_id EXATAMENTE como a Meta entregou. Para celulares
-      // brasileiros o wa_id vem sem o 9 (ex.: 554888088057); a Meta resolve a
-      // conta internamente. Inserir o 9 manualmente leva a API a aceitar o
-      // envio (200) mas nao entregar — a mensagem some em silencio.
-      to,
-      type: "text",
-      text: { preview_url: false, body },
-    }),
-  });
+  for (const parte of partes) {
+    let ultimoErro: unknown = null;
+    // 1 nova tentativa em falha de rede/5xx/429 (não em 4xx de validação).
+    for (let tentativa = 0; tentativa < 2; tentativa++) {
+      try {
+        const res = await fetch(
+          url,
+          comTimeout({
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${env.WHATSAPP_TOKEN}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              messaging_product: "whatsapp",
+              recipient_type: "individual",
+              // Responde ao wa_id EXATAMENTE como a Meta entregou. Para celulares
+              // brasileiros o wa_id vem sem o 9 (ex.: 554888088057); a Meta resolve a
+              // conta internamente. Inserir o 9 manualmente leva a API a aceitar o
+              // envio (200) mas nao entregar — a mensagem some em silencio.
+              to,
+              type: "text",
+              text: { preview_url: false, body: parte },
+            }),
+          }),
+        );
 
-  if (!res.ok) {
-    const detail = await safeErrorText(res);
-    throw new Error(`Falha ao enviar mensagem no WhatsApp (${res.status}): ${detail}`);
+        if (!res.ok) {
+          const detail = await safeErrorText(res);
+          const err = new Error(`Falha ao enviar mensagem no WhatsApp (${res.status}): ${detail}`);
+          if (res.status >= 500 || res.status === 429) {
+            ultimoErro = err;
+            await new Promise((r) => setTimeout(r, 800));
+            continue;
+          }
+          throw err;
+        }
+
+        // Confirma o envio com o id da mensagem devolvido pela Graph API. A entrega
+        // efetiva chega depois, como evento de status no webhook (ver api/webhook.ts).
+        const data = (await res.json().catch(() => null)) as
+          | { messages?: Array<{ id?: string }> }
+          | null;
+        const wamid = data?.messages?.[0]?.id;
+        console.log(`[whatsapp] Mensagem aceita pela Graph API (id=${wamid ?? "?"}).`);
+        ultimoErro = null;
+        break;
+      } catch (err) {
+        // Erro de validação (4xx) sobe direto; rede/timeout tenta mais uma vez.
+        if (err instanceof Error && /\((4\d\d)\)/.test(err.message) && !/\(429\)/.test(err.message)) throw err;
+        ultimoErro = err;
+      }
+    }
+    if (ultimoErro) throw ultimoErro;
   }
+}
 
-  // Confirma o envio com o id da mensagem devolvido pela Graph API. A entrega
-  // efetiva chega depois, como evento de status no webhook (ver api/webhook.ts).
-  const data = (await res.json().catch(() => null)) as
-    | { messages?: Array<{ id?: string }> }
-    | null;
-  const wamid = data?.messages?.[0]?.id;
-  console.log(`[whatsapp] Mensagem aceita pela Graph API para ${to} (id=${wamid ?? "?"}).`);
+/** Divide um texto longo em pedaços, preferindo quebrar em parágrafos/linhas. */
+function dividirTexto(texto: string, max: number): string[] {
+  if (texto.length <= max) return [texto];
+  const partes: string[] = [];
+  let resto = texto;
+  while (resto.length > max) {
+    let corte = resto.lastIndexOf("\n\n", max);
+    if (corte < max * 0.5) corte = resto.lastIndexOf("\n", max);
+    if (corte < max * 0.5) corte = resto.lastIndexOf(" ", max);
+    if (corte <= 0) corte = max;
+    partes.push(resto.slice(0, corte).trimEnd());
+    resto = resto.slice(corte).trimStart();
+  }
+  if (resto) partes.push(resto);
+  return partes;
 }
 
 /**
@@ -56,18 +112,24 @@ export async function uploadMedia(
   filename: string,
 ): Promise<string> {
   const env = getEnv();
-  const url = `${GRAPH_BASE}/${env.WHATSAPP_PHONE_NUMBER_ID}/media`;
+  const url = `${graphBase()}/${env.WHATSAPP_PHONE_NUMBER_ID}/media`;
 
   const form = new FormData();
   form.append("messaging_product", "whatsapp");
   form.append("type", mimeType);
   form.append("file", new Blob([bytes], { type: mimeType }), filename);
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${env.WHATSAPP_TOKEN}` },
-    body: form,
-  });
+  const res = await fetch(
+    url,
+    comTimeout(
+      {
+        method: "POST",
+        headers: { Authorization: `Bearer ${env.WHATSAPP_TOKEN}` },
+        body: form,
+      },
+      TIMEOUT_MIDIA_MS,
+    ),
+  );
   if (!res.ok) {
     const detail = await safeErrorText(res);
     throw new Error(`Falha no upload de mídia (${res.status}): ${detail}`);
@@ -86,9 +148,9 @@ export async function sendDocumentMessage(
   caption?: string,
 ): Promise<void> {
   const env = getEnv();
-  const url = `${GRAPH_BASE}/${env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
+  const url = `${graphBase()}/${env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
 
-  const res = await fetch(url, {
+  const res = await fetch(url, comTimeout({
     method: "POST",
     headers: {
       Authorization: `Bearer ${env.WHATSAPP_TOKEN}`,
@@ -101,7 +163,7 @@ export async function sendDocumentMessage(
       type: "document",
       document: { id: mediaId, filename, caption },
     }),
-  });
+  }));
   if (!res.ok) {
     const detail = await safeErrorText(res);
     throw new Error(`Falha ao enviar documento no WhatsApp (${res.status}): ${detail}`);
@@ -115,9 +177,9 @@ export async function sendImageMessage(
   caption?: string,
 ): Promise<void> {
   const env = getEnv();
-  const url = `${GRAPH_BASE}/${env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
+  const url = `${graphBase()}/${env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
 
-  const res = await fetch(url, {
+  const res = await fetch(url, comTimeout({
     method: "POST",
     headers: {
       Authorization: `Bearer ${env.WHATSAPP_TOKEN}`,
@@ -130,7 +192,7 @@ export async function sendImageMessage(
       type: "image",
       image: { id: mediaId, caption },
     }),
-  });
+  }));
   if (!res.ok) {
     const detail = await safeErrorText(res);
     throw new Error(`Falha ao enviar imagem no WhatsApp (${res.status}): ${detail}`);
@@ -149,9 +211,10 @@ export async function downloadMedia(
   const env = getEnv();
 
   // 1) Metadados da mídia (inclui a URL de download)
-  const metaRes = await fetch(`${GRAPH_BASE}/${mediaId}`, {
-    headers: { Authorization: `Bearer ${env.WHATSAPP_TOKEN}` },
-  });
+  const metaRes = await fetch(
+    `${graphBase()}/${mediaId}`,
+    comTimeout({ headers: { Authorization: `Bearer ${env.WHATSAPP_TOKEN}` } }),
+  );
   if (!metaRes.ok) {
     const detail = await safeErrorText(metaRes);
     throw new Error(`Falha ao obter metadados da mídia (${metaRes.status}): ${detail}`);
@@ -162,9 +225,10 @@ export async function downloadMedia(
   }
 
   // 2) Download dos bytes (a URL exige o mesmo Bearer token)
-  const fileRes = await fetch(meta.url, {
-    headers: { Authorization: `Bearer ${env.WHATSAPP_TOKEN}` },
-  });
+  const fileRes = await fetch(
+    meta.url,
+    comTimeout({ headers: { Authorization: `Bearer ${env.WHATSAPP_TOKEN}` } }, TIMEOUT_MIDIA_MS),
+  );
   if (!fileRes.ok) {
     const detail = await safeErrorText(fileRes);
     throw new Error(`Falha ao baixar a mídia (${fileRes.status}): ${detail}`);

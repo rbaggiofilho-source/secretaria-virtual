@@ -72,8 +72,10 @@ export function App() {
       .then((r) => {
         if (vivo) setEstado({ fase: 'logado', usuario: r.usuario })
       })
-      .catch(() => {
-        setToken(null)
+      .catch((err: Error & { status?: number }) => {
+        // Só descarta o token se o servidor recusou a sessão (401). Queda de
+        // rede/500 não desloga o usuário: na próxima abertura ele segue logado.
+        if (err?.status === 401) setToken(null)
         if (vivo) setEstado({ fase: 'deslogado' })
       })
     return () => {

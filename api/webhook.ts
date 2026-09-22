@@ -1,8 +1,8 @@
 import { getEnv } from "../src/config/env.js";
-import { claimMessageOnce } from "../src/memory/context.js";
+import { claimMessageOnce, marcarMensagemProcessada } from "../src/memory/context.js";
 import { handleIncomingMessage } from "../src/pipeline.js";
 import { isValidSignature } from "../src/whatsapp/signature.js";
-import { extractFirstMessage, type WhatsAppWebhookPayload } from "../src/whatsapp/types.js";
+import { extractMessages, type WhatsAppWebhookPayload } from "../src/whatsapp/types.js";
 
 /**
  * Webhook único da WhatsApp Cloud API.
@@ -85,8 +85,8 @@ async function handlePost(request: Request): Promise<Response> {
     return new Response("Bad JSON", { status: 400 });
   }
 
-  const extracted = extractFirstMessage(payload);
-  if (!extracted) {
+  const mensagens = extractMessages(payload);
+  if (mensagens.length === 0) {
     // Sem mensagem de usuário: provavelmente um evento de status (a Meta avisa
     // se a NOSSA resposta foi sent/delivered/read/failed). Logamos para
     // diagnosticar entrega — um "failed" aqui explica resposta que some sem
@@ -95,17 +95,30 @@ async function handlePost(request: Request): Promise<Response> {
     return new Response("EVENT_RECEIVED", { status: 200 });
   }
 
-  // Dedup: a Meta reenvia o mesmo evento se não recebe o 200 a tempo. Só o
-  // primeiro a "reivindicar" o id processa; reentregas são reconhecidas e
-  // ignoradas, evitando eventos duplicados no calendário.
-  const isFirst = await claimMessageOnce(extracted.message.id);
-  if (!isFirst) {
-    console.log(`[webhook] Mensagem ${extracted.message.id} já processada — reentrega ignorada.`);
-    return new Response("EVENT_RECEIVED", { status: 200 });
+  // Processa TODAS as mensagens do lote, em ordem (antes só a primeira).
+  // O prazo é da REQUISIÇÃO (a Vercel corta em 60s): se não der tempo para a
+  // próxima, devolve 503 e a Meta reenvia o lote — as já concluídas são
+  // puladas pelo dedup.
+  const inicio = Date.now();
+  const prazo = inicio + 50_000;
+  for (const message of mensagens) {
+    if (Date.now() - inicio > 30_000) {
+      console.warn("[webhook] Sem tempo para o restante do lote — pedindo reentrega.");
+      return new Response("RETRY", { status: 503 });
+    }
+    // Dedup: a Meta reenvia o mesmo evento se não recebe o 200 a tempo. Só o
+    // primeiro a "reivindicar" o id processa. A reivindicação fica
+    // "processing" até terminar: se a função morrer no meio (timeout), uma
+    // reentrega posterior pode retomar — a mensagem não some em silêncio.
+    const isFirst = await claimMessageOnce(message.id);
+    if (!isFirst) {
+      console.log(`[webhook] Mensagem ${message.id} já processada — reentrega ignorada.`);
+      continue;
+    }
+    // Processa e só então confirma. O pipeline tem prazo interno (< 60s).
+    await handleIncomingMessage(message, { prazo });
+    await marcarMensagemProcessada(message.id);
   }
-
-  // Processa a mensagem e só então confirma. maxDuration=60s cobre STT+Claude.
-  await handleIncomingMessage(extracted.message);
   return new Response("EVENT_RECEIVED", { status: 200 });
 }
 

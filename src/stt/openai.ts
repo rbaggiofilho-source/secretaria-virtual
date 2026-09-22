@@ -21,6 +21,8 @@ export async function transcribeWithOpenAI(input: TranscribeInput): Promise<stri
     method: "POST",
     headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}` },
     body: form,
+    // Timeout: STT pendurado não pode consumir os 60s da função.
+    signal: AbortSignal.timeout(25000),
   });
 
   if (!res.ok) {

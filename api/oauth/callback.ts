@@ -1,5 +1,6 @@
 import { getOAuthToken, saveOAuthToken } from "../../src/memory/context.js";
-import { exchangeCode, oauthConfigured, verifyState } from "../../src/oauth/google.js";
+import { consumirNonce, exchangeCode, oauthConfigured, verifyState } from "../../src/oauth/google.js";
+import { sendTextMessage } from "../../src/whatsapp/client.js";
 import { errorPage, successPage } from "../../src/oauth/page.js";
 
 /**
@@ -27,8 +28,8 @@ export default {
 
     const code = url.searchParams.get("code") ?? "";
     const state = (url.searchParams.get("state") ?? "").replace(/[^A-Za-z0-9._-]/g, "");
-    const waId = verifyState(state);
-    if (!waId || !code) {
+    const st = verifyState(state);
+    if (!st || !code) {
       return errorPage(
         "Link inválido",
         "Não consegui validar este retorno. Peça um novo link para a Rosana no WhatsApp.",
@@ -36,7 +37,16 @@ export default {
       );
     }
 
+    const waId = st.wa;
     try {
+      // Uso único: cada link conecta uma agenda UMA vez.
+      if (!(await consumirNonce(st.n, waId))) {
+        return errorPage(
+          "Link já utilizado",
+          "Este link de conexão já foi usado ou expirou. Peça um novo para a Rosana no WhatsApp (mande “conectar agenda”).",
+          400,
+        );
+      }
       const tokens = await exchangeCode(code);
 
       // O Google só manda refresh_token na primeira autorização (ou com
@@ -63,6 +73,15 @@ export default {
         email: tokens.email,
       });
       console.log("[oauth] agenda conectada para um usuário.");
+      // Avisa no WhatsApp QUAL conta foi conectada: se não foi a pessoa, ela
+      // percebe na hora (defesa contra link vazado).
+      await sendTextMessage(
+        waId,
+        `✅ Agenda conectada${tokens.email ? `: ${tokens.email}` : ""}. ` +
+          "Se não foi você que conectou, me avise e mande “conectar agenda” para trocar.",
+      ).catch((e) =>
+        console.error(`[oauth] aviso de conexão falhou: ${e instanceof Error ? e.message : String(e)}`),
+      );
       return successPage(tokens.email);
     } catch (e) {
       console.error(`[oauth] falha no callback: ${e instanceof Error ? e.message : String(e)}`);

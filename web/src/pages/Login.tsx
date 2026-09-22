@@ -4,7 +4,8 @@ import { Logo } from '../components/Logo'
 import { login, requestCode, setPassword, setToken, type Usuario } from '../lib/api'
 
 const ERRO_MSG: Record<string, string> = {
-  credenciais: 'Número ou senha incorretos. Confira e tente de novo.',
+  credenciais: 'Número ou senha incorretos. Primeiro acesso ou esqueceu a senha? Crie uma nova pelo código no WhatsApp.',
+  limite_diario: 'Muitas tentativas hoje. Tente novamente amanhã ou fale com o suporte.',
   bloqueado: 'Muitas tentativas. Aguarde 15 minutos e tente novamente.',
   nao_autorizado: 'Este número não está autorizado. Fale com o Ricardo para liberar seu acesso.',
   muito_cedo: 'Já enviamos um código há pouco. Aguarde um minuto e tente de novo.',
@@ -54,12 +55,10 @@ export function Login({ onLogin }: { onLogin: (u: Usuario) => void }) {
       setToken(r.token)
       onLogin(r.usuario)
     } catch (err) {
-      if (String((err as Error)?.message) === 'sem_senha') {
-        setSemSenha(true)
-        setErro('Você ainda não criou uma senha para este número.')
-      } else {
-        setErro(msg(err))
-      }
+      // "credenciais" cobre também quem ainda não criou senha (o servidor não
+      // revela a diferença): oferece o caminho de criar/redefinir.
+      if (String((err as Error)?.message) === 'credenciais') setSemSenha(true)
+      setErro(msg(err))
     } finally {
       setLoading(false)
     }
@@ -70,8 +69,8 @@ export function Login({ onLogin }: { onLogin: (u: Usuario) => void }) {
     setErro(null)
     setLoading(true)
     try {
-      const r = await requestCode(whatsapp)
-      setNome(r.nome ?? null)
+      await requestCode(whatsapp)
+      setNome(null)
       setModo('reset_codigo')
     } catch (err) {
       setErro(msg(err))
@@ -149,7 +148,7 @@ export function Login({ onLogin }: { onLogin: (u: Usuario) => void }) {
         {modo === 'reset_codigo' && (
           <form onSubmit={salvarSenha}>
             <h1>Defina sua senha</h1>
-            <p className="login-sub">{nome ? <>Oi, {nome}! </> : null}Enviamos um código no WhatsApp <strong>{whatsapp}</strong>. Digite-o e escolha sua nova senha.</p>
+            <p className="login-sub">{nome ? <>Oi, {nome}! </> : null}Se este número estiver cadastrado, enviamos um código no WhatsApp <strong>{whatsapp}</strong>. Digite-o e escolha sua nova senha.</p>
             <label className="login-field">
               <span>Código do WhatsApp</span>
               <input type="text" inputMode="numeric" autoFocus maxLength={6} className="login-code" placeholder="000000"

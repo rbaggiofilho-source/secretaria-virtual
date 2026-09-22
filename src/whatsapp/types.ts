@@ -75,3 +75,18 @@ export function extractFirstMessage(
   }
   return null;
 }
+
+/**
+ * Extrai TODAS as mensagens de usuário do payload, na ordem. A Meta pode
+ * agrupar mais de uma mensagem num mesmo POST — antes só a primeira era
+ * processada e as demais sumiam sem aviso.
+ */
+export function extractMessages(payload: WhatsAppWebhookPayload): WhatsAppMessage[] {
+  const out: WhatsAppMessage[] = [];
+  for (const entry of payload.entry ?? []) {
+    for (const change of entry.changes ?? []) {
+      for (const m of change.value?.messages ?? []) out.push(m);
+    }
+  }
+  return out;
+}

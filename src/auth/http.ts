@@ -1,19 +1,29 @@
 /**
  * Utilitários HTTP para os endpoints da plataforma web (/api/app/*).
  *
- * A tela roda num domínio diferente do backend, então precisamos de CORS. Como
- * a sessão viaja num header Authorization: Bearer (e NÃO em cookie), não há
- * risco de CSRF por cookie e podemos liberar a origem com segurança. Se quiser
- * travar numa origem específica, defina WEB_APP_ORIGIN na Vercel.
+ * A tela roda num domínio diferente do backend, então precisamos de CORS. A
+ * sessão viaja no header Authorization: Bearer (não em cookie), então não há
+ * CSRF por cookie; ainda assim, só as origens do painel são liberadas.
+ * WEB_APP_ORIGIN (lista separada por vírgula) sobrescreve o padrão abaixo.
  */
+
+const ORIGENS_PADRAO = [
+  "https://userosana.com.br",
+  "https://www.userosana.com.br",
+  "http://localhost:5173",
+];
+/** Previews do projeto rosana-web na Vercel. */
+const PREVIEW_VERCEL = /^https:\/\/rosana-web(-[a-z0-9-]+)?\.vercel\.app$/;
 
 function allowOrigin(request: Request): string {
   const configured = (process.env.WEB_APP_ORIGIN ?? "").trim();
-  if (!configured) return "*";
-  // Permite uma lista separada por vírgula; ecoa a origem se estiver na lista.
+  const list = configured
+    ? configured.split(",").map((s) => s.trim()).filter(Boolean)
+    : ORIGENS_PADRAO;
   const origin = request.headers.get("origin") ?? "";
-  const list = configured.split(",").map((s) => s.trim()).filter(Boolean);
-  return list.includes(origin) ? origin : list[0] ?? "*";
+  if (list.includes("*")) return "*";
+  if (list.includes(origin) || PREVIEW_VERCEL.test(origin)) return origin;
+  return list[0] ?? "null";
 }
 
 export function corsHeaders(request: Request): Record<string, string> {

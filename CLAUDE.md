@@ -64,7 +64,12 @@ beta; opcionais — sem eles só o caminho da conta de serviço funciona),
 `PUBLIC_BASE_URL` (default `https://secretaria-virtual-seven.vercel.app`),
 `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `TIMEZONE` (default `America/Sao_Paulo`),
 `CRON_SECRET` (protege o cron do "bom dia"; a Vercel manda como `Authorization: Bearer`),
-`WEB_APP_ORIGIN` (opcional; trava o CORS de `/api/app/*` numa origem — sem ele é `*`).
+`WEB_APP_ORIGIN` (opcional; lista de origens do CORS de `/api/app/*` — sem ele vale o
+padrão userosana.com.br + www + localhost:5173 + previews `rosana-web*.vercel.app`),
+`SESSION_SECRET` (opcional, recomendado; segredo-mestre dos tokens de sessão/OAuth/OTP —
+sem ele usa `WHATSAPP_APP_SECRET`), `TOKEN_ENC_KEY` (opcional, recomendado; cifra os
+tokens do Google em repouso, AES-256-GCM), `WHATSAPP_GRAPH_VERSION` (default `v21.0`),
+`BETA_INVITE_CODE` (**sem default**: sem ele o `/cadastro` fica FECHADO).
 Validadas via `zod` em `src/config/env.ts` (faz `trim`; STT_PROVIDER tolerante a maiúsculas).
 - **Projeto `rosana-web` (site):** `VITE_API_BASE` = `https://secretaria-virtual-seven.vercel.app`
   (URL do backend; lida em build pelo `web/src/lib/api.ts`, com fallback pra essa mesma URL).
@@ -137,17 +142,27 @@ WhatsApp. Eventos de status (sent/delivered/read/failed) são logados.
   (`buscarPrecos`). Para ATUALIZAR: reimportar a planilha e regerar o arquivo +
   deploy (é dado estático versionado no git, não no banco).
 - `src/util/datetime.ts` — fuso e formatação de datas.
-- `supabase/schema.sql` — schema.
+- `supabase/migrations/` — schema VERSIONADO (baseline de 22/09 + correções). Toda
+  mudança de banco vira migração nova aqui e é aplicada ANTES do deploy do código.
+  `supabase/schema.sql` foi aposentado (estava desatualizado).
+- `src/auth/tokens.ts` — tokens HMAC com finalidade (`session`/`oauth_state`/`otp`),
+  chave derivada por finalidade. `src/auth/ratelimit.ts` — limites no banco
+  (`secretaria_rate_limits`), update otimista. `src/util/crypto.ts` — AES-GCM p/ tokens.
 - `package.json`: `"type":"module"`, deps: `@anthropic-ai/sdk, @supabase/supabase-js, googleapis, pdf-lib, zod`; **sem** script `build`.
 
 ## Modelo de dados (Supabase — todas com RLS ligado)
 - `secretaria_memories` — fatos, obras, apelidos, pendências, preferências (por `user_wa`).
 - `secretaria_conversations` — histórico (role user/assistant).
-- `secretaria_processed_messages` — dedup (PK `wa_message_id`).
+- `secretaria_processed_messages` — dedup (PK `wa_message_id`; `status`
+  processing/done + `claimed_at`: reentrega retoma mensagem "processing" parada >90s).
+- `secretaria_rate_limits` (chave/janela/contagem), `secretaria_oauth_nonces` (link
+  "conectar agenda" de uso único), `secretaria_locks` (1 mensagem por vez por usuário),
+  `secretaria_leads` (interessados vindos do `/cadastro` do site).
 - `secretaria_auth_codes` — códigos OTP do painel web, usados p/ criar/redefinir
   senha (PK `user_wa`; `code_hash`, `expires_at`, `attempts`, `last_sent_at`).
 - `secretaria_senhas` — senhas do painel (PK `user_wa`; `senha_hash` scrypt,
-  `falhas`, `bloqueado_ate`). Uma linha por variante de wa_id.
+  `falhas`, `bloqueado_ate`, `sessao_versao`). Uma linha por variante de wa_id.
+  `sessao_versao` sobe a cada troca/redefinição de senha e REVOGA tokens antigos.
 - `secretaria_obras` — cadastro ESTRUTURADO e editável da obra (id; nome; cliente;
   endereco; contexto; data_inicio; data_fim_alvo; status ativa/pausada/concluida).
   unique(user_wa,nome). Os lançamentos referenciam a obra pelo NOME, então
@@ -203,7 +218,7 @@ prioridade — + `referencia` — base de mercado, 433 insumos).
 ## Onboarding do beta (site + OAuth) — desde 07/09/2026
 - **Site de cadastro:** `GET/POST /cadastro` (`api/cadastro.ts`, rewrite no
   `vercel.json`). Coleta nome/CPF/endereço/profissão/WhatsApp + código de convite
-  (`BETA_INVITE_CODE`, default `ENGETEC2026`); grava em `secretaria_usuarios`
+  (`BETA_INVITE_CODE`, SEM default — sem a env o cadastro fica fechado); grava em `secretaria_usuarios`
   (uma linha por variante de wa_id, `waIdVariants`); devolve o número da Rosana +
   manual. **Ainda exige** adicionar o número à mão na lista de destinatários da
   Meta (modo dev, teto 5).
@@ -290,6 +305,40 @@ banco; nada de novo produto. Rodando em **userosana.com.br** (projeto Vercel
 
 ---
 
+## Auditoria de 22/09/2026 (correções — ver migração `20260923000000_correcoes_auditoria.sql`)
+- **Tokens com finalidade:** sessão, state do OAuth e hash do OTP usam chaves
+  DERIVADAS diferentes + campo `typ`. Antes o link "conectar agenda" funcionava
+  como login no painel por 30 dias. Sessão carrega `v` (versão) e `autenticar()`
+  confere versão + `ativo` a cada requisição.
+- **wa_id canônico:** dados sempre pela forma SEM o nono dígito (`canonicalWa`);
+  responder sempre ao `from` CRU. Tabelas de lookup (usuarios/oauth/senhas) seguem
+  com uma linha por variante.
+- **Cadastro nunca sobrescreve** linha existente (antes rebaixava o dono). Convite
+  só por `BETA_INVITE_CODE` (sem default).
+- **Exclusão de conta** conferida no servidor contra a mensagem DIGITADA (texto)
+  — áudio/foto/injeção não disparam. Apaga também obras, senhas, códigos, nonces
+  e TODOS os arquivos da pasta do usuário no Storage.
+- **Anti-enumeração/força bruta:** request-code/login respondem igual p/ número
+  cadastrado ou não; tentativas de OTP/senha reservadas com update condicional
+  (rajada paralela não fura); tetos diários e rate limit por IP.
+- **WhatsApp:** processa TODAS as mensagens do lote; prazo interno (~50s) no agente
+  (responde o que já fez em vez de morrer); timeouts em todo fetch; trava por
+  usuário; tipos não suportados com resposta própria; alerta ao dono quando a
+  Anthropic recusa por crédito/chave (1x/3h).
+- **Dados:** filtro de obra EXATO no painel/PDF (antes "Casa" pegava "Casa Praia");
+  `gerar_rdo_pdf` recusa termo ambíguo; renomear/criar obra com nome existente → 409;
+  RDO do dia é COMPLEMENTADO por padrão (modo `substituir` p/ correção); custo
+  duplicado recente pede confirmação (`forcar`); material não relança custo
+  (`custo_id`); relatório de custos pagina (>1000 linhas).
+- **Agenda:** `invalid_grant` apaga o token morto e oferece reconectar; link OAuth
+  de uso único + aviso "agenda conectada: email" no WhatsApp.
+- **Custo Claude:** system prompt dividido — parte estática com `cache_control`
+  (cacheia tools + regras), data/memória depois do ponto de cache.
+- **Web:** CSP/HSTS/X-Frame-Options no `rosana-web`; `/privacidade` e `/termos`
+  reescritos p/ o backend; `/cadastro` do site grava lead; trocar senha devolve
+  token novo (as outras sessões caem).
+- **CI:** `.github/workflows/ci.yml` — typecheck, build do web, limite de 12 funções.
+
 ## Armadilhas já resolvidas (NÃO repetir)
 - **ESM na Vercel:** `"type":"module"`, imports relativos terminam em `.js`,
   tsconfig `NodeNext`, **sem** script `build`. Não mexer.
@@ -345,6 +394,8 @@ banco; nada de novo produto. Rodando em **userosana.com.br** (projeto Vercel
 
 ## Convenções
 - Commit/push só na branch de produção; deploy é automático ao dar push.
+- **Ordem de deploy com migração:** aplicar a migração no Supabase ANTES de levar o
+  código à branch de produção (o código novo depende das colunas/tabelas novas).
 - Nunca pedir/colar segredos no chat — vão direto na Vercel.
 - Nada é descartado em silêncio: se uma ação falha, a secretária avisa o dono.
 - Fluxo p/ nova capacidade: tool em `src/agent/tools.ts` (definição + dispatch) +

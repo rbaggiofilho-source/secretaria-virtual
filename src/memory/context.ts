@@ -1,5 +1,6 @@
 import { getSupabase, type MemoryKind, type MemoryRow } from "./supabase.js";
-import { removeFotos } from "./storage.js";
+import { listarArquivosDoUsuario, removeFotos } from "./storage.js";
+import { cifrar, decifrar } from "../util/crypto.js";
 
 /**
  * Camada de acesso à memória. Todas as funções são escopadas por user_wa
@@ -10,6 +11,40 @@ import { removeFotos } from "./storage.js";
 // propósito: histórico grande em cada chamada explode o custo do Claude. Para
 // revisar dias anteriores sob demanda, existe loadHistorySince + tool revisar_conversa.
 const RECENT_HISTORY_LIMIT = 30;
+
+/** Tamanho de página ao ler tabelas (o PostgREST corta em 1000 linhas por padrão). */
+const PAGINA = 1000;
+
+/**
+ * Lê TODAS as linhas de uma consulta, paginando com range(). Sem isso, o
+ * Supabase devolve no máximo 1000 linhas em silêncio — e somas/listas saem
+ * erradas (ex.: total de custos acima de 1000 lançamentos).
+ */
+export async function todasAsLinhas<T>(
+  montar: (de: number, ate: number) => PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>,
+  maximo = 20000,
+): Promise<T[]> {
+  const out: T[] = [];
+  for (let de = 0; de < maximo; de += PAGINA) {
+    const { data, error } = await montar(de, de + PAGINA - 1);
+    if (error) throw new Error(error.message);
+    const linhas = (data ?? []) as T[];
+    out.push(...linhas);
+    if (linhas.length < PAGINA) break;
+  }
+  return out;
+}
+
+/**
+ * Filtro por obra. `exata` = nome exato (sem diferenciar maiúsculas), usado
+ * pelo painel e pelo PDF do RDO — antes era sempre "contém", e "Casa" trazia
+ * também "Casa Praia" (misturando obras no RDO que vai para o cliente).
+ * Sem `exata`, busca parcial (WhatsApp), com curingas escapados.
+ */
+function padraoObra(obra: string, exata?: boolean): string {
+  const t = likeEscape(obra.trim());
+  return exata ? t : `%${t}%`;
+}
 
 export interface OwnerContext {
   fatos: string[];
@@ -151,7 +186,7 @@ export async function atualizarMemoria(
     .from("secretaria_memories")
     .select("*")
     .eq("user_wa", userWa)
-    .ilike("content", `%${busca}%`)
+    .ilike("content", `%${likeEscape(busca)}%`)
     .order("created_at", { ascending: false })
     .limit(1);
   if (kind) query = query.eq("kind", kind);
@@ -188,7 +223,7 @@ export async function concluirPendencia(
     .eq("user_wa", userWa)
     .eq("kind", "pendencia")
     .eq("status", "aberta")
-    .ilike("content", `%${busca}%`)
+    .ilike("content", `%${likeEscape(busca)}%`)
     .order("created_at", { ascending: false })
     .limit(1);
   if (error) throw new Error(`Falha ao buscar pendência: ${error.message}`);
@@ -221,7 +256,7 @@ export async function getPending(
     .order("created_at", { ascending: false });
 
   if (obra) {
-    query = query.ilike("obra", `%${obra}%`);
+    query = query.ilike("obra", padraoObra(obra));
   }
 
   const { data, error } = await query;
@@ -279,28 +314,118 @@ export async function loadHistorySince(
 }
 
 /**
- * Marca uma mensagem do WhatsApp como processada, de forma atômica.
+ * "Reivindica" uma mensagem do WhatsApp para processamento, de forma atômica.
  *
  * A Meta reenvia o mesmo evento (mesmo `wa_message_id`) quando não recebe o
- * 200 a tempo. Inserimos o id numa tabela com PRIMARY KEY: se a inserção
- * vencer, somos o primeiro a tratar essa mensagem (retorna true); se colidir
- * (código 23505 = unique_violation), é uma reentrega e deve ser ignorada
- * (retorna false). Isso impede que uma retentativa crie um evento duplicado.
+ * 200 a tempo. A tabela tem PRIMARY KEY no id: só quem insere primeiro
+ * processa. A linha nasce com status='processing' e vira 'done' ao terminar
+ * (marcarMensagemProcessada). Se a função morrer no meio (timeout da Vercel),
+ * a linha fica 'processing' — e uma REENTREGA depois de PROCESSING_STALE_MS
+ * pode retomá-la. Antes, a mensagem era marcada logo de cara e, se a função
+ * morresse, a reentrega era descartada: a mensagem sumia sem resposta.
  *
- * Em erro inesperado do banco, retornamos true (fail-open): melhor arriscar um
- * raro duplicado do que engolir uma mensagem legítima do dono.
+ * Em erro inesperado do banco, retorna true (fail-open): melhor arriscar um
+ * raro duplicado do que engolir uma mensagem legítima.
  */
+const PROCESSING_STALE_MS = 90 * 1000;
+
 export async function claimMessageOnce(messageId: string): Promise<boolean> {
   const supabase = getSupabase();
   const { error } = await supabase
     .from("secretaria_processed_messages")
-    .insert({ wa_message_id: messageId });
+    .insert({ wa_message_id: messageId, status: "processing", claimed_at: new Date().toISOString() });
 
   if (!error) return true;
-  if (error.code === "23505") return false; // já processada (reentrega)
+  if (error.code !== "23505") {
+    console.error(`Falha ao registrar dedup da mensagem ${messageId}: ${error.message}`);
+    return true; // fail-open
+  }
 
-  console.error(`Falha ao registrar dedup da mensagem ${messageId}: ${error.message}`);
-  return true; // fail-open
+  // Já existe: só retoma se ficou "processing" parado (a função anterior morreu).
+  const limite = new Date(Date.now() - PROCESSING_STALE_MS).toISOString();
+  const { data, error: e2 } = await supabase
+    .from("secretaria_processed_messages")
+    .update({ claimed_at: new Date().toISOString() })
+    .eq("wa_message_id", messageId)
+    .eq("status", "processing")
+    .lt("claimed_at", limite)
+    .select("wa_message_id");
+  if (e2) {
+    console.error(`Falha ao retomar mensagem ${messageId}: ${e2.message}`);
+    return false;
+  }
+  if (data && data.length > 0) {
+    console.warn(`[dedup] Mensagem ${messageId} retomada (processamento anterior não terminou).`);
+    return true;
+  }
+  return false; // reentrega de algo já processado (ou em processamento agora)
+}
+
+/** Marca a mensagem como concluída (reentregas futuras são ignoradas). */
+export async function marcarMensagemProcessada(messageId: string): Promise<void> {
+  const supabase = getSupabase();
+  const { error } = await supabase
+    .from("secretaria_processed_messages")
+    .update({ status: "done" })
+    .eq("wa_message_id", messageId);
+  if (error) console.error(`Falha ao concluir dedup da mensagem ${messageId}: ${error.message}`);
+}
+
+/** Limpeza: apaga registros de dedup antigos (a Meta não reenvia após dias). */
+export async function limparMensagensProcessadas(dias = 30): Promise<void> {
+  const supabase = getSupabase();
+  const limite = new Date(Date.now() - dias * 86400000).toISOString();
+  const { error } = await supabase
+    .from("secretaria_processed_messages")
+    .delete()
+    .lt("created_at", limite);
+  if (error) console.error(`Falha ao limpar dedup antigo: ${error.message}`);
+}
+
+/* ---------- Trava por usuário (mensagens em sequência) ---------- */
+
+/**
+ * Trava simples por usuário (tabela secretaria_locks) para que duas mensagens
+ * seguidas do MESMO usuário (ex.: áudio + foto) não sejam processadas em
+ * paralelo — o que cruzava o histórico e embaralhava a ordem das respostas.
+ * Espera até `esperaMs`; se não conseguir, segue assim mesmo (nunca trava a
+ * resposta). A trava expira sozinha após `duracaoMs` (função morta).
+ */
+export async function adquirirTravaUsuario(
+  userWa: string,
+  esperaMs = 20000,
+  duracaoMs = 70000,
+): Promise<boolean> {
+  const supabase = getSupabase();
+  const inicio = Date.now();
+  while (Date.now() - inicio < esperaMs) {
+    try {
+      const ate = new Date(Date.now() + duracaoMs).toISOString();
+      const { error } = await supabase.from("secretaria_locks").insert({ user_wa: userWa, ate });
+      if (!error) return true;
+      if (error.code !== "23505") throw new Error(error.message);
+      // Existe: toma se já expirou.
+      const { data } = await supabase
+        .from("secretaria_locks")
+        .update({ ate })
+        .eq("user_wa", userWa)
+        .lt("ate", new Date().toISOString())
+        .select("user_wa");
+      if (data && data.length > 0) return true;
+    } catch (err) {
+      console.error(`[trava] falha: ${err instanceof Error ? err.message : String(err)}`);
+      return false; // sem trava, mas segue
+    }
+    await new Promise((r) => setTimeout(r, 700));
+  }
+  console.warn("[trava] tempo de espera esgotado; processando sem trava.");
+  return false;
+}
+
+export async function liberarTravaUsuario(userWa: string): Promise<void> {
+  const supabase = getSupabase();
+  const { error } = await supabase.from("secretaria_locks").delete().eq("user_wa", userWa);
+  if (error) console.error(`[trava] falha ao liberar: ${error.message}`);
 }
 
 /** Registra uma mensagem no histórico de conversa. */
@@ -369,6 +494,31 @@ export async function registrarCusto(
   return data as CustoRow;
 }
 
+/**
+ * Procura um custo IGUAL (mesmo valor, obra e data) lançado nos últimos
+ * `minutos` — sinal de duplicata (nota fiscal reenviada, pedido repetido).
+ */
+export async function buscarCustoRecente(
+  userWa: string,
+  params: { valor: number; obra: string | null; data: string | null },
+  minutos = 15,
+): Promise<Pick<CustoRow, "id" | "obra" | "valor" | "descricao" | "data"> | null> {
+  if (!Number.isFinite(params.valor)) return null;
+  const supabase = getSupabase();
+  let q = supabase
+    .from("secretaria_custos")
+    .select("id, obra, valor, descricao, data")
+    .eq("user_wa", userWa)
+    .eq("valor", params.valor)
+    .gt("created_at", new Date(Date.now() - minutos * 60000).toISOString())
+    .limit(1);
+  q = params.obra ? q.ilike("obra", likeEscape(params.obra.trim())) : q.is("obra", null);
+  if (params.data) q = q.eq("data", params.data);
+  const { data, error } = await q;
+  if (error) throw new Error(`Falha ao checar duplicata de custo: ${error.message}`);
+  return ((data ?? [])[0] as Pick<CustoRow, "id" | "obra" | "valor" | "descricao" | "data"> | undefined) ?? null;
+}
+
 export interface RelatorioCustos {
   total: number;
   porCategoria: Record<string, number>;
@@ -378,23 +528,28 @@ export interface RelatorioCustos {
 /** Relatório de custos, opcionalmente por obra e intervalo de datas (YYYY-MM-DD). */
 export async function relatorioCustos(
   userWa: string,
-  filtros: { obra?: string | null; desde?: string | null; ate?: string | null } = {},
+  filtros: { obra?: string | null; obraExata?: boolean; desde?: string | null; ate?: string | null } = {},
 ): Promise<RelatorioCustos> {
   const supabase = getSupabase();
-  let query = supabase
-    .from("secretaria_custos")
-    .select("id, obra, categoria, valor, descricao, data")
-    .eq("user_wa", userWa)
-    .order("data", { ascending: false });
+  const montar = (de: number, ate: number) => {
+    let query = supabase
+      .from("secretaria_custos")
+      .select("id, obra, categoria, valor, descricao, data")
+      .eq("user_wa", userWa)
+      .order("data", { ascending: false })
+      .order("id", { ascending: false });
+    if (filtros.obra) query = query.ilike("obra", padraoObra(filtros.obra, filtros.obraExata));
+    if (filtros.desde) query = query.gte("data", filtros.desde);
+    if (filtros.ate) query = query.lte("data", filtros.ate);
+    return query.range(de, ate);
+  };
 
-  if (filtros.obra) query = query.ilike("obra", `%${filtros.obra}%`);
-  if (filtros.desde) query = query.gte("data", filtros.desde);
-  if (filtros.ate) query = query.lte("data", filtros.ate);
-
-  const { data, error } = await query;
-  if (error) throw new Error(`Falha ao gerar relatório de custos: ${error.message}`);
-
-  const itens = (data ?? []) as RelatorioCustos["itens"];
+  let itens: RelatorioCustos["itens"];
+  try {
+    itens = await todasAsLinhas<RelatorioCustos["itens"][number]>(montar);
+  } catch (err) {
+    throw new Error(`Falha ao gerar relatório de custos: ${err instanceof Error ? err.message : String(err)}`);
+  }
   let total = 0;
   const porCategoria: Record<string, number> = {};
   for (const it of itens) {
@@ -402,6 +557,9 @@ export async function relatorioCustos(
     total += v;
     porCategoria[it.categoria] = (porCategoria[it.categoria] ?? 0) + v;
   }
+  // Arredonda em centavos (evita 0,1+0,2 = 0,30000000000000004 no total).
+  total = Math.round(total * 100) / 100;
+  for (const k of Object.keys(porCategoria)) porCategoria[k] = Math.round(porCategoria[k]! * 100) / 100;
   return { total, porCategoria, itens };
 }
 
@@ -425,10 +583,26 @@ export interface RdoRow {
   updated_at: string;
 }
 
+/** Junta dois textos do RDO sem duplicar (se um contém o outro, fica o maior). */
+function juntarTexto(antigo: string | null, novo: string | null | undefined): string | null {
+  const a = antigo?.trim() || "";
+  const n = novo?.trim() || "";
+  if (!n) return a || null;
+  if (!a) return n;
+  const la = a.toLowerCase();
+  const ln = n.toLowerCase();
+  if (ln.includes(la)) return n;
+  if (la.includes(ln)) return a;
+  return `${a}\n${n}`;
+}
+
 /**
- * Registra (ou atualiza) o RDO de uma obra num dia. Upsert por
- * (user_wa, obra, data): reenviar o mesmo dia SUBSTITUI o registro, então o
- * agente deve mandar o conteúdo completo do dia a cada chamada.
+ * Registra o RDO de uma obra num dia (único por user_wa+obra+data).
+ *   modo "complementar" (padrão): se o dia já tem RDO, JUNTA — anexa
+ *     atividades/ocorrências/materiais (sem duplicar texto repetido) e mescla o
+ *     efetivo por função (a quantidade nova de uma função substitui a antiga).
+ *     Antes, um segundo áudio do mesmo dia APAGAVA o primeiro relato.
+ *   modo "substituir": troca o conteúdo do dia pelo enviado (correções).
  */
 export async function registrarRDO(
   userWa: string,
@@ -440,35 +614,69 @@ export async function registrarRDO(
     atividades?: string | null;
     ocorrencias?: string | null;
     materiais?: string | null;
+    modo?: "complementar" | "substituir";
   },
 ): Promise<RdoRow> {
   const supabase = getSupabase();
+  const data = params.data || todayIsoDateSP();
+
+  let atual: RdoRow | null = null;
+  if (params.modo !== "substituir") {
+    const { data: rows, error } = await supabase
+      .from("secretaria_rdo")
+      .select("*")
+      .eq("user_wa", userWa)
+      .eq("obra", params.obra)
+      .eq("data", data)
+      .limit(1);
+    if (error) throw new Error(`Falha ao ler RDO do dia: ${error.message}`);
+    atual = ((rows ?? [])[0] as RdoRow | undefined) ?? null;
+  }
+
+  let efetivo: EfetivoItem[] = params.efetivo ?? [];
+  if (atual) {
+    const mapa = new Map<string, EfetivoItem>();
+    for (const e of atual.efetivo ?? []) mapa.set(e.funcao.trim().toLowerCase(), e);
+    for (const e of params.efetivo ?? []) mapa.set(e.funcao.trim().toLowerCase(), e);
+    efetivo = [...mapa.values()];
+  }
+
   const row: Record<string, unknown> = {
     user_wa: userWa,
     obra: params.obra,
-    clima: params.clima ?? null,
-    efetivo: params.efetivo ?? [],
-    atividades: params.atividades ?? null,
-    ocorrencias: params.ocorrencias ?? null,
-    materiais: params.materiais ?? null,
+    data,
+    clima: params.clima ?? atual?.clima ?? null,
+    efetivo,
+    atividades: atual ? juntarTexto(atual.atividades, params.atividades) : params.atividades ?? null,
+    ocorrencias: atual ? juntarTexto(atual.ocorrencias, params.ocorrencias) : params.ocorrencias ?? null,
+    materiais: atual ? juntarTexto(atual.materiais, params.materiais) : params.materiais ?? null,
     updated_at: new Date().toISOString(),
   };
-  if (params.data) row.data = params.data;
 
-  const { data, error } = await supabase
+  const { data: salvo, error } = await supabase
     .from("secretaria_rdo")
     .upsert(row, { onConflict: "user_wa,obra,data" })
     .select("*")
     .single();
 
   if (error) throw new Error(`Falha ao registrar RDO: ${error.message}`);
-  return data as RdoRow;
+  return salvo as RdoRow;
+}
+
+/** Hoje (YYYY-MM-DD) no fuso de São Paulo — igual ao default da coluna. */
+function todayIsoDateSP(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: process.env.TIMEZONE?.trim() || "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
 }
 
 /** Consulta RDOs por obra e/ou intervalo (YYYY-MM-DD), mais recentes primeiro. */
 export async function consultarRDO(
   userWa: string,
-  filtros: { obra?: string | null; desde?: string | null; ate?: string | null } = {},
+  filtros: { obra?: string | null; obraExata?: boolean; desde?: string | null; ate?: string | null } = {},
 ): Promise<RdoRow[]> {
   const supabase = getSupabase();
   let query = supabase
@@ -477,7 +685,7 @@ export async function consultarRDO(
     .eq("user_wa", userWa)
     .order("data", { ascending: false });
 
-  if (filtros.obra) query = query.ilike("obra", `%${filtros.obra}%`);
+  if (filtros.obra) query = query.ilike("obra", padraoObra(filtros.obra, filtros.obraExata));
   if (filtros.desde) query = query.gte("data", filtros.desde);
   if (filtros.ate) query = query.lte("data", filtros.ate);
 
@@ -548,6 +756,7 @@ export async function consultarFotos(
   userWa: string,
   filtros: {
     obra?: string | null;
+    obraExata?: boolean;
     tipo?: TipoFoto | null;
     desde?: string | null;
     ate?: string | null;
@@ -560,7 +769,7 @@ export async function consultarFotos(
     .eq("user_wa", userWa)
     .order("data", { ascending: false });
 
-  if (filtros.obra) query = query.ilike("obra", `%${filtros.obra}%`);
+  if (filtros.obra) query = query.ilike("obra", padraoObra(filtros.obra, filtros.obraExata));
   if (filtros.tipo) query = query.eq("tipo", filtros.tipo);
   if (filtros.desde) query = query.gte("data", filtros.desde);
   if (filtros.ate) query = query.lte("data", filtros.ate);
@@ -621,13 +830,21 @@ export async function usuariosAtivosParaNudge(): Promise<Array<{ user_wa: string
   const desde = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
   // 1) wa_ids que mandaram mensagem (role=user) nas últimas 24h.
-  const { data: conv, error: e1 } = await supabase
-    .from("secretaria_conversations")
-    .select("user_wa")
-    .eq("role", "user")
-    .gt("created_at", desde);
-  if (e1) throw new Error(`Falha ao buscar ativos: ${e1.message}`);
-  const ativos = [...new Set((conv ?? []).map((r) => (r as { user_wa: string }).user_wa))];
+  let conv: Array<{ user_wa: string }>;
+  try {
+    conv = await todasAsLinhas<{ user_wa: string }>((de, ate) =>
+      supabase
+        .from("secretaria_conversations")
+        .select("user_wa")
+        .eq("role", "user")
+        .gt("created_at", desde)
+        .order("id", { ascending: true })
+        .range(de, ate),
+    );
+  } catch (err) {
+    throw new Error(`Falha ao buscar ativos: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  const ativos = [...new Set(conv.map((r) => r.user_wa))];
   if (ativos.length === 0) return [];
 
   // 2) desses, os usuários ativos com nudge ligado.
@@ -669,6 +886,33 @@ export function waIdVariants(input: string): string[] {
   return [...out];
 }
 
+/**
+ * wa_id CANÔNICO = chave dos dados em todas as tabelas. Para celular BR usamos
+ * a forma SEM o nono dígito (12 dígitos), que é como a Meta entrega o wa_id e
+ * como todos os dados históricos já estão gravados. Assim, venha a mensagem com
+ * ou sem o 9 (ou o login digitado de qualquer jeito), os dados são os mesmos.
+ * O número CRU recebido continua sendo usado só para RESPONDER no WhatsApp.
+ */
+export function canonicalWa(input: string): string {
+  const d = input.replace(/\D/g, "");
+  if (d.startsWith("55") && d.length === 13 && d[4] === "9") return d.slice(0, 4) + d.slice(5);
+  return d;
+}
+
+/** Busca o usuário em qualquer variante do wa_id (com/sem o nono dígito). */
+export async function getUsuarioVariantes(userWa: string): Promise<UsuarioRow | null> {
+  for (const wa of waIdVariants(userWa)) {
+    const u = await getUsuario(wa);
+    if (u) return u;
+  }
+  return null;
+}
+
+/** Escapa curingas do LIKE/ILIKE (% _ \) para busca literal. */
+export function likeEscape(termo: string): string {
+  return termo.replace(/[\\%_]/g, (c) => "\\" + c);
+}
+
 export interface CadastroInput {
   nomeCompleto: string;
   cpf?: string | null;
@@ -678,13 +922,26 @@ export interface CadastroInput {
 }
 
 /**
- * Cria/atualiza o cadastro de um usuário do beta (uma linha por variante de
- * wa_id). status='ativo', dono=false. Retorna os wa_ids gravados.
+ * Cria o cadastro de um usuário do beta (uma linha por variante de wa_id).
+ * NUNCA sobrescreve um cadastro existente: se o número já existe (em qualquer
+ * variante) nada é gravado e retorna { jaExistia: true }. Antes era um upsert
+ * com dono=false/ativo=true — qualquer um com o código de convite podia
+ * rebaixar o dono (e parar a agenda dele) ou reativar um usuário bloqueado.
  */
-export async function registrarCadastro(dados: CadastroInput): Promise<string[]> {
+export async function registrarCadastro(
+  dados: CadastroInput,
+): Promise<{ jaExistia: boolean; waIds: string[] }> {
   const supabase = getSupabase();
   const waIds = waIdVariants(dados.whatsappInput);
   if (waIds.length === 0) throw new Error("Número de WhatsApp inválido.");
+
+  const { data: existentes, error: e1 } = await supabase
+    .from("secretaria_usuarios")
+    .select("user_wa")
+    .in("user_wa", waIds)
+    .limit(1);
+  if (e1) throw new Error(`Falha ao verificar cadastro: ${e1.message}`);
+  if (existentes && existentes.length > 0) return { jaExistia: true, waIds };
 
   const nome = dados.nomeCompleto.trim().split(/\s+/)[0] || dados.nomeCompleto.trim();
   const rows = waIds.map((user_wa) => ({
@@ -699,11 +956,12 @@ export async function registrarCadastro(dados: CadastroInput): Promise<string[]>
     dono: false,
   }));
 
+  // ignoreDuplicates: se outra requisição criou no meio-tempo, não sobrescreve.
   const { error } = await supabase
     .from("secretaria_usuarios")
-    .upsert(rows, { onConflict: "user_wa" });
+    .upsert(rows, { onConflict: "user_wa", ignoreDuplicates: true });
   if (error) throw new Error(`Falha ao gravar cadastro: ${error.message}`);
-  return waIds;
+  return { jaExistia: false, waIds };
 }
 
 /* ---------- Exclusão de conta (LGPD / direito ao esquecimento) ---------- */
@@ -727,17 +985,22 @@ export async function excluirDadosUsuario(userWa: string): Promise<ResultadoExcl
   const supabase = getSupabase();
   const variantes = waIdVariants(userWa);
 
-  // 1) Arquivos do Storage: pega os caminhos antes de apagar os registros.
+  // 1) Arquivos do Storage: os referenciados pelos registros E tudo que estiver
+  //    sob a pasta do usuário (inclui fotos arquivadas que nunca viraram
+  //    registro — antes ficavam órfãs no bucket).
   let arquivos = 0;
   try {
     const { data } = await supabase
       .from("secretaria_fotos")
       .select("caminho")
       .in("user_wa", variantes);
-    const caminhos = (data ?? [])
-      .map((r) => (r as { caminho: string | null }).caminho)
-      .filter((c): c is string => Boolean(c));
-    if (caminhos.length > 0) arquivos = await removeFotos(caminhos);
+    const caminhos = new Set(
+      (data ?? [])
+        .map((r) => (r as { caminho: string | null }).caminho)
+        .filter((c): c is string => Boolean(c)),
+    );
+    for (const v of variantes) for (const c of await listarArquivosDoUsuario(v)) caminhos.add(c);
+    if (caminhos.size > 0) arquivos = await removeFotos([...caminhos]);
   } catch (err) {
     // Não bloqueia a exclusão dos dados por falha ao limpar arquivos.
     console.error(
@@ -754,7 +1017,11 @@ export async function excluirDadosUsuario(userWa: string): Promise<ResultadoExcl
     "secretaria_fotos",
     "secretaria_documentos",
     "secretaria_materiais",
+    "secretaria_obras",
     "secretaria_oauth_tokens",
+    "secretaria_oauth_nonces",
+    "secretaria_auth_codes",
+    "secretaria_senhas", // derruba as sessões do painel
     "secretaria_usuarios", // por último: desautoriza o número
   ];
 
@@ -860,6 +1127,7 @@ export async function consultarDocumentos(
   userWa: string,
   filtros: {
     obra?: string | null;
+    obraExata?: boolean;
     tipo?: TipoDocumento | null;
     incluirArquivados?: boolean;
   } = {},
@@ -872,7 +1140,7 @@ export async function consultarDocumentos(
     .order("vencimento", { ascending: true, nullsFirst: false });
 
   if (!filtros.incluirArquivados) query = query.eq("status", "ativo");
-  if (filtros.obra) query = query.ilike("obra", `%${filtros.obra}%`);
+  if (filtros.obra) query = query.ilike("obra", padraoObra(filtros.obra, filtros.obraExata));
   if (filtros.tipo) query = query.eq("tipo", filtros.tipo);
 
   const { data, error } = await query;
@@ -910,8 +1178,21 @@ export interface MaterialRow {
   previsao_entrega: string | null;
   data_compra: string | null;
   observacoes: string | null;
+  /** Custo já lançado a partir deste material (evita lançar duas vezes). */
+  custo_id: number | null;
   created_at: string;
   updated_at: string;
+}
+
+/** Vincula o custo lançado ao material (para não relançar). */
+export async function setMaterialCusto(userWa: string, materialId: number, custoId: number): Promise<void> {
+  const supabase = getSupabase();
+  const { error } = await supabase
+    .from("secretaria_materiais")
+    .update({ custo_id: custoId })
+    .eq("user_wa", userWa)
+    .eq("id", materialId);
+  if (error) console.error(`Falha ao vincular custo ao material ${materialId}: ${error.message}`);
 }
 
 /**
@@ -943,10 +1224,10 @@ export async function registrarMaterial(
     .from("secretaria_materiais")
     .select("*")
     .eq("user_wa", userWa)
-    .ilike("item", params.item)
+    .ilike("item", likeEscape(params.item.trim()))
     .order("created_at", { ascending: false })
     .limit(1);
-  find = params.obra ? find.ilike("obra", params.obra) : find.is("obra", null);
+  find = params.obra ? find.ilike("obra", likeEscape(params.obra.trim())) : find.is("obra", null);
   const { data: achado, error: findErr } = await find;
   if (findErr) throw new Error(`Falha ao buscar material: ${findErr.message}`);
   const atual = (achado?.[0] as MaterialRow | undefined) ?? null;
@@ -1001,7 +1282,7 @@ export async function registrarMaterial(
 /** Lista materiais por obra e/ou status (mais recentes primeiro). */
 export async function consultarMateriais(
   userWa: string,
-  filtros: { obra?: string | null; status?: MaterialStatus | null } = {},
+  filtros: { obra?: string | null; obraExata?: boolean; status?: MaterialStatus | null } = {},
 ): Promise<MaterialRow[]> {
   const supabase = getSupabase();
   let query = supabase
@@ -1010,7 +1291,7 @@ export async function consultarMateriais(
     .eq("user_wa", userWa)
     .order("updated_at", { ascending: false });
 
-  if (filtros.obra) query = query.ilike("obra", `%${filtros.obra}%`);
+  if (filtros.obra) query = query.ilike("obra", padraoObra(filtros.obra, filtros.obraExata));
   if (filtros.status) query = query.eq("status", filtros.status);
 
   const { data, error } = await query;
@@ -1049,7 +1330,7 @@ export async function buscarPrecosDoUsuario(
     .from("secretaria_materiais")
     .select("item, unidade, obra, fornecedor, valor_unitario, cotacoes, data_compra, updated_at")
     .in("user_wa", waIdVariants(userWa))
-    .ilike("item", `%${t}%`)
+    .ilike("item", `%${likeEscape(t)}%`)
     .order("updated_at", { ascending: false })
     .limit(40);
   if (error) throw new Error(`Falha ao buscar preços do usuário: ${error.message}`);
@@ -1117,8 +1398,27 @@ export async function getOAuthToken(userWa: string): Promise<OAuthTokenRow | nul
     .limit(1);
 
   if (error) throw new Error(`Falha ao buscar token OAuth: ${error.message}`);
-  const rows = (data ?? []) as OAuthTokenRow[];
-  return rows[0] ?? null;
+  const row = ((data ?? []) as OAuthTokenRow[])[0];
+  if (!row) return null;
+  return {
+    ...row,
+    refresh_token: decifrar(row.refresh_token),
+    access_token: row.access_token ? decifrar(row.access_token) : null,
+  };
+}
+
+/**
+ * Remove o token OAuth (todas as variantes). Usado quando o Google responde
+ * invalid_grant (token revogado/expirado): o token morto não serve para nada e
+ * a Rosana passa a oferecer a reconexão.
+ */
+export async function deleteOAuthToken(userWa: string): Promise<void> {
+  const supabase = getSupabase();
+  const { error } = await supabase
+    .from("secretaria_oauth_tokens")
+    .delete()
+    .in("user_wa", waIdVariants(userWa));
+  if (error) throw new Error(`Falha ao remover token OAuth: ${error.message}`);
 }
 
 /**
@@ -1140,8 +1440,8 @@ export async function saveOAuthToken(
     user_wa: wa,
     provider: "google",
     google_email: tok.email ?? null,
-    refresh_token: tok.refreshToken,
-    access_token: tok.accessToken ?? null,
+    refresh_token: cifrar(tok.refreshToken),
+    access_token: tok.accessToken ? cifrar(tok.accessToken) : null,
     expiry: tok.expiry ?? null,
     scope: tok.scope ?? null,
     updated_at: new Date().toISOString(),
@@ -1151,4 +1451,35 @@ export async function saveOAuthToken(
     .from("secretaria_oauth_tokens")
     .upsert(rows, { onConflict: "user_wa" });
   if (error) throw new Error(`Falha ao salvar token OAuth: ${error.message}`);
+}
+
+/* ---------- Leads do site (antes do pagamento existir) ---------- */
+
+export interface LeadInput {
+  nome: string;
+  telefone: string;
+  email?: string | null;
+  cpf?: string | null;
+  endereco?: string | null;
+  profissao?: string | null;
+  plano?: string | null;
+}
+
+/**
+ * Guarda o interesse de quem preencheu o /cadastro do site. Antes, o
+ * formulário coletava os dados e os DESCARTAVA (checkout ainda é placeholder),
+ * perdendo o lead. NÃO autoriza o número — só registra para contato.
+ */
+export async function registrarLead(lead: LeadInput): Promise<void> {
+  const supabase = getSupabase();
+  const { error } = await supabase.from("secretaria_leads").insert({
+    nome: lead.nome,
+    telefone: lead.telefone,
+    email: lead.email ?? null,
+    cpf: lead.cpf ?? null,
+    endereco: lead.endereco ?? null,
+    profissao: lead.profissao ?? null,
+    plano: lead.plano ?? null,
+  });
+  if (error) throw new Error(`Falha ao registrar lead: ${error.message}`);
 }

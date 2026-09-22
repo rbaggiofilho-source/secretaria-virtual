@@ -1,8 +1,9 @@
 import crypto from "node:crypto";
 import { getSupabase } from "../memory/supabase.js";
-import { getEnv } from "../config/env.js";
-import { getUsuario, waIdVariants, type UsuarioRow } from "../memory/context.js";
+import { canonicalWa, getUsuario, waIdVariants, type UsuarioRow } from "../memory/context.js";
 import { sendTextMessage } from "../whatsapp/client.js";
+import { consumirLimite } from "./ratelimit.js";
+import { hmacB64, iguaisSeguro } from "./tokens.js";
 
 /**
  * Login por código no WhatsApp (OTP). Fluxo:
@@ -20,21 +21,25 @@ import { sendTextMessage } from "../whatsapp/client.js";
 const CODE_TTL_MS = 10 * 60 * 1000; // 10 min de validade
 const RESEND_COOLDOWN_MS = 60 * 1000; // 1 min entre reenvios
 const MAX_ATTEMPTS = 5; // tentativas erradas antes de invalidar
+const MAX_CODIGOS_DIA = 5; // códigos enviados por número em 24h
+const MAX_TENTATIVAS_DIA = 15; // tentativas de código por número em 24h
+const DIA_MS = 24 * 60 * 60 * 1000;
 
 export type RequestResult =
   | { ok: true; nome: string }
-  | { ok: false; reason: "nao_autorizado" | "muito_cedo" | "envio_falhou" };
+  | { ok: false; reason: "nao_autorizado" | "muito_cedo" | "limite_diario" | "envio_falhou" };
 
 export type VerifyResult =
   | { ok: true; usuario: UsuarioRow }
-  | { ok: false; reason: "nao_autorizado" | "sem_codigo" | "expirado" | "excedeu" | "invalido" };
+  | {
+      ok: false;
+      reason: "nao_autorizado" | "sem_codigo" | "expirado" | "excedeu" | "invalido" | "limite_diario";
+    };
 
 /** Hash do código atrelado ao wa_id (nunca guardamos o código puro). */
 function hashCode(waId: string, code: string): string {
-  return crypto
-    .createHmac("sha256", getEnv().WHATSAPP_APP_SECRET)
-    .update(`${waId}:${code}`)
-    .digest("base64url");
+  // Chave derivada própria do OTP (separada da sessão e do state do OAuth).
+  return hmacB64("otp", `${waId}:${code}`);
 }
 
 /**
@@ -71,6 +76,7 @@ export async function resolveUsuarioAtivo(input: string): Promise<UsuarioRow | n
 export async function requestLoginCode(input: string): Promise<RequestResult> {
   const usuario = await resolveUsuarioAtivo(input);
   if (!usuario) return { ok: false, reason: "nao_autorizado" };
+  const wa = canonicalWa(usuario.user_wa);
 
   const supabase = getSupabase();
 
@@ -78,19 +84,24 @@ export async function requestLoginCode(input: string): Promise<RequestResult> {
   const { data: existing } = await supabase
     .from("secretaria_auth_codes")
     .select("last_sent_at")
-    .eq("user_wa", usuario.user_wa)
+    .eq("user_wa", wa)
     .maybeSingle();
   if (existing?.last_sent_at) {
     const since = Date.now() - new Date(existing.last_sent_at as string).getTime();
     if (since < RESEND_COOLDOWN_MS) return { ok: false, reason: "muito_cedo" };
+  }
+  // Teto diário: sem ele, dava para pedir um código novo por minuto e somar
+  // ~7.000 palpites/dia (5 por código).
+  if (!(await consumirLimite(`otp_envio:${wa}`, MAX_CODIGOS_DIA, DIA_MS))) {
+    return { ok: false, reason: "limite_diario" };
   }
 
   const code = String(crypto.randomInt(0, 1_000_000)).padStart(6, "0");
   const now = new Date();
   const { error } = await supabase.from("secretaria_auth_codes").upsert(
     {
-      user_wa: usuario.user_wa,
-      code_hash: hashCode(usuario.user_wa, code),
+      user_wa: wa,
+      code_hash: hashCode(wa, code),
       expires_at: new Date(now.getTime() + CODE_TTL_MS).toISOString(),
       attempts: 0,
       last_sent_at: now.toISOString(),
@@ -100,14 +111,15 @@ export async function requestLoginCode(input: string): Promise<RequestResult> {
   if (error) throw new Error(`Falha ao gravar código de login: ${error.message}`);
 
   try {
+    // Responde ao número como cadastrado (a Meta entrega na forma sem o 9).
     await sendTextMessage(
-      usuario.user_wa,
+      wa,
       `Seu código de acesso ao painel da Rosana é ${code}.\n\n` +
         `Ele vale por 10 minutos. Se não foi você que pediu, ignore esta mensagem — ninguém entra sem o código.`,
     );
   } catch (err) {
     console.error(
-      `[auth] falha ao enviar código para ${usuario.user_wa}: ${err instanceof Error ? err.message : String(err)}`,
+      `[auth] falha ao enviar código: ${err instanceof Error ? err.message : String(err)}`,
     );
     return { ok: false, reason: "envio_falhou" };
   }
@@ -115,43 +127,63 @@ export async function requestLoginCode(input: string): Promise<RequestResult> {
   return { ok: true, nome: usuario.nome };
 }
 
-/** Verifica o código digitado. Em caso de acerto, consome-o (uso único). */
+/**
+ * Verifica o código digitado. Em caso de acerto, consome-o (uso único).
+ *
+ * A tentativa é RESERVADA antes da comparação, com update condicional
+ * (attempts = n → n+1): requisições simultâneas não conseguem usar a mesma
+ * "vaga", então uma rajada paralela não fura o limite de 5 tentativas (antes
+ * era ler → comparar → gravar, e 1000 requisições juntas liam attempts=0).
+ */
 export async function verifyLoginCode(input: string, code: string): Promise<VerifyResult> {
   const usuario = await resolveUsuarioAtivo(input);
   if (!usuario) return { ok: false, reason: "nao_autorizado" };
+  const wa = canonicalWa(usuario.user_wa);
+
+  if (!(await consumirLimite(`otp_tentativa:${wa}`, MAX_TENTATIVAS_DIA, DIA_MS))) {
+    return { ok: false, reason: "limite_diario" };
+  }
 
   const supabase = getSupabase();
   const { data, error } = await supabase
     .from("secretaria_auth_codes")
     .select("code_hash, expires_at, attempts")
-    .eq("user_wa", usuario.user_wa)
+    .eq("user_wa", wa)
     .maybeSingle();
   if (error) throw new Error(`Falha ao ler código de login: ${error.message}`);
   if (!data) return { ok: false, reason: "sem_codigo" };
 
   if (new Date(data.expires_at as string).getTime() < Date.now()) {
-    await supabase.from("secretaria_auth_codes").delete().eq("user_wa", usuario.user_wa);
+    await supabase.from("secretaria_auth_codes").delete().eq("user_wa", wa);
     return { ok: false, reason: "expirado" };
   }
-  if ((data.attempts as number) >= MAX_ATTEMPTS) {
-    await supabase.from("secretaria_auth_codes").delete().eq("user_wa", usuario.user_wa);
+  const tentativas = data.attempts as number;
+  if (tentativas >= MAX_ATTEMPTS) {
+    await supabase.from("secretaria_auth_codes").delete().eq("user_wa", wa);
     return { ok: false, reason: "excedeu" };
   }
 
-  const provided = hashCode(usuario.user_wa, (code ?? "").replace(/\D/g, ""));
-  const a = Buffer.from(provided);
-  const b = Buffer.from(String(data.code_hash));
-  const match = a.length === b.length && crypto.timingSafeEqual(a, b);
+  // Reserva a tentativa (atômico). Se outra requisição levou a vaga, nega.
+  const { data: reservado, error: rErr } = await supabase
+    .from("secretaria_auth_codes")
+    .update({ attempts: tentativas + 1 })
+    .eq("user_wa", wa)
+    .eq("attempts", tentativas)
+    .select("user_wa");
+  if (rErr) throw new Error(`Falha ao registrar tentativa: ${rErr.message}`);
+  if (!reservado || reservado.length === 0) return { ok: false, reason: "invalido" };
 
-  if (!match) {
-    await supabase
-      .from("secretaria_auth_codes")
-      .update({ attempts: (data.attempts as number) + 1 })
-      .eq("user_wa", usuario.user_wa);
-    return { ok: false, reason: "invalido" };
-  }
+  const provided = hashCode(wa, (code ?? "").replace(/\D/g, ""));
+  if (!iguaisSeguro(provided, String(data.code_hash))) return { ok: false, reason: "invalido" };
 
-  // Acertou: consome o código (uso único).
-  await supabase.from("secretaria_auth_codes").delete().eq("user_wa", usuario.user_wa);
+  // Acertou: consome o código (uso único). Se já tinha sido consumido por uma
+  // requisição concorrente, não vale de novo.
+  const { data: apagado } = await supabase
+    .from("secretaria_auth_codes")
+    .delete()
+    .eq("user_wa", wa)
+    .eq("code_hash", String(data.code_hash))
+    .select("user_wa");
+  if (!apagado || apagado.length === 0) return { ok: false, reason: "sem_codigo" };
   return { ok: true, usuario };
 }

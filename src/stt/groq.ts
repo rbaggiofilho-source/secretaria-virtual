@@ -22,6 +22,8 @@ export async function transcribeWithGroq(input: TranscribeInput): Promise<string
     method: "POST",
     headers: { Authorization: `Bearer ${env.GROQ_API_KEY}` },
     body: form,
+    // Timeout: STT pendurado não pode consumir os 60s da função.
+    signal: AbortSignal.timeout(25000),
   });
 
   if (!res.ok) {
