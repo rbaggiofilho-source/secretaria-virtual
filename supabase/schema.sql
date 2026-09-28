@@ -166,3 +166,104 @@ alter table public.secretaria_obras enable row level security;
 -- Security. Estas tabelas nunca são expostas ao cliente/browser, então RLS
 -- não é necessário aqui. Se um dia expor via anon key, habilite RLS e
 -- políticas por user_wa antes.
+
+-- ---------------------------------------------------------------------------
+-- Planos em 3 níveis + limites de uso + pacotes extras (28/09/2026)
+-- ---------------------------------------------------------------------------
+-- secretaria_planos ganha os LIMITES (editáveis no /admin). limite_obras null =
+-- ilimitado. Os RECURSOS de cada plano (quais funções) ficam no código
+-- (src/pay/planos.ts). Ids antigos essencial/profissional ficam ignorados pelo
+-- código novo (mapeados para obra/construtora em quem já os tem gravado).
+alter table public.secretaria_planos
+  add column if not exists limite_mensagens integer,
+  add column if not exists limite_fotos     integer,
+  add column if not exists limite_audio_min integer,
+  add column if not exists limite_obras     integer;
+
+insert into public.secretaria_planos
+  (id, nome, valor, descricao, ativo, ordem, limite_mensagens, limite_fotos, limite_audio_min, limite_obras)
+values
+  ('agenda', 'Agenda', 49.00, 'Agenda, lembretes, memória e custos de 1 obra.', true, 1, 250, 0, 30, 1),
+  ('obra', 'Obra', 89.00, 'Diário de Obra em PDF, notas fiscais por foto e prazos de documentos.', true, 2, 400, 50, 180, 5),
+  ('construtora', 'Construtora', 159.00, 'Obras ilimitadas, compras e cotações, orçamento com os seus preços.', true, 3, 700, 300, 600, null)
+on conflict (id) do nothing;
+
+-- Uso por usuário/mês: contadores das cotas + custo REAL (tokens da API).
+-- extra_* = pacotes comprados no mês (somam ao limite do plano).
+create table if not exists public.secretaria_uso (
+  user_wa               text        not null,
+  mes                   text        not null, -- 'YYYY-MM' no fuso do usuário
+  mensagens             integer     not null default 0,
+  fotos                 integer     not null default 0,
+  audio_seg             integer     not null default 0,
+  chamadas_ia           integer     not null default 0,
+  tokens_entrada        bigint      not null default 0,
+  tokens_saida          bigint      not null default 0,
+  tokens_cache_leitura  bigint      not null default 0,
+  tokens_cache_escrita  bigint      not null default 0,
+  custo_usd             numeric(12,6) not null default 0,
+  extra_mensagens       integer     not null default 0,
+  extra_fotos           integer     not null default 0,
+  extra_audio_seg       integer     not null default 0,
+  updated_at            timestamptz not null default now(),
+  primary key (user_wa, mes)
+);
+
+create index if not exists secretaria_uso_mes_idx on public.secretaria_uso (mes);
+alter table public.secretaria_uso enable row level security;
+
+-- Incremento ATÔMICO (mensagens simultâneas não se atropelam).
+create or replace function public.secretaria_uso_incrementar(
+  p_user_wa text, p_mes text,
+  p_mensagens integer default 0, p_fotos integer default 0, p_audio_seg integer default 0,
+  p_chamadas_ia integer default 0, p_tokens_entrada bigint default 0, p_tokens_saida bigint default 0,
+  p_tokens_cache_leitura bigint default 0, p_tokens_cache_escrita bigint default 0,
+  p_custo_usd numeric default 0,
+  p_extra_mensagens integer default 0, p_extra_fotos integer default 0, p_extra_audio_seg integer default 0
+) returns void
+language sql
+security invoker
+set search_path = public
+as $$
+  insert into public.secretaria_uso as u (
+    user_wa, mes, mensagens, fotos, audio_seg, chamadas_ia, tokens_entrada, tokens_saida,
+    tokens_cache_leitura, tokens_cache_escrita, custo_usd, extra_mensagens, extra_fotos, extra_audio_seg
+  ) values (
+    p_user_wa, p_mes, p_mensagens, p_fotos, p_audio_seg, p_chamadas_ia, p_tokens_entrada, p_tokens_saida,
+    p_tokens_cache_leitura, p_tokens_cache_escrita, p_custo_usd, p_extra_mensagens, p_extra_fotos, p_extra_audio_seg
+  )
+  on conflict (user_wa, mes) do update set
+    mensagens            = u.mensagens + excluded.mensagens,
+    fotos                = u.fotos + excluded.fotos,
+    audio_seg            = u.audio_seg + excluded.audio_seg,
+    chamadas_ia          = u.chamadas_ia + excluded.chamadas_ia,
+    tokens_entrada       = u.tokens_entrada + excluded.tokens_entrada,
+    tokens_saida         = u.tokens_saida + excluded.tokens_saida,
+    tokens_cache_leitura = u.tokens_cache_leitura + excluded.tokens_cache_leitura,
+    tokens_cache_escrita = u.tokens_cache_escrita + excluded.tokens_cache_escrita,
+    custo_usd            = u.custo_usd + excluded.custo_usd,
+    extra_mensagens      = u.extra_mensagens + excluded.extra_mensagens,
+    extra_fotos          = u.extra_fotos + excluded.extra_fotos,
+    extra_audio_seg      = u.extra_audio_seg + excluded.extra_audio_seg,
+    updated_at           = now();
+$$;
+
+revoke all on function public.secretaria_uso_incrementar(
+  text, text, integer, integer, integer, integer, bigint, bigint, bigint, bigint, numeric, integer, integer, integer
+) from public, anon, authenticated;
+
+-- Compras de pacotes extras. mp_payment_id ÚNICO = idempotência do webhook
+-- (o MP reenvia notificações). origem 'admin' = concessão manual.
+create table if not exists public.secretaria_pacotes_compras (
+  id             bigint generated always as identity primary key,
+  user_wa        text        not null,
+  mes            text        not null,
+  pacote_id      text        not null,
+  valor          numeric(10,2) not null default 0,
+  origem         text        not null check (origem in ('mercadopago','admin')),
+  mp_payment_id  text        unique,
+  created_at     timestamptz not null default now()
+);
+
+create index if not exists secretaria_pacotes_user_idx on public.secretaria_pacotes_compras (user_wa, mes);
+alter table public.secretaria_pacotes_compras enable row level security;

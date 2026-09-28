@@ -99,6 +99,35 @@ export interface PlanoPublico {
   descricao: string | null
   ativo: boolean
   ordem: number
+  limite_mensagens?: number
+  limite_fotos?: number
+  limite_audio_min?: number
+  /** null = ilimitado */
+  limite_obras?: number | null
+}
+
+// ---------- Plano + uso do mês (usuário logado) ----------
+
+export interface UsoItem {
+  usado: number
+  /** null = ilimitado */
+  limite: number | null
+}
+
+export interface PlanoUsuario {
+  plano: {
+    id: string
+    nome: string
+    valor: number
+    recursos: string[]
+    ilimitado: boolean
+    limiteObras: number | null
+  }
+  uso: { mes: string; mensagens: UsoItem; fotos: UsoItem; audioMin: UsoItem }
+}
+
+export function getMeuPlano() {
+  return call<{ ok: boolean } & PlanoUsuario>('/api/app/data?recurso=plano')
 }
 
 /** Planos ativos (preços atuais definidos pelo admin). Público, sem token. */

@@ -53,6 +53,9 @@ import { buscarPrecos } from "../precos/index.js";
 import { getEnv } from "../config/env.js";
 import { addDays, addMonths, daysBetween, formatDateBr, todayIsoDate, weekdayBr } from "../util/datetime.js";
 import type { MemoryKind } from "../memory/supabase.js";
+import { checarObra, resolverDireito, saldoDoUsuario, temRecurso, type Direito } from "../pay/cota.js";
+import { iniciarCompraPacote } from "../pay/pacotes.js";
+import { PACOTES, type Recurso } from "../pay/planos.js";
 
 /**
  * Definição das tools que o Claude pode chamar (function calling) e o
@@ -590,7 +593,73 @@ export const TOOLS: Anthropic.Tool[] = [
       additionalProperties: false,
     },
   },
+  {
+    name: "comprar_pacote",
+    description:
+      "Mostra quanto o usuário já usou do plano no mês (mensagens, fotos, áudio) e/ou gera o link de pagamento de um PACOTE EXTRA. Use quando ele perguntar o saldo/uso do plano, quando uma ferramenta avisar que o limite acabou e ele quiser continuar, ou quando pedir para comprar mais. Sem 'pacote', só devolve o saldo e os pacotes disponíveis. Pacotes: mensagens_100 (+100 mensagens), mensagens_300 (+300 mensagens), fotos_50 (+50 fotos/notas), audio_120 (+2h de áudio). O link de pagamento é enviado pelo sistema numa mensagem separada — NÃO copie a URL.",
+    input_schema: {
+      type: "object",
+      properties: {
+        pacote: {
+          type: "string",
+          enum: ["mensagens_100", "mensagens_300", "fotos_50", "audio_120"],
+          description: "Pacote a comprar (omita para só consultar o saldo)",
+        },
+      },
+      required: [],
+      additionalProperties: false,
+    },
+  },
 ];
+
+/**
+ * Recurso do plano que cada tool exige (ver src/pay/planos.ts). Tool fora da
+ * lista = "base" (todos os planos). O modelo só RECEBE as tools do plano do
+ * usuário (toolsDoPlano) e o runTool confere de novo (defesa em profundidade).
+ */
+const TOOL_RECURSO: Record<string, Recurso> = {
+  registrar_custo: "custos",
+  relatorio_custos: "custos",
+  revisar_conversa: "revisar",
+  registrar_rdo: "rdo",
+  consultar_rdo: "rdo",
+  gerar_rdo_pdf: "rdo",
+  registrar_foto: "fotos",
+  consultar_fotos: "fotos",
+  enviar_foto: "fotos",
+  registrar_documento: "documentos",
+  consultar_documentos: "documentos",
+  consultar_preco: "preco_referencia",
+  registrar_material: "materiais",
+  consultar_materiais: "materiais",
+};
+
+/** Tools que gravam dados numa obra — passam pelo limite de obras do plano. */
+const TOOLS_COM_OBRA = new Set([
+  "registrar_custo",
+  "registrar_rdo",
+  "registrar_foto",
+  "registrar_documento",
+  "registrar_material",
+]);
+
+/**
+ * Lista de tools liberadas para o plano, em ordem FIXA (a ordem faz parte do
+ * prefixo do cache de prompt). A última recebe cache_control: as definições
+ * das tools são iguais para todos do mesmo plano, então o cache é compartilhado.
+ */
+const toolsCache = new Map<string, Anthropic.Tool[]>();
+export function toolsDoPlano(direito: Direito): Anthropic.Tool[] {
+  const chave = direito.ilimitado ? "*" : direito.plano.recursos.join(",");
+  const pronto = toolsCache.get(chave);
+  if (pronto) return pronto;
+  const lista = TOOLS.filter((t) => temRecurso(direito, TOOL_RECURSO[t.name] ?? "base"));
+  const comCache = lista.map((t, i) =>
+    i === lista.length - 1 ? { ...t, cache_control: { type: "ephemeral" as const, ttl: "1h" as const } } : t,
+  );
+  toolsCache.set(chave, comCache);
+  return comCache;
+}
 
 /**
  * Executa uma tool call. Retorna { text, isError }.
@@ -600,9 +669,35 @@ export async function runTool(
   usuario: UsuarioRow,
   name: string,
   input: Record<string, unknown>,
-  ctx?: { imagePaths?: string[] },
+  ctx?: { imagePaths?: string[]; direito?: Direito },
 ): Promise<{ text: string; isError: boolean }> {
   const userWa = usuario.user_wa;
+  const direito = ctx?.direito;
+
+  // Plano: a tool está liberada? A obra cabe no limite do plano?
+  if (direito) {
+    const recurso = TOOL_RECURSO[name] ?? "base";
+    if (!temRecurso(direito, recurso)) {
+      return {
+        isError: true,
+        text: JSON.stringify({
+          ok: false,
+          error: `Função fora do plano ${direito.plano.nome}. Explique ao usuário e ofereça o upgrade de plano.`,
+        }),
+      };
+    }
+    if (TOOLS_COM_OBRA.has(name) && input.obra) {
+      try {
+        const bloqueio = await checarObra(usuario, direito, String(input.obra));
+        if (bloqueio) {
+          return { isError: true, text: JSON.stringify({ ok: false, error: `LIMITE: ${bloqueio}` }) };
+        }
+      } catch (err) {
+        // Falha ao contar obras não trava o uso (fail-open).
+        console.error("[tools] checarObra:", err instanceof Error ? err.message : err);
+      }
+    }
+  }
 
   // Auth de calendário resolvida pelo SERVIDOR (nunca pelo modelo), sob demanda:
   // - OAuth: usuário conectou a própria conta Google -> escreve no "primary" dele;
@@ -949,7 +1044,12 @@ export async function runTool(
 
       case "consultar_preco": {
         const termo = String(input.termo);
-        const seusPrecos = await buscarPrecosDoUsuario(userWa, termo, 6);
+        // Os preços PRÓPRIOS do usuário (histórico de compras/cotações) são do
+        // plano Construtora; nos demais, só a base de referência.
+        const seusPrecos =
+          !direito || temRecurso(direito, "preco_proprio")
+            ? await buscarPrecosDoUsuario(userWa, termo, 6)
+            : [];
         const itens = buscarPrecos(termo, 8);
         return {
           isError: false,
@@ -1442,6 +1542,53 @@ export async function runTool(
               cotacoes: m.cotacoes,
               melhor_cotacao: melhorCotacao(m),
             })),
+          }),
+        };
+      }
+
+      case "comprar_pacote": {
+        const d = direito ?? (await resolverDireito(usuario));
+        const saldo = await saldoDoUsuario(usuario, d);
+        const fmt = (x: { usado: number; limite: number; restante: number }, div = 1) =>
+          Number.isFinite(x.limite)
+            ? { usado: Math.round(x.usado / div), limite: Math.round(x.limite / div), restante: Math.round(x.restante / div) }
+            : { usado: Math.round(x.usado / div), limite: "ilimitado" };
+        const uso = {
+          plano: d.plano.nome,
+          mensagens: fmt(saldo.mensagens),
+          fotos: fmt(saldo.fotos),
+          audio_minutos: fmt(saldo.audioSeg, 60),
+          observacao: "Os limites renovam no dia 1º de cada mês; pacotes extras valem até o fim do mês.",
+        };
+        const pacoteId = input.pacote ? String(input.pacote) : "";
+        if (!pacoteId) {
+          const disponiveis = Object.values(PACOTES)
+            .filter((p) => !p.exige || temRecurso(d, p.exige))
+            .map((p) => ({ id: p.id, nome: p.nome, valor: p.valor }));
+          return { isError: false, text: JSON.stringify({ ok: true, uso, pacotes: disponiveis }) };
+        }
+        const compra = await iniciarCompraPacote(usuario, d, pacoteId);
+        if (!compra.ok) {
+          const msg =
+            compra.motivo === "fora_do_plano"
+              ? "Esse pacote é de um recurso que o plano não tem — ofereça o upgrade."
+              : compra.motivo === "pagamento_indisponivel"
+                ? "A compra de pacotes pelo WhatsApp ainda não está ativa. Diga que o time da Rosana vai liberar e peça para ele aguardar o contato."
+                : "Pacote inválido.";
+          return { isError: true, text: JSON.stringify({ ok: false, error: msg, uso }) };
+        }
+        // Link enviado numa mensagem SEPARADA (o modelo não copia URL).
+        await sendTextMessage(
+          userWa,
+          `Link para pagar o ${compra.pacote.nome} (R$ ${compra.pacote.valor.toFixed(2).replace(".", ",")}):\n${compra.link}`,
+        );
+        return {
+          isError: false,
+          text: JSON.stringify({
+            ok: true,
+            uso,
+            link_enviado: true,
+            instrucao: "O link já foi enviado. Confirme em 1 frase; o crédito entra assim que o pagamento for aprovado.",
           }),
         };
       }
