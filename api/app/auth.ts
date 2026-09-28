@@ -2,16 +2,14 @@ import { autenticar, signSession } from "../../src/auth/session.js";
 import { requestLoginCode, verifyLoginCode } from "../../src/auth/codes.js";
 import { verifyLogin, setPassword, validarSenha } from "../../src/auth/password.js";
 import { consumirLimite, ipDaRequisicao } from "../../src/auth/ratelimit.js";
-import { canonicalWa, registrarLead, type UsuarioRow } from "../../src/memory/context.js";
+import { type UsuarioRow } from "../../src/memory/context.js";
 import { json, preflight, readJson } from "../../src/auth/http.js";
-import { getEnv } from "../../src/config/env.js";
-import { sendTextMessage } from "../../src/whatsapp/client.js";
 
 /**
  * Roteador único de AUTENTICAÇÃO do painel (`?acao=...`), para caber no limite
  * de funções serverless do plano Hobby da Vercel.
  *   GET  ?acao=session
- *   POST ?acao=login | request-code | set-password | change-password | lead
+ *   POST ?acao=login | request-code | set-password | change-password
  *
  * Anti-enumeração: login e request-code respondem IGUAL para número
  * cadastrado ou não (antes, request-code devolvia 403 vs. ok + o NOME da
@@ -121,38 +119,6 @@ export default {
         const versao = await setPassword(sessao.wa, novaSenha);
         // As OUTRAS sessões caem (versão nova); esta recebe um token novo.
         return json(request, { ok: true, token: signSession(sessao.wa, versao) });
-      }
-
-      // ---- lead (interesse vindo do /cadastro do site, antes do pagamento) ----
-      if (acao === "lead") {
-        if (!(await consumirLimite(`lead_ip:${ip}`, 5, HORA))) {
-          return json(request, { ok: false, error: "muito_cedo" }, 429);
-        }
-        const str = (v: unknown, max = 200) =>
-          typeof v === "string" && v.trim() ? v.trim().slice(0, max) : null;
-        const nome = str(body.nome);
-        const telefone = str(body.telefone, 30);
-        if (!nome || !telefone) return json(request, { ok: false, error: "faltam_dados" }, 400);
-        await registrarLead({
-          nome,
-          telefone: canonicalWa(telefone),
-          email: str(body.email),
-          cpf: str(body.cpf, 20),
-          endereco: str(body.endereco, 300),
-          profissao: str(body.profissao, 100),
-          plano: str(body.plano, 30),
-        });
-        // Avisa o dono (best-effort: fora da janela de 24h a Meta não entrega).
-        const dono = getEnv().ALLOWED_WHATSAPP_NUMBER;
-        if (dono) {
-          await sendTextMessage(
-            dono,
-            `🆕 Novo interessado pelo site: ${nome} (${telefone})` +
-              (str(body.plano, 30) ? ` — plano ${str(body.plano, 30)}` : "") +
-              ". Está na tabela secretaria_leads.",
-          ).catch(() => undefined);
-        }
-        return json(request, { ok: true });
       }
 
       return json(request, { error: "acao_desconhecida" }, 400);

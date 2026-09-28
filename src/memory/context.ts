@@ -1486,34 +1486,3 @@ export async function saveOAuthToken(
     .upsert(rows, { onConflict: "user_wa" });
   if (error) throw new Error(`Falha ao salvar token OAuth: ${error.message}`);
 }
-
-/* ---------- Leads do site (antes do pagamento existir) ---------- */
-
-export interface LeadInput {
-  nome: string;
-  telefone: string;
-  email?: string | null;
-  cpf?: string | null;
-  endereco?: string | null;
-  profissao?: string | null;
-  plano?: string | null;
-}
-
-/**
- * Guarda o interesse de quem preencheu o /cadastro do site. Antes, o
- * formulário coletava os dados e os DESCARTAVA (checkout ainda é placeholder),
- * perdendo o lead. NÃO autoriza o número — só registra para contato.
- */
-export async function registrarLead(lead: LeadInput): Promise<void> {
-  const supabase = getSupabase();
-  const { error } = await supabase.from("secretaria_leads").insert({
-    nome: lead.nome,
-    telefone: lead.telefone,
-    email: lead.email ?? null,
-    cpf: lead.cpf ?? null,
-    endereco: lead.endereco ?? null,
-    profissao: lead.profissao ?? null,
-    plano: lead.plano ?? null,
-  });
-  if (error) throw new Error(`Falha ao registrar lead: ${error.message}`);
-}

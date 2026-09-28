@@ -1,5 +1,5 @@
-import { registrarInteresse } from '../lib/api'
-import { FormEvent, useMemo, useState } from 'react'
+import { FormEvent, useEffect, useMemo, useState } from 'react'
+import { assinar, getPlanosPublicos, formatarBRL } from '../lib/api'
 import '../styles/landing.css'
 
 type PlanoId = 'essencial' | 'profissional'
@@ -13,10 +13,9 @@ interface DadosCadastro {
   profissao: string
 }
 
-const planos: Record<PlanoId, { nome: string; preco: string; descricao: string }> = {
-  // TODO: preço a confirmar
+type PlanoInfo = { nome: string; preco: string; descricao: string }
+const planosPadrao: Record<PlanoId, PlanoInfo> = {
   essencial: { nome: 'Essencial', preco: 'R$ 89,90/mês', descricao: 'Organização prática para começar.' },
-  // TODO: preço a confirmar
   profissional: { nome: 'Profissional', preco: 'R$ 169,90/mês', descricao: 'A operação completa da sua obra.' },
 }
 
@@ -42,33 +41,29 @@ function cpfValido(cpfFormatado: string) {
   return digito(9) === Number(cpf[9]) && digito(10) === Number(cpf[10])
 }
 
-async function iniciarCheckout(dados: DadosCadastro, plano: PlanoId) {
-  // TODO: integrar Mercado Pago no backend. Enquanto isso, o interesse é
-  // GUARDADO no backend (antes os dados eram descartados e o lead se perdia).
-  try {
-    await registrarInteresse({
-      nome: dados.nome,
-      telefone: dados.telefone,
-      email: dados.email,
-      cpf: dados.cpf,
-      endereco: dados.endereco,
-      profissao: dados.profissao,
-      plano,
-    })
-  } catch {
-    /* segue para a tela de "em breve" mesmo se o registro falhar */
-  }
-  return { aguardandoIntegracao: true, cliente: dados.nome, plano }
-}
-
 export function Cadastro() {
   const planoInicial = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('plano') === 'essencial' ? 'essencial' : 'profissional'
   const [dados, setDados] = useState<DadosCadastro>(dadosIniciais)
   const [plano, setPlano] = useState<PlanoId>(planoInicial)
+  const [planos, setPlanos] = useState<Record<PlanoId, PlanoInfo>>(planosPadrao)
   const [etapa, setEtapa] = useState<'cadastro' | 'pagamento'>('cadastro')
   const [erros, setErros] = useState<Partial<Record<keyof DadosCadastro, string>>>({})
-  const [checkout, setCheckout] = useState<'pronto' | 'processando' | 'em-breve'>('pronto')
-  const planoAtual = useMemo(() => planos[plano], [plano])
+  const [checkout, setCheckout] = useState<'pronto' | 'processando' | 'em-breve' | 'erro' | 'ja-cadastrado'>('pronto')
+  const planoAtual = useMemo(() => planos[plano], [planos, plano])
+
+  useEffect(() => {
+    getPlanosPublicos()
+      .then((r) => {
+        const m = { ...planosPadrao }
+        for (const p of r.planos) {
+          if (p.id === 'essencial' || p.id === 'profissional') {
+            m[p.id] = { nome: p.nome, preco: `${formatarBRL(p.valor)}/mês`, descricao: p.descricao ?? planosPadrao[p.id].descricao }
+          }
+        }
+        setPlanos(m)
+      })
+      .catch(() => {})
+  }, [])
 
   const atualizar = (campo: keyof DadosCadastro, valor: string) => {
     setDados((anterior) => ({ ...anterior, [campo]: valor }))
@@ -94,8 +89,28 @@ export function Cadastro() {
 
   const pagar = async () => {
     setCheckout('processando')
-    await iniciarCheckout(dados, plano)
-    setCheckout('em-breve')
+    try {
+      const r = await assinar({
+        nome: dados.nome,
+        email: dados.email,
+        whatsapp: dados.telefone,
+        cpf: dados.cpf,
+        endereco: dados.endereco,
+        profissao: dados.profissao,
+        plano,
+      })
+      if (r.jaCadastrado) {
+        setCheckout('ja-cadastrado') // número já tem acesso: vai para o painel
+        return
+      }
+      if (r.init_point) {
+        window.location.href = r.init_point // vai pro checkout do Mercado Pago
+        return
+      }
+      setCheckout('em-breve') // MP ainda não configurado; cadastro guardado
+    } catch {
+      setCheckout('erro')
+    }
   }
 
   return (
@@ -117,10 +132,10 @@ export function Cadastro() {
             <p className="privacy-note">🔒 Ao continuar, você concorda com nossos <a href="/termos">Termos de uso</a> e nossa <a href="/privacidade">Política de privacidade</a>.</p>
             <button className="sales-button sales-button--primary signup-submit" type="submit">Continuar para pagamento <span>→</span></button>
           </form> : <div className="payment-step">
-            <div className="form-heading"><span>02</span><div><h2>Resumo da assinatura</h2><p>O pagamento ainda não será processado nesta versão.</p></div></div>
+            <div className="form-heading"><span>02</span><div><h2>Resumo da assinatura</h2><p>Você será direcionado ao pagamento seguro do Mercado Pago.</p></div></div>
             <div className="order-summary"><div><span>Plano {planoAtual.nome}</span><button onClick={() => setEtapa('cadastro')}>Alterar</button></div><strong>{planoAtual.preco}</strong><small>Renovação mensal · cancele quando quiser</small></div>
             <div className="customer-summary"><h3>Dados da assinatura</h3><dl><div><dt>Nome</dt><dd>{dados.nome}</dd></div><div><dt>E-mail</dt><dd>{dados.email}</dd></div><div><dt>WhatsApp</dt><dd>{dados.telefone}</dd></div><div><dt>CPF</dt><dd>{dados.cpf}</dd></div></dl></div>
-            {checkout === 'em-breve' ? <div className="checkout-message" role="status"><span>✓</span><div><strong>Cadastro recebido!</strong><p>A integração de pagamento estará disponível em breve. Nenhuma cobrança foi realizada.</p></div></div> : <><div className="payment-placeholder"><span>▣</span><div><strong>Pagamento seguro</strong><small>Aqui será aberto o checkout do Mercado Pago.</small></div></div><button className="sales-button sales-button--primary signup-submit" onClick={pagar} disabled={checkout === 'processando'}>{checkout === 'processando' ? 'Preparando checkout…' : 'Assinar e pagar'} <span>→</span></button><p className="secure-note">🔒 Ambiente protegido. Nenhuma informação bancária é armazenada pela Rosana.</p></>}
+            {checkout === 'ja-cadastrado' ? <div className="checkout-message" role="status"><span>✓</span><div><strong>Este WhatsApp já tem acesso à Rosana.</strong><p>Não é preciso assinar de novo. <a href="/entrar">Entre no painel</a> ou mande uma mensagem para a Rosana. Nenhuma cobrança foi realizada.</p></div></div> : checkout === 'em-breve' ? <div className="checkout-message" role="status"><span>✓</span><div><strong>Cadastro recebido!</strong><p>A cobrança automática ainda está sendo ativada. Guardamos seu cadastro e a equipe entra em contato para concluir a assinatura. Nenhuma cobrança foi realizada.</p></div></div> : <><div className="payment-placeholder"><span>▣</span><div><strong>Pagamento seguro</strong><small>Você será levado ao checkout do Mercado Pago para autorizar a assinatura mensal.</small></div></div>{checkout === 'erro' && <p className="signup-form has-error" style={{ margin: '0 0 8px' }}><small style={{ color: '#a33f30' }}>Não consegui iniciar o pagamento agora. Confira os dados e tente de novo.</small></p>}<button className="sales-button sales-button--primary signup-submit" onClick={pagar} disabled={checkout === 'processando'}>{checkout === 'processando' ? 'Preparando checkout…' : 'Assinar e pagar'} <span>→</span></button><p className="secure-note">🔒 Ambiente protegido. Nenhuma informação bancária é armazenada pela Rosana.</p></>}
           </div>}
         </section>
       </main>

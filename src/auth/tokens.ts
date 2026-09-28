@@ -12,7 +12,7 @@ import { getEnv } from "../config/env.js";
  * Formato: base64url(JSON payload).base64url(hmac(chave_derivada, payload)).
  */
 
-export type Finalidade = "session" | "oauth_state" | "otp";
+export type Finalidade = "session" | "oauth_state" | "otp" | "admin";
 
 function segredoMestre(): string {
   const env = getEnv();

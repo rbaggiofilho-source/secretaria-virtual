@@ -90,6 +90,51 @@ export interface DashboardData {
   contadores: { fotos: number; materiais: number; pendencias: number }
 }
 
+// ---------- Planos públicos (landing/cadastro) ----------
+
+export interface PlanoPublico {
+  id: string
+  nome: string
+  valor: number
+  descricao: string | null
+  ativo: boolean
+  ordem: number
+}
+
+/** Planos ativos (preços atuais definidos pelo admin). Público, sem token. */
+export function getPlanosPublicos() {
+  return call<{ ok: boolean; planos: PlanoPublico[] }>('/api/app/admin?recurso=planos-public')
+}
+
+/** Formata um valor em reais: 89.9 → "R$ 89,90". */
+export function formatarBRL(valor: number): string {
+  return `R$ ${valor.toFixed(2).replace('.', ',')}`
+}
+
+// ---------- Cadastro + assinatura (público, sem token) ----------
+
+export interface DadosAssinatura {
+  nome: string
+  email: string
+  whatsapp: string
+  cpf?: string
+  endereco?: string
+  profissao?: string
+  plano: string
+}
+
+/**
+ * Grava o cadastro e inicia a assinatura no Mercado Pago. Se o MP estiver
+ * configurado, devolve `init_point` (URL do checkout p/ redirecionar); senão
+ * devolve `aguardandoIntegracao` (mostra "em breve", nenhuma cobrança).
+ */
+export function assinar(dados: DadosAssinatura) {
+  return call<{ ok: boolean; init_point?: string; aguardandoIntegracao?: boolean; jaCadastrado?: boolean }>(
+    '/api/app/pay?acao=assinar',
+    { method: 'POST', body: JSON.stringify(dados) },
+  )
+}
+
 /** Login por número do WhatsApp + senha. Devolve o token de sessão + usuário. */
 export function login(whatsapp: string, senha: string) {
   return call<{ ok: boolean; token: string; usuario: Usuario }>('/api/app/auth?acao=login', {
@@ -266,22 +311,6 @@ export async function trocarSenha(senhaAtual: string, novaSenha: string) {
   // Trocar a senha derruba as sessões antigas; esta recebe um token novo.
   if (r.token) setToken(r.token)
   return r
-}
-
-/** Registra o interesse (lead) do /cadastro enquanto o pagamento não está no ar. */
-export function registrarInteresse(dados: {
-  nome: string
-  telefone: string
-  email?: string
-  cpf?: string
-  endereco?: string
-  profissao?: string
-  plano?: string
-}) {
-  return call<{ ok: boolean }>('/api/app/auth?acao=lead', {
-    method: 'POST',
-    body: JSON.stringify(dados),
-  })
 }
 
 /** Baixa o PDF do RDO de uma obra (fetch com token → download no navegador). */

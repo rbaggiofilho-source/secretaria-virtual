@@ -1,4 +1,12 @@
+import { useEffect, useState } from 'react'
+import { getPlanosPublicos, type PlanoPublico } from '../lib/api'
 import '../styles/landing.css'
+
+function partesPreco(valor: number) {
+  const int = Math.floor(valor)
+  const cc = Math.round((valor - int) * 100).toString().padStart(2, '0')
+  return { int, cc }
+}
 
 const recursos = [
   { icon: '◎', title: 'Agenda que se organiza sozinha', text: 'Crie compromissos e lembretes no Google Agenda pelo WhatsApp, por texto ou áudio.' },
@@ -23,6 +31,18 @@ function Logo() {
 }
 
 export function Landing() {
+  const [planos, setPlanos] = useState<Record<string, PlanoPublico>>({})
+  useEffect(() => {
+    getPlanosPublicos()
+      .then((r) => {
+        const m: Record<string, PlanoPublico> = {}
+        r.planos.forEach((p) => { m[p.id] = p })
+        setPlanos(m)
+      })
+      .catch(() => {})
+  }, [])
+  const ess = partesPreco(planos.essencial?.valor ?? 89.9)
+  const pro = partesPreco(planos.profissional?.valor ?? 169.9)
   return (
     <div className="sales-page">
       <header className="sales-header">
@@ -91,9 +111,9 @@ export function Landing() {
           <div className="section-heading section-heading--center"><p className="sales-kicker">PLANOS PARA CONSTRUIR COM CONTROLE</p><h2>Seu tempo vale mais.</h2><p>Escolha a estrutura ideal para a sua rotina. Cancele quando quiser.</p></div>
           <div className="pricing-grid">
             {/* TODO: preço a confirmar */}
-            <article className="price-card"><div><span className="plan-name">ESSENCIAL</span><h3>Para organizar a rotina</h3><p>Comece a tirar informações do papel e centralizar a sua obra.</p></div><div className="price"><small>R$</small><strong>89</strong><span>,90<br /><em>/ mês</em></span></div><ul><li>✓ Agenda e lembretes</li><li>✓ Custos por obra</li><li>✓ Registro fotográfico</li><li>✓ Painel web completo</li></ul><a className="sales-button sales-button--outline-dark" href="/cadastro?plano=essencial">Assinar Essencial</a><small className="price-disclaimer">Valor provisório para validação comercial.</small></article>
+            <article className="price-card"><div><span className="plan-name">ESSENCIAL</span><h3>Para organizar a rotina</h3><p>Comece a tirar informações do papel e centralizar a sua obra.</p></div><div className="price"><small>R$</small><strong>{ess.int}</strong><span>,{ess.cc}<br /><em>/ mês</em></span></div><ul><li>✓ Agenda e lembretes</li><li>✓ Custos por obra</li><li>✓ Registro fotográfico</li><li>✓ Painel web completo</li></ul><a className="sales-button sales-button--outline-dark" href="/cadastro?plano=essencial">Assinar Essencial</a><small className="price-disclaimer">Valor provisório para validação comercial.</small></article>
             {/* TODO: preço a confirmar */}
-            <article className="price-card price-card--highlight"><span className="popular-label">MAIS COMPLETO</span><div><span className="plan-name">PROFISSIONAL</span><h3>Sua operação organizada</h3><p>Recursos inteligentes para acompanhar mais obras com produtividade.</p></div><div className="price"><small>R$</small><strong>169</strong><span>,90<br /><em>/ mês</em></span></div><ul><li>✓ Tudo do plano Essencial</li><li>✓ RDO por voz e PDF</li><li>✓ Nota fiscal por foto</li><li>✓ Compras e cotações</li><li>✓ Histórico de preços e orçamentos</li></ul><a className="sales-button sales-button--accent" href="/cadastro?plano=profissional">Assinar Profissional</a><small className="price-disclaimer">Valor provisório para validação comercial.</small></article>
+            <article className="price-card price-card--highlight"><span className="popular-label">MAIS COMPLETO</span><div><span className="plan-name">PROFISSIONAL</span><h3>Sua operação organizada</h3><p>Recursos inteligentes para acompanhar mais obras com produtividade.</p></div><div className="price"><small>R$</small><strong>{pro.int}</strong><span>,{pro.cc}<br /><em>/ mês</em></span></div><ul><li>✓ Tudo do plano Essencial</li><li>✓ RDO por voz e PDF</li><li>✓ Nota fiscal por foto</li><li>✓ Compras e cotações</li><li>✓ Histórico de preços e orçamentos</li></ul><a className="sales-button sales-button--accent" href="/cadastro?plano=profissional">Assinar Profissional</a><small className="price-disclaimer">Valor provisório para validação comercial.</small></article>
           </div>
         </section>
 
