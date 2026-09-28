@@ -50,13 +50,13 @@ const cartoes: Cartao[] = [
     id: 'obra', rotulo: 'OBRA', titulo: 'Sua obra no controle',
     texto: 'Para quem toca algumas obras e precisa de registro técnico.',
     itens: ['Tudo do plano Agenda', 'Diário de Obra (RDO) por voz + PDF', 'Nota fiscal por foto (lança o custo)', 'Prazos de alvará, ART/RRT e ASO', 'Orçamento com preços de mercado', 'Painel web completo'],
-    valorPadrao: 89, limitesPadrao: { mensagens: 400, fotos: 50, audioMin: 180, obras: 5 }, destaque: true,
+    valorPadrao: 119, limitesPadrao: { mensagens: 400, fotos: 50, audioMin: 180, obras: 5 }, destaque: true,
   },
   {
     id: 'construtora', rotulo: 'CONSTRUTORA', titulo: 'Operação completa',
     texto: 'Para escritórios e construtoras com várias frentes.',
     itens: ['Tudo do plano Obra', 'Obras ilimitadas', 'Compras, cotações e fornecedores', 'Orçamento com os SEUS preços reais', 'Mais fotos, áudio e mensagens'],
-    valorPadrao: 159, limitesPadrao: { mensagens: 700, fotos: 300, audioMin: 600, obras: null },
+    valorPadrao: 229, limitesPadrao: { mensagens: 700, fotos: 300, audioMin: 600, obras: null },
   },
 ]
 
@@ -174,7 +174,7 @@ export function Landing() {
               )
             })}
           </div>
-          <p className="pricing-extras">Bateu o limite do mês? Sem precisar trocar de plano: compre um pacote extra direto no WhatsApp — +100 mensagens por R$ 19,90, +50 fotos por R$ 9,90 ou +2h de áudio por R$ 9,90.</p>
+          <p className="pricing-extras">Bateu o limite do mês? Sem precisar trocar de plano: compre um pacote extra direto no WhatsApp — +100 mensagens por R$ 27,90, +50 fotos por R$ 9,90 ou +2h de áudio por R$ 9,90.</p>
         </section>
 
         <section className="final-cta"><span className="cta-detail" aria-hidden="true"></span><div><p className="sales-kicker sales-kicker--light">SUA OBRA PEDE A SUA ATENÇÃO</p><h2>Deixe a organização<br />com a <em>Rosana.</em></h2><p>Comece agora e descubra uma rotina com mais clareza, produtividade e tempo para construir.</p><a className="sales-button sales-button--accent" href="/cadastro">Quero ganhar meu tempo de volta <span>→</span></a></div></section>

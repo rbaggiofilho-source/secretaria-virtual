@@ -184,8 +184,8 @@ insert into public.secretaria_planos
   (id, nome, valor, descricao, ativo, ordem, limite_mensagens, limite_fotos, limite_audio_min, limite_obras)
 values
   ('agenda', 'Agenda', 49.00, 'Agenda, lembretes, memória e custos de 1 obra.', true, 1, 250, 0, 30, 1),
-  ('obra', 'Obra', 89.00, 'Diário de Obra em PDF, notas fiscais por foto e prazos de documentos.', true, 2, 400, 50, 180, 5),
-  ('construtora', 'Construtora', 159.00, 'Obras ilimitadas, compras e cotações, orçamento com os seus preços.', true, 3, 700, 300, 600, null)
+  ('obra', 'Obra', 119.00, 'Diário de Obra em PDF, notas fiscais por foto e prazos de documentos.', true, 2, 400, 50, 180, 5),
+  ('construtora', 'Construtora', 229.00, 'Obras ilimitadas, compras e cotações, orçamento com os seus preços.', true, 3, 700, 300, 600, null)
 on conflict (id) do nothing;
 
 -- Uso por usuário/mês: contadores das cotas + custo REAL (tokens da API).

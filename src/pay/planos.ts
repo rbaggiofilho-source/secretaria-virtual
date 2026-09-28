@@ -6,9 +6,11 @@
  *
  * Por que há LIMITE de uso: o custo da IA é por mensagem (~US$ 0,015–0,02 com
  * cache de prompt). Sem teto, um usuário pesado no plano de R$ 49 dá prejuízo.
- * Os limites abaixo mantêm o custo de IA ≤ ~50% do preço líquido MESMO com a
- * cota inteira consumida. Quem bater o limite compra um PACOTE extra (ou sobe
- * de plano).
+ * REGRA DE PREÇO: margem ≥ 48% no PIOR caso (cota inteira consumida), já
+ * descontando ~11% de taxas (Mercado Pago + imposto) ⇒ preço ≥ custo máx / 0,41.
+ * Custo máx. (US$ 0,02/msg + US$ 0,005/foto + Groq, câmbio R$ 5,60): Agenda
+ * ~R$ 20 → R$ 49; Obra ~R$ 48 → R$ 119; Construtora ~R$ 93 → R$ 229.
+ * Quem bater o limite compra um PACOTE extra (ou sobe de plano).
  */
 
 export type PlanoId = "agenda" | "obra" | "construtora";
@@ -66,14 +68,14 @@ export const PLANOS: Record<PlanoId, Plano> = {
   obra: {
     id: "obra",
     nome: "Rosana Obra",
-    valor: 89,
+    valor: 119,
     recursos: RECURSOS_OBRA,
     limites: { mensagens: 400, fotos: 50, audioMin: 180, obras: 5 },
   },
   construtora: {
     id: "construtora",
     nome: "Rosana Construtora",
-    valor: 159,
+    valor: 229,
     recursos: RECURSOS_CONSTRUTORA,
     limites: { mensagens: 700, fotos: 300, audioMin: 600, obras: null },
   },
@@ -118,12 +120,12 @@ export interface Pacote {
 }
 
 /**
- * Preços com margem ≥ 2× o custo de pior caso (IA ~R$ 0,11/mensagem, Groq
- * ~R$ 0,62/hora de áudio) já descontando taxa do Mercado Pago + imposto.
+ * Mesma regra dos planos: margem ≥ 48% no pior caso (IA ~R$ 0,11/mensagem,
+ * Groq ~R$ 0,62/hora de áudio), já descontando ~11% de taxas.
  */
 export const PACOTES: Record<PacoteId, Pacote> = {
-  mensagens_100: { id: "mensagens_100", nome: "+100 mensagens", valor: 19.9, mensagens: 100 },
-  mensagens_300: { id: "mensagens_300", nome: "+300 mensagens", valor: 49.9, mensagens: 300 },
+  mensagens_100: { id: "mensagens_100", nome: "+100 mensagens", valor: 27.9, mensagens: 100 },
+  mensagens_300: { id: "mensagens_300", nome: "+300 mensagens", valor: 82.9, mensagens: 300 },
   fotos_50: { id: "fotos_50", nome: "+50 fotos/notas fiscais", valor: 9.9, fotos: 50, exige: "fotos" },
   audio_120: { id: "audio_120", nome: "+2 horas de áudio", valor: 9.9, audioMin: 120 },
 };
