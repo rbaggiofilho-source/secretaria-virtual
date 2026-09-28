@@ -8,8 +8,15 @@ import {
   changeAdminPassword,
 } from "../../src/auth/admin.js";
 import { validarSenha } from "../../src/auth/hash.js";
-import { buildOverview, listUsuariosAdmin, setUsuarioAtivo } from "../../src/admin/metrics.js";
+import {
+  buildOverview,
+  listUsuariosAdmin,
+  setUsuarioAtivo,
+  setUsuarioPlano,
+} from "../../src/admin/metrics.js";
 import { listPlanos, upsertPlano } from "../../src/pay/planos-db.js";
+import { getPacote, normalizarPlanoId, PACOTES } from "../../src/pay/planos.js";
+import { creditarPacote } from "../../src/pay/pacotes.js";
 
 /**
  * Painel de ADMINISTRAÇÃO da Rosana. Endpoint único (teto de 12 funções da
@@ -29,7 +36,7 @@ export default {
     try {
       // ----- Público (sem token) -----
       if (recurso === "planos-public" && request.method === "GET") {
-        return json(request, { ok: true, planos: await listPlanos(false) });
+        return json(request, { ok: true, planos: await listPlanos(false), pacotes: Object.values(PACOTES) });
       }
       if (acao === "bootstrap" && request.method === "POST") return await bootstrap(request);
       if (acao === "login" && request.method === "POST") return await login(request);
@@ -53,7 +60,7 @@ export default {
           case "usuarios":
             return json(request, { ok: true, usuarios: await listUsuariosAdmin() });
           case "planos":
-            return json(request, { ok: true, planos: await listPlanos(true) });
+            return json(request, { ok: true, planos: await listPlanos(true), pacotes: Object.values(PACOTES) });
           default:
             return json(request, { error: "recurso_desconhecido" }, 400);
         }
@@ -67,6 +74,23 @@ export default {
           await setUsuarioAtivo(userWa, Boolean(body.ativo));
           return json(request, { ok: true });
         }
+        if (acao === "set-usuario-plano") {
+          const body = await readJson(request);
+          const userWa = String(body.user_wa ?? "");
+          const plano = normalizarPlanoId(String(body.plano ?? ""));
+          if (!userWa || !plano) return json(request, { error: "faltam_dados" }, 400);
+          await setUsuarioPlano(userWa, plano);
+          return json(request, { ok: true });
+        }
+        if (acao === "conceder-pacote") {
+          // Cortesia/venda manual (ex.: enquanto o Mercado Pago não está ligado).
+          const body = await readJson(request);
+          const userWa = String(body.user_wa ?? "");
+          const pacote = getPacote(String(body.pacote ?? ""));
+          if (!userWa || !pacote) return json(request, { error: "faltam_dados" }, 400);
+          await creditarPacote({ userWa, pacoteId: pacote.id, origem: "admin" });
+          return json(request, { ok: true });
+        }
         if (acao === "set-plano") {
           const body = await readJson(request);
           const id = String(body.id ?? "");
@@ -75,6 +99,12 @@ export default {
           if (valorNum !== undefined && (!Number.isFinite(valorNum) || valorNum < 0)) {
             return json(request, { error: "valor_invalido" }, 400);
           }
+          // Limites: inteiro ≥ 0; limite_obras aceita null (= ilimitado).
+          const lim = (v: unknown): number | undefined => {
+            if (v === undefined) return undefined;
+            const n = Math.floor(Number(v));
+            return Number.isFinite(n) && n >= 0 ? n : undefined;
+          };
           const plano = await upsertPlano({
             id,
             nome: body.nome !== undefined ? String(body.nome) : undefined,
@@ -82,6 +112,13 @@ export default {
             descricao: body.descricao !== undefined ? String(body.descricao) : undefined,
             ativo: body.ativo !== undefined ? Boolean(body.ativo) : undefined,
             ordem: body.ordem !== undefined ? Number(body.ordem) : undefined,
+            limite_mensagens: lim(body.limite_mensagens),
+            limite_fotos: lim(body.limite_fotos),
+            limite_audio_min: lim(body.limite_audio_min),
+            limite_obras:
+              body.limite_obras === null || body.limite_obras === ""
+                ? null
+                : lim(body.limite_obras),
           });
           return json(request, { ok: true, plano });
         }

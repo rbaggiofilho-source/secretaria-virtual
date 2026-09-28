@@ -2,7 +2,10 @@ import { FormEvent, useEffect, useMemo, useState } from 'react'
 import { assinar, getPlanosPublicos, formatarBRL } from '../lib/api'
 import '../styles/landing.css'
 
-type PlanoId = 'essencial' | 'profissional'
+type PlanoId = 'agenda' | 'obra' | 'construtora'
+const PLANO_IDS: PlanoId[] = ['agenda', 'obra', 'construtora']
+// Links antigos (?plano=essencial/profissional) caem no plano equivalente.
+const LEGADO: Record<string, PlanoId> = { essencial: 'obra', profissional: 'construtora' }
 
 interface DadosCadastro {
   nome: string
@@ -15,8 +18,16 @@ interface DadosCadastro {
 
 type PlanoInfo = { nome: string; preco: string; descricao: string }
 const planosPadrao: Record<PlanoId, PlanoInfo> = {
-  essencial: { nome: 'Essencial', preco: 'R$ 89,90/mês', descricao: 'Organização prática para começar.' },
-  profissional: { nome: 'Profissional', preco: 'R$ 169,90/mês', descricao: 'A operação completa da sua obra.' },
+  agenda: { nome: 'Agenda', preco: 'R$ 49,00/mês', descricao: 'Agenda, lembretes, memória e custos de 1 obra.' },
+  obra: { nome: 'Obra', preco: 'R$ 89,00/mês', descricao: 'Diário de Obra em PDF, notas fiscais por foto e prazos de documentos.' },
+  construtora: { nome: 'Construtora', preco: 'R$ 159,00/mês', descricao: 'Obras ilimitadas, compras e cotações, orçamento com os seus preços.' },
+}
+
+function planoDaUrl(): PlanoId {
+  if (typeof window === 'undefined') return 'obra'
+  const p = new URLSearchParams(window.location.search).get('plano') ?? ''
+  if ((PLANO_IDS as string[]).includes(p)) return p as PlanoId
+  return LEGADO[p] ?? 'obra'
 }
 
 const dadosIniciais: DadosCadastro = { nome: '', cpf: '', email: '', telefone: '', endereco: '', profissao: '' }
@@ -42,7 +53,7 @@ function cpfValido(cpfFormatado: string) {
 }
 
 export function Cadastro() {
-  const planoInicial = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('plano') === 'essencial' ? 'essencial' : 'profissional'
+  const planoInicial = planoDaUrl()
   const [dados, setDados] = useState<DadosCadastro>(dadosIniciais)
   const [plano, setPlano] = useState<PlanoId>(planoInicial)
   const [planos, setPlanos] = useState<Record<PlanoId, PlanoInfo>>(planosPadrao)
@@ -56,8 +67,9 @@ export function Cadastro() {
       .then((r) => {
         const m = { ...planosPadrao }
         for (const p of r.planos) {
-          if (p.id === 'essencial' || p.id === 'profissional') {
-            m[p.id] = { nome: p.nome, preco: `${formatarBRL(p.valor)}/mês`, descricao: p.descricao ?? planosPadrao[p.id].descricao }
+          if ((PLANO_IDS as string[]).includes(p.id)) {
+            const id = p.id as PlanoId
+            m[id] = { nome: p.nome, preco: `${formatarBRL(p.valor)}/mês`, descricao: p.descricao ?? planosPadrao[id].descricao }
           }
         }
         setPlanos(m)

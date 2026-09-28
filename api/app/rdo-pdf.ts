@@ -3,6 +3,7 @@ import { consultarRDO, getUsuario } from "../../src/memory/context.js";
 import { buscarObraPorNome } from "../../src/memory/obras.js";
 import { buildRdoPdf } from "../../src/pdf/rdo.js";
 import { corsHeaders, json, preflight } from "../../src/auth/http.js";
+import { resolverDireito, temRecurso } from "../../src/pay/cota.js";
 
 /**
  * GET /api/app/rdo-pdf?obra=<obra> (Bearer) — gera e baixa o PDF do Diário de
@@ -24,6 +25,10 @@ export default {
 
       // Enriquece o cabeçalho com o cadastro estruturado da obra + nome do usuário.
       const [cad, usuario] = await Promise.all([buscarObraPorNome(wa, obra), getUsuario(wa)]);
+      // PDF do RDO é recurso dos planos Obra/Construtora.
+      if (usuario && !temRecurso(await resolverDireito(usuario), "rdo")) {
+        return json(request, { ok: false, error: "fora_do_plano" }, 403);
+      }
       const bytes = await buildRdoPdf({
         obra: cad?.nome ?? obra,
         rdos,

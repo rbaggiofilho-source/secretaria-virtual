@@ -580,6 +580,8 @@ export interface UsuarioRow {
   dono: boolean;
   ativo: boolean;
   nudge_diario: boolean;
+  /** Plano da assinatura (agenda/obra/construtora; null = beta/legado). */
+  plano?: string | null;
 }
 
 /** Busca o usuário pelo wa_id. Retorna null se não cadastrado. */
@@ -587,7 +589,7 @@ export async function getUsuario(userWa: string): Promise<UsuarioRow | null> {
   const supabase = getSupabase();
   const { data, error } = await supabase
     .from("secretaria_usuarios")
-    .select("user_wa, nome, calendar_id, contextos, profissao, dono, ativo, nudge_diario")
+    .select("user_wa, nome, calendar_id, contextos, profissao, dono, ativo, nudge_diario, plano")
     .eq("user_wa", userWa)
     .maybeSingle();
 

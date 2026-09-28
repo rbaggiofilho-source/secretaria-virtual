@@ -73,6 +73,77 @@ export async function criarAssinatura(input: CriarAssinaturaInput): Promise<Assi
   return { id, initPoint };
 }
 
+// ---------------------------------------------------------------------------
+// Pagamento ÚNICO (Checkout Pro) — pacotes extras de uso
+// ---------------------------------------------------------------------------
+
+export interface CriarCheckoutInput {
+  itemId: string;
+  titulo: string;
+  valor: number; // BRL
+  externalReference: string;
+  notificationUrl: string;
+  backUrl: string;
+}
+
+/** Cria uma preferência de pagamento único e devolve o link do checkout. */
+export async function criarCheckout(input: CriarCheckoutInput): Promise<{ id: string; initPoint: string }> {
+  const token = mpToken();
+  if (!token) throw new Error("MERCADOPAGO_ACCESS_TOKEN ausente");
+  const body = {
+    items: [
+      {
+        id: input.itemId,
+        title: input.titulo,
+        quantity: 1,
+        unit_price: Number(input.valor.toFixed(2)),
+        currency_id: "BRL",
+      },
+    ],
+    external_reference: input.externalReference,
+    notification_url: input.notificationUrl,
+    back_urls: { success: input.backUrl, failure: input.backUrl, pending: input.backUrl },
+    auto_return: "approved",
+  };
+  const res = await fetch(`${MP_API}/checkout/preferences`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body),
+  });
+  const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!res.ok) {
+    throw new Error(`MP preference falhou (${res.status}): ${JSON.stringify(data).slice(0, 300)}`);
+  }
+  const id = String(data.id ?? "");
+  const initPoint = String(data.init_point ?? data.sandbox_init_point ?? "");
+  if (!id || !initPoint) throw new Error("MP não devolveu id/init_point");
+  return { id, initPoint };
+}
+
+export interface PagamentoStatus {
+  id: string;
+  status: string; // approved | pending | rejected | refunded | ...
+  externalReference: string | null;
+  valor: number;
+}
+
+/** Consulta um pagamento (usado pelo webhook dos pacotes). */
+export async function consultarPagamento(id: string): Promise<PagamentoStatus | null> {
+  const token = mpToken();
+  if (!token) return null;
+  const res = await fetch(`${MP_API}/v1/payments/${encodeURIComponent(id)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) return null;
+  const d = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  return {
+    id: String(d.id ?? id),
+    status: String(d.status ?? ""),
+    externalReference: (d.external_reference as string | null) ?? null,
+    valor: Number(d.transaction_amount ?? 0),
+  };
+}
+
 export interface AssinaturaStatus {
   id: string;
   status: string; // pending | authorized | paused | cancelled

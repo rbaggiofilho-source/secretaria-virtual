@@ -1,8 +1,10 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { getEnv } from "../config/env.js";
 import type { OwnerContext, UsuarioRow } from "../memory/context.js";
+import { custoChamadaUsd } from "../memory/uso.js";
+import type { Direito } from "../pay/cota.js";
 import { buildSystemPrompt } from "./system-prompt.js";
-import { runTool, TOOLS } from "./tools.js";
+import { runTool, toolsDoPlano } from "./tools.js";
 
 /**
  * Loop de tool use com o Claude (Haiku mais recente por padrão).
@@ -31,7 +33,9 @@ export async function runSecretary(params: {
   wasAudio?: boolean;
   /** Primeira interação deste usuário (sem histórico) — dispara onboarding. */
   primeiroContato?: boolean;
-}): Promise<string> {
+  /** Plano/direitos do usuário: filtra as tools e orienta o prompt. */
+  direito: Direito;
+}): Promise<{ text: string; consumo: ConsumoIa }> {
   const env = getEnv();
   const client = getClient();
   // Quando a entrada veio de áudio, sinaliza para o modelo aplicar a seção
@@ -53,7 +57,27 @@ export async function runSecretary(params: {
         "COMECE a conhecer o usuário com poucas perguntas (empresa, obras, fases, " +
         "responsáveis) — em CONVERSA, sem textão, salvando na memória o que aprender."
       : "";
-  const system = buildSystemPrompt(params.context, params.usuario) + audioHint + onboardingHint;
+  const prompt = buildSystemPrompt(
+    params.context,
+    params.usuario,
+    params.direito.ilimitado ? null : params.direito.plano,
+  );
+  // Cache de prompt: tools (1h, compartilhado por plano) → parte estática do
+  // system (por usuário) → mensagens (ponto móvel no fim, reaproveitado a cada
+  // volta do loop de tools). Ver custo em src/memory/uso.ts.
+  const system: Anthropic.TextBlockParam[] = [
+    { type: "text", text: prompt.estatico, cache_control: { type: "ephemeral" } },
+    { type: "text", text: prompt.dinamico + audioHint + onboardingHint },
+  ];
+  const tools = toolsDoPlano(params.direito);
+  const consumo: ConsumoIa = {
+    chamadas: 0,
+    tokensEntrada: 0,
+    tokensSaida: 0,
+    tokensCacheLeitura: 0,
+    tokensCacheEscrita: 0,
+    custoUsd: 0,
+  };
 
   // Monta o conteúdo da mensagem atual. Com imagem, usa blocos (visão);
   // sem imagem, mantém a string simples de sempre.
@@ -84,16 +108,17 @@ export async function runSecretary(params: {
 
   // Contexto do turno passado às tools: fila de caminhos das imagens já
   // arquivadas, que o registrar_foto consome para ligar a foto ao arquivo.
-  const toolCtx = { imagePaths: [...(params.imagePaths ?? [])] };
+  const toolCtx = { imagePaths: [...(params.imagePaths ?? [])], direito: params.direito };
 
   for (let turn = 0; turn < MAX_TURNS; turn++) {
     const response = await client.messages.create({
       model: env.ANTHROPIC_MODEL,
       max_tokens: 2048,
       system,
-      tools: TOOLS,
-      messages,
+      tools,
+      messages: comCacheNoFim(messages),
     });
+    somarConsumo(consumo, env.ANTHROPIC_MODEL, response.usage);
 
     // Guarda o turno do assistente (com blocos de tool_use, se houver).
     messages.push({ role: "assistant", content: response.content });
@@ -124,16 +149,56 @@ export async function runSecretary(params: {
       continue; // deixa o modelo reagir aos resultados
     }
 
-    // Sem mais tool use: extrai o texto final.
-    const text = extractText(response);
-    if (text) return text;
-
-    // Resposta sem texto (raro): encerra com aviso.
-    return "Ok.";
+    // Sem mais tool use: extrai o texto final (resposta sem texto é rara).
+    return { text: extractText(response) || "Ok.", consumo };
   }
 
   // Estourou o limite de turnos — avisa em vez de silenciar.
-  return "Processei sua mensagem, mas precisei de muitos passos e parei por segurança. Pode repetir de forma mais direta?";
+  return {
+    text: "Processei sua mensagem, mas precisei de muitos passos e parei por segurança. Pode repetir de forma mais direta?",
+    consumo,
+  };
+}
+
+/** Tokens e custo (US$) somados de todas as chamadas à IA de uma mensagem. */
+export interface ConsumoIa {
+  chamadas: number;
+  tokensEntrada: number;
+  tokensSaida: number;
+  tokensCacheLeitura: number;
+  tokensCacheEscrita: number;
+  custoUsd: number;
+}
+
+function somarConsumo(c: ConsumoIa, model: string, u: Anthropic.Usage): void {
+  c.chamadas += 1;
+  c.tokensEntrada += u.input_tokens;
+  c.tokensSaida += u.output_tokens;
+  c.tokensCacheLeitura += u.cache_read_input_tokens ?? 0;
+  c.tokensCacheEscrita += u.cache_creation_input_tokens ?? 0;
+  c.custoUsd += custoChamadaUsd(model, u);
+}
+
+/**
+ * Cópia das mensagens com um ponto de cache no ÚLTIMO bloco: na volta seguinte
+ * do loop de tools (e na próxima mensagem, se vier em até 5 min) todo o
+ * histórico já enviado é lido do cache (0,1× o preço) em vez de pago de novo.
+ * Não altera `messages` (o ponto anda para o fim a cada chamada).
+ */
+function comCacheNoFim(messages: Anthropic.MessageParam[]): Anthropic.MessageParam[] {
+  if (messages.length === 0) return messages;
+  const copia = messages.slice();
+  const ultima = copia[copia.length - 1]!;
+  const blocos: Anthropic.ContentBlockParam[] =
+    typeof ultima.content === "string"
+      ? [{ type: "text", text: ultima.content }]
+      : ultima.content.slice();
+  const i = blocos.length - 1;
+  if (i >= 0) {
+    blocos[i] = { ...blocos[i], cache_control: { type: "ephemeral" } } as Anthropic.ContentBlockParam;
+  }
+  copia[copia.length - 1] = { ...ultima, content: blocos };
+  return copia;
 }
 
 function extractText(response: Anthropic.Message): string {

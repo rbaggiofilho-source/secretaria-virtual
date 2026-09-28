@@ -191,6 +191,10 @@ WhatsApp. Eventos de status (sent/delivered/read/failed) são logados.
 - `secretaria_planos` — planos vendáveis (PK id essencial/profissional; nome,
   valor, descricao, ativo, ordem). Fonte da verdade dos PREÇOS (pay + landing +
   cadastro + admin leem daqui; fallback estático em `src/pay/planos.ts`).
+- `secretaria_uso` — uso/custo por usuário+mês (PK user_wa,mes; contadores das
+  cotas, tokens, custo_usd, extra_* dos pacotes). RPC `secretaria_uso_incrementar`.
+- `secretaria_pacotes_compras` — compras/concessões de pacotes extras
+  (mp_payment_id único = idempotência do webhook; origem mercadopago|admin).
 - `secretaria_oauth_tokens` — tokens do Google OAuth por usuário (PK user_wa;
   refresh_token, access_token, expiry, scope, google_email). Uma linha por
   variante de wa_id.
@@ -230,7 +234,10 @@ ter nomes duplicados/errados),
 `registrar_material`, `consultar_materiais`,
 `consultar_preco` (orçamentos: devolve `seus_precos` — preços REAIS do próprio
 usuário, do histórico de `secretaria_materiais` via `buscarPrecosDoUsuario`, com
-prioridade — + `referencia` — base de mercado, 433 insumos).
+prioridade — + `referencia` — base de mercado, 433 insumos; `seus_precos` só no
+plano Construtora),
+`comprar_pacote` (saldo do plano no mês + link de pagamento de pacote extra;
+o link vai em mensagem separada).
 
 ## Onboarding do beta (site + OAuth) — desde 07/09/2026
 - **Site de cadastro:** `GET/POST /cadastro` (`api/cadastro.ts`, rewrite no
@@ -319,6 +326,40 @@ banco; nada de novo produto. Rodando em **userosana.com.br** (projeto Vercel
   material são criados via WhatsApp); "orçamento/progresso" de obra (não existe no
   modelo); "consumo de créditos" real em R$ (hoje é proxy por volume de mensagens —
   não há API de saldo Anthropic/Groq); e o `www` (só o apex no registro.br).
+
+## Planos, limites e pacotes (desde 28/09/2026)
+- **3 planos** (`src/pay/planos.ts`): **Agenda R$ 49** (agenda, memória, custos de
+  1 obra; 250 msgs, sem fotos, 30 min áudio), **Obra R$ 89** (+ RDO/PDF, fotos/NF,
+  documentos, revisar conversa, preço de referência; 400 msgs, 50 fotos, 3h, 5
+  obras), **Construtora R$ 159** (+ materiais/cotações, orçamento com os PRÓPRIOS
+  preços; 700 msgs, 300 fotos, 10h, obras ilimitadas). RECURSOS (quais funções)
+  são fixos no código; PREÇO e LIMITES são editáveis no /admin (colunas
+  `limite_*` em `secretaria_planos`, cache de 5 min). Ids antigos
+  `essencial`→obra, `profissional`→construtora. Sem plano (beta) = Construtora.
+  Dono = sem limite.
+- **Por que os limites:** custo medido ~US$ 0,015–0,02/mensagem COM cache de
+  prompt (sem cache era ~US$ 0,04). Limites dimensionados p/ custo de IA ≤ ~50%
+  do preço líquido mesmo com a cota inteira usada.
+- **Aplicação:** `src/pay/cota.ts` (`resolverDireito`, `saldoDoUsuario`,
+  `checarObra`). O pipeline checa a cota ANTES de chamar a IA (mensagens, fotos,
+  áudio estimado por bytes ~2 KB/s) e responde sem gastar IA; o agente só recebe
+  as tools do plano (`toolsDoPlano`) e o `runTool` confere de novo + limite de
+  obras. Aviso ao cruzar 80%. Fail-open: erro ao ler plano/uso não trava.
+- **Medição real:** `secretaria_uso` (user_wa+mês): mensagens, fotos, áudio,
+  tokens (entrada/saída/cache) e `custo_usd` calculado do `usage` da API
+  (`src/memory/uso.ts`). Incremento atômico via RPC `secretaria_uso_incrementar`.
+  O admin mostra o custo REAL por usuário/mês.
+- **Cache de prompt:** system dividido em `estatico` (cacheado) + `dinamico`
+  (data/tabela/memória); cache_control nas tools (1h, compartilhado por plano),
+  no system estático e no fim das mensagens (loop de tools lê do cache).
+- **Pacotes extras** (`PACOTES`, valem até o fim do mês): +100 msgs R$ 19,90;
+  +300 R$ 49,90; +50 fotos R$ 9,90; +2h áudio R$ 9,90. Compra: usuário manda
+  "PACOTE 100/300/FOTOS/AUDIO" (tratado no pipeline SEM IA, funciona com o limite
+  estourado) ou a tool `comprar_pacote` → Checkout Pro do MP (pagamento único) →
+  webhook `pay?acao=webhook` com type=payment → `processarPagamentoPacote` credita
+  (idempotente por `mp_payment_id` em `secretaria_pacotes_compras`) e avisa no
+  WhatsApp. Sem `MERCADOPAGO_ACCESS_TOKEN`: responde "em breve"; o admin pode
+  conceder pacote manualmente (Usuários → "+ pacote").
 
 ## Funcionalidades (todas no ar)
 - **Base:** agenda/lembretes no Google Agenda pessoal; memória (obras/apelidos/pendências); texto e voz.

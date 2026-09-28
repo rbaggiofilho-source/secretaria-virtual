@@ -8,12 +8,14 @@ import {
   consultarDocumentos,
   consultarMateriais,
   consultarFotos,
+  getUsuario,
   type MaterialStatus,
   type TipoFoto,
 } from "../../src/memory/context.js";
 import { salvarObra, excluirObra, type ObraStatus } from "../../src/memory/obras.js";
 import { signedFotoUrl } from "../../src/memory/storage.js";
 import { json, preflight, readJson } from "../../src/auth/http.js";
+import { checarObra, resolverDireito, saldoDoUsuario } from "../../src/pay/cota.js";
 
 /**
  * Roteador único dos DADOS do painel (`?recurso=...`), para caber no limite de
@@ -80,6 +82,34 @@ export default {
             );
             return json(request, { ok: true, fotos: comUrl });
           }
+          case "plano": {
+            // Plano + saldo do mês (Configurações do painel).
+            const usuario = await getUsuario(wa);
+            if (!usuario) return json(request, { ok: false, error: "usuario_nao_encontrado" }, 404);
+            const direito = await resolverDireito(usuario);
+            const saldo = await saldoDoUsuario(usuario, direito);
+            const num = (n: number) => (Number.isFinite(n) ? n : null); // null = ilimitado
+            return json(request, {
+              ok: true,
+              plano: {
+                id: direito.plano.id,
+                nome: direito.plano.nome,
+                valor: direito.plano.valor,
+                recursos: direito.plano.recursos,
+                ilimitado: direito.ilimitado,
+                limiteObras: direito.ilimitado ? null : direito.plano.limites.obras,
+              },
+              uso: {
+                mes: saldo.uso.mes,
+                mensagens: { usado: saldo.mensagens.usado, limite: num(saldo.mensagens.limite) },
+                fotos: { usado: saldo.fotos.usado, limite: num(saldo.fotos.limite) },
+                audioMin: {
+                  usado: Math.round(saldo.audioSeg.usado / 60),
+                  limite: Number.isFinite(saldo.audioSeg.limite) ? Math.round(saldo.audioSeg.limite / 60) : null,
+                },
+              },
+            });
+          }
           default:
             return json(request, { error: "recurso_desconhecido" }, 400);
         }
@@ -91,6 +121,14 @@ export default {
           const nome = (typeof body.nome === "string" ? body.nome : "").trim();
           if (!nome) return json(request, { ok: false, error: "nome_obrigatorio" }, 400);
           const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
+          // Obra NOVA passa pelo limite de obras do plano (editar não conta).
+          if (typeof body.id !== "number") {
+            const usuario = await getUsuario(wa);
+            if (usuario) {
+              const bloqueio = await checarObra(usuario, await resolverDireito(usuario), nome);
+              if (bloqueio) return json(request, { ok: false, error: "limite_obras", mensagem: bloqueio }, 403);
+            }
+          }
           const obra = await salvarObra(wa, {
             id: typeof body.id === "number" ? body.id : null,
             nome,

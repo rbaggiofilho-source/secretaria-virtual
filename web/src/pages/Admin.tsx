@@ -10,6 +10,8 @@ import {
   getOverview,
   getUsuariosAdmin,
   setUsuarioAtivo,
+  setUsuarioPlano,
+  concederPacote,
   getPlanosAdmin,
   salvarPlano,
   type Overview,
@@ -134,6 +136,7 @@ function AbaVisao() {
   if (!data) return <p style={{ color: '#90a69b' }}>Carregando métricas…</p>
   const maxDia = Math.max(1, ...data.novosPorDia.map((d) => d.total))
   const maxConsumo = Math.max(1, ...data.topConsumo.map((c) => c.mensagens))
+  const maxCusto = Math.max(0, ...data.topConsumo.map((c) => c.custo_usd_mes))
   const t = data.totais
   return (
     <>
@@ -170,20 +173,36 @@ function AbaVisao() {
       </div>
 
       <div className="adm-card">
-        <h2>Consumo por usuário <small>· proxy por volume de mensagens ({data.mensagensTotais} no total)</small></h2>
+        <h2>Custo real de IA no mês <small>· medido da API (IA + transcrição), sem o dono: US$ {data.custoIaMesUsd.toFixed(2)}</small></h2>
         <div className="adm-bars">
           {data.topConsumo.length === 0 && <p style={{ color: '#90a69b', fontSize: 13 }}>Sem atividade ainda.</p>}
           {data.topConsumo.map((c, i) => (
             <div className="adm-bar-row" key={i}>
-              <span className="lbl">{c.nome || c.email || '—'}</span>
-              <div className="adm-bar" style={{ width: `${(c.mensagens / maxConsumo) * 100}%` }} />
-              <span className="val">{c.mensagens}</span>
+              <span className="lbl">{c.nome || c.email || '—'}{c.plano ? ` · ${c.plano}` : ''}</span>
+              <div className="adm-bar" style={{ width: `${(maxCusto > 0 ? c.custo_usd_mes / maxCusto : c.mensagens / maxConsumo) * 100}%` }} />
+              <span className="val">US$ {c.custo_usd_mes.toFixed(2)} · {c.mensagens_mes} msgs</span>
             </div>
           ))}
         </div>
       </div>
     </>
   )
+}
+
+// Pacotes extras que o admin pode conceder (mesmos ids de src/pay/planos.ts).
+const PACOTES_ADMIN = [
+  { id: 'mensagens_100', nome: '+100 mensagens' },
+  { id: 'mensagens_300', nome: '+300 mensagens' },
+  { id: 'fotos_50', nome: '+50 fotos' },
+  { id: 'audio_120', nome: '+2h de áudio' },
+]
+
+/** Plano gravado → valor do select (ids antigos caem no equivalente). */
+function planoAtual(plano: string | null): string {
+  if (!plano) return ''
+  if (plano === 'essencial') return 'obra'
+  if (plano === 'profissional') return 'construtora'
+  return plano
 }
 
 function statusPill(u: UsuarioAdmin) {
@@ -213,6 +232,17 @@ function AbaUsuarios() {
     setSalvando(u.user_wa)
     try { await setUsuarioAtivo(u.user_wa, !u.ativo); carregar() } finally { setSalvando(null) }
   }
+  async function trocarPlano(u: UsuarioAdmin, plano: string) {
+    setSalvando(u.user_wa)
+    try { await setUsuarioPlano(u.user_wa, plano); carregar() } finally { setSalvando(null) }
+  }
+  async function darPacote(u: UsuarioAdmin, pacote: string) {
+    if (!pacote) return
+    const nomePacote = PACOTES_ADMIN.find((p) => p.id === pacote)?.nome ?? pacote
+    if (!window.confirm(`Conceder "${nomePacote}" para ${u.nome || u.user_wa} neste mês (sem cobrança)?`)) return
+    setSalvando(u.user_wa)
+    try { await concederPacote(u.user_wa, pacote); carregar() } finally { setSalvando(null) }
+  }
 
   if (erro) return <p className="adm-erro">Não consegui carregar os usuários.</p>
   if (!usuarios) return <p style={{ color: '#90a69b' }}>Carregando usuários…</p>
@@ -222,17 +252,35 @@ function AbaUsuarios() {
       <input className="adm-mini" style={{ width: '100%', height: 40, marginBottom: 12, boxSizing: 'border-box' }} placeholder="Buscar por nome, e-mail, número, plano…" value={busca} onChange={(e) => setBusca(e.target.value)} />
       <div style={{ overflowX: 'auto' }}>
         <table className="adm-table">
-          <thead><tr><th>Nome</th><th>Contato</th><th>Plano</th><th>Status</th><th>Msgs</th><th>Desde</th><th></th></tr></thead>
+          <thead><tr><th>Nome</th><th>Contato</th><th>Plano</th><th>Status</th><th>Msgs (mês)</th><th>Custo IA (mês)</th><th>Desde</th><th></th></tr></thead>
           <tbody>
             {filtrados.map((u) => (
               <tr key={u.user_wa}>
                 <td>{u.nome || '—'} {u.dono && <span className="adm-pill on">dono</span>}</td>
                 <td style={{ color: '#90a69b' }}>{u.email || u.user_wa}</td>
-                <td>{u.plano || '—'}</td>
+                <td>
+                  {u.dono ? 'sem limite' : (
+                    <select className="adm-mini" value={planoAtual(u.plano)} disabled={salvando === u.user_wa} onChange={(e) => trocarPlano(u, e.target.value)}>
+                      {!u.plano && <option value="">beta (= construtora)</option>}
+                      <option value="agenda">agenda</option>
+                      <option value="obra">obra</option>
+                      <option value="construtora">construtora</option>
+                    </select>
+                  )}
+                </td>
                 <td>{statusPill(u)}</td>
-                <td style={{ fontVariantNumeric: 'tabular-nums' }}>{u.mensagens}</td>
+                <td style={{ fontVariantNumeric: 'tabular-nums' }}>{u.mensagens_mes} <span style={{ color: '#90a69b' }}>/ {u.mensagens} total</span></td>
+                <td style={{ fontVariantNumeric: 'tabular-nums' }}>US$ {u.custo_usd_mes.toFixed(2)}</td>
                 <td style={{ color: '#90a69b' }}>{u.criado_em ? u.criado_em.slice(0, 10) : '—'}</td>
-                <td>{!u.dono && <button className="adm-mini" disabled={salvando === u.user_wa} onClick={() => alternar(u)}>{u.ativo ? 'Desativar' : 'Ativar'}</button>}</td>
+                <td style={{ whiteSpace: 'nowrap' }}>
+                  {!u.dono && <button className="adm-mini" disabled={salvando === u.user_wa} onClick={() => alternar(u)}>{u.ativo ? 'Desativar' : 'Ativar'}</button>}
+                  {!u.dono && (
+                    <select className="adm-mini" style={{ marginLeft: 6 }} value="" disabled={salvando === u.user_wa} onChange={(e) => darPacote(u, e.target.value)}>
+                      <option value="">+ pacote…</option>
+                      {PACOTES_ADMIN.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
+                    </select>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -250,7 +298,7 @@ function AbaPlanos() {
   if (!planos) return <p style={{ color: '#90a69b' }}>Carregando planos…</p>
   return (
     <div className="adm-card">
-      <h2>Planos e valores <small>· editar aqui muda o preço cobrado e o que aparece no site</small></h2>
+      <h2>Planos, valores e limites <small>· editar aqui muda o preço cobrado, o site e os limites aplicados no WhatsApp (as funções de cada plano são fixas no código)</small></h2>
       {planos.map((p) => <PlanoEditor key={p.id} plano={p} />)}
     </div>
   )
@@ -261,14 +309,25 @@ function PlanoEditor({ plano }: { plano: PlanoAdmin }) {
   const [valor, setValor] = useState(String(plano.valor))
   const [descricao, setDescricao] = useState(plano.descricao ?? '')
   const [ativo, setAtivo] = useState(plano.ativo)
+  const [msgs, setMsgs] = useState(String(plano.limite_mensagens ?? ''))
+  const [fotos, setFotos] = useState(String(plano.limite_fotos ?? ''))
+  const [audio, setAudio] = useState(String(plano.limite_audio_min ?? ''))
+  const [obras, setObras] = useState(plano.limite_obras === null ? '' : String(plano.limite_obras ?? ''))
   const [estado, setEstado] = useState<'idle' | 'salvando' | 'ok' | 'erro'>('idle')
 
   async function salvar() {
     const v = Number(valor.replace(',', '.'))
-    if (!Number.isFinite(v) || v < 0) { setEstado('erro'); return }
+    const inteiro = (s: string) => { const n = Math.floor(Number(s)); return Number.isFinite(n) && n >= 0 ? n : NaN }
+    const lim = { m: inteiro(msgs), f: inteiro(fotos), a: inteiro(audio) }
+    if (!Number.isFinite(v) || v < 0 || Number.isNaN(lim.m) || Number.isNaN(lim.f) || Number.isNaN(lim.a)) { setEstado('erro'); return }
+    const limObras = obras.trim() === '' ? null : inteiro(obras)
+    if (limObras !== null && Number.isNaN(limObras)) { setEstado('erro'); return }
     setEstado('salvando')
     try {
-      await salvarPlano({ id: plano.id, nome, valor: v, descricao, ativo })
+      await salvarPlano({
+        id: plano.id, nome, valor: v, descricao, ativo,
+        limite_mensagens: lim.m, limite_fotos: lim.f, limite_audio_min: lim.a, limite_obras: limObras,
+      })
       setEstado('ok'); setTimeout(() => setEstado('idle'), 2000)
     } catch { setEstado('erro') }
   }
@@ -280,6 +339,10 @@ function PlanoEditor({ plano }: { plano: PlanoAdmin }) {
       <label className="full">Descrição<input value={descricao} onChange={(e) => setDescricao(e.target.value)} /></label>
       <label>Ativo<select value={ativo ? '1' : '0'} onChange={(e) => setAtivo(e.target.value === '1')}><option value="1">Sim (aparece no site)</option><option value="0">Não</option></select></label>
       <label>Prévia<input value={formatarBRL(Number(valor.replace(',', '.')) || 0) + '/mês'} disabled /></label>
+      <label>Mensagens/mês<input value={msgs} onChange={(e) => setMsgs(e.target.value)} inputMode="numeric" /></label>
+      <label>Fotos/mês (0 = sem fotos)<input value={fotos} onChange={(e) => setFotos(e.target.value)} inputMode="numeric" /></label>
+      <label>Áudio (min/mês)<input value={audio} onChange={(e) => setAudio(e.target.value)} inputMode="numeric" /></label>
+      <label>Obras (vazio = ilimitado)<input value={obras} onChange={(e) => setObras(e.target.value)} inputMode="numeric" /></label>
       <div className="row-actions">
         {estado === 'ok' && <span style={{ color: '#57c99b', fontSize: 12, alignSelf: 'center' }}>Salvo ✓</span>}
         {estado === 'erro' && <span style={{ color: '#d9705f', fontSize: 12, alignSelf: 'center' }}>Erro ao salvar</span>}

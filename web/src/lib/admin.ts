@@ -84,8 +84,17 @@ export interface Overview {
   porPlano: { plano: string; total: number; ativos: number }[]
   porStatusAssinatura: { status: string; total: number }[]
   novosPorDia: { data: string; total: number }[]
-  topConsumo: { nome: string | null; email: string | null; mensagens: number }[]
+  topConsumo: {
+    nome: string | null
+    email: string | null
+    plano: string | null
+    mensagens: number
+    mensagens_mes: number
+    custo_usd_mes: number
+  }[]
   mensagensTotais: number
+  /** Custo REAL de IA+transcrição no mês (medido da API). */
+  custoIaMesUsd: number
 }
 export function getOverview() {
   return adminCall<{ ok: boolean; data: Overview }>('/api/app/admin?recurso=overview')
@@ -103,6 +112,8 @@ export interface UsuarioAdmin {
   criado_em: string | null
   assinatura_em: string | null
   mensagens: number
+  mensagens_mes: number
+  custo_usd_mes: number
 }
 export function getUsuariosAdmin() {
   return adminCall<{ ok: boolean; usuarios: UsuarioAdmin[] }>('/api/app/admin?recurso=usuarios')
@@ -114,6 +125,20 @@ export function setUsuarioAtivo(user_wa: string, ativo: boolean) {
   })
 }
 
+export function setUsuarioPlano(user_wa: string, plano: string) {
+  return adminCall<{ ok: boolean }>('/api/app/admin?acao=set-usuario-plano', {
+    method: 'POST',
+    body: JSON.stringify({ user_wa, plano }),
+  })
+}
+/** Concede um pacote extra no mês (cortesia/venda manual). */
+export function concederPacote(user_wa: string, pacote: string) {
+  return adminCall<{ ok: boolean }>('/api/app/admin?acao=conceder-pacote', {
+    method: 'POST',
+    body: JSON.stringify({ user_wa, pacote }),
+  })
+}
+
 export interface PlanoAdmin {
   id: string
   nome: string
@@ -121,9 +146,19 @@ export interface PlanoAdmin {
   descricao: string | null
   ativo: boolean
   ordem: number
+  limite_mensagens: number
+  limite_fotos: number
+  limite_audio_min: number
+  /** null = ilimitado */
+  limite_obras: number | null
+}
+export interface PacoteAdmin {
+  id: string
+  nome: string
+  valor: number
 }
 export function getPlanosAdmin() {
-  return adminCall<{ ok: boolean; planos: PlanoAdmin[] }>('/api/app/admin?recurso=planos')
+  return adminCall<{ ok: boolean; planos: PlanoAdmin[]; pacotes: PacoteAdmin[] }>('/api/app/admin?recurso=planos')
 }
 export function salvarPlano(p: Partial<PlanoAdmin> & { id: string }) {
   return adminCall<{ ok: boolean; plano: PlanoAdmin }>('/api/app/admin?acao=set-plano', {

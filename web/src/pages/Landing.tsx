@@ -26,6 +26,56 @@ const passos = [
   { number: '03', title: 'Você acompanha', text: 'Veja o panorama das suas obras no painel e volte sua atenção para o que realmente importa.' },
 ]
 
+// Cartões dos planos. Preço e limites vêm do backend (editáveis no /admin);
+// os valores aqui são só o fallback se a API não responder.
+interface Cartao {
+  id: 'agenda' | 'obra' | 'construtora'
+  rotulo: string
+  titulo: string
+  texto: string
+  itens: string[]
+  valorPadrao: number
+  limitesPadrao: { mensagens: number; fotos: number; audioMin: number; obras: number | null }
+  destaque?: boolean
+}
+
+const cartoes: Cartao[] = [
+  {
+    id: 'agenda', rotulo: 'AGENDA', titulo: 'Para organizar a rotina',
+    texto: 'Sua agenda e suas pendências no WhatsApp, por texto ou áudio.',
+    itens: ['Agenda e lembretes no Google Agenda', 'Memória e pendências', '"Bom dia" com o seu dia', 'Custos de 1 obra', 'Áudio transcrito'],
+    valorPadrao: 49, limitesPadrao: { mensagens: 250, fotos: 0, audioMin: 30, obras: 1 },
+  },
+  {
+    id: 'obra', rotulo: 'OBRA', titulo: 'Sua obra no controle',
+    texto: 'Para quem toca algumas obras e precisa de registro técnico.',
+    itens: ['Tudo do plano Agenda', 'Diário de Obra (RDO) por voz + PDF', 'Nota fiscal por foto (lança o custo)', 'Prazos de alvará, ART/RRT e ASO', 'Orçamento com preços de mercado', 'Painel web completo'],
+    valorPadrao: 89, limitesPadrao: { mensagens: 400, fotos: 50, audioMin: 180, obras: 5 }, destaque: true,
+  },
+  {
+    id: 'construtora', rotulo: 'CONSTRUTORA', titulo: 'Operação completa',
+    texto: 'Para escritórios e construtoras com várias frentes.',
+    itens: ['Tudo do plano Obra', 'Obras ilimitadas', 'Compras, cotações e fornecedores', 'Orçamento com os SEUS preços reais', 'Mais fotos, áudio e mensagens'],
+    valorPadrao: 159, limitesPadrao: { mensagens: 700, fotos: 300, audioMin: 600, obras: null },
+  },
+]
+
+function limitesTexto(p: PlanoPublico | undefined, c: Cartao): string[] {
+  const l = {
+    mensagens: p?.limite_mensagens ?? c.limitesPadrao.mensagens,
+    fotos: p?.limite_fotos ?? c.limitesPadrao.fotos,
+    audioMin: p?.limite_audio_min ?? c.limitesPadrao.audioMin,
+    obras: p ? p.limite_obras ?? null : c.limitesPadrao.obras,
+  }
+  const horas = l.audioMin >= 60 ? `${Math.round(l.audioMin / 60)}h de áudio` : `${l.audioMin} min de áudio`
+  return [
+    `${l.mensagens} mensagens/mês`,
+    l.fotos > 0 ? `${l.fotos} fotos/notas por mês` : 'Sem fotos/notas fiscais',
+    `${horas}/mês`,
+    l.obras === null ? 'Obras ilimitadas' : `Até ${l.obras} obra${l.obras > 1 ? 's' : ''}`,
+  ]
+}
+
 function Logo() {
   return <div className="logo" aria-label="Rosana"><span className="logo-mark" aria-hidden="true"><i></i><i></i><i></i></span><span>rosana<i>.</i></span></div>
 }
@@ -41,8 +91,6 @@ export function Landing() {
       })
       .catch(() => {})
   }, [])
-  const ess = partesPreco(planos.essencial?.valor ?? 89.9)
-  const pro = partesPreco(planos.profissional?.valor ?? 169.9)
   return (
     <div className="sales-page">
       <header className="sales-header">
@@ -109,12 +157,24 @@ export function Landing() {
 
         <section className="sales-section pricing-section" id="planos">
           <div className="section-heading section-heading--center"><p className="sales-kicker">PLANOS PARA CONSTRUIR COM CONTROLE</p><h2>Seu tempo vale mais.</h2><p>Escolha a estrutura ideal para a sua rotina. Cancele quando quiser.</p></div>
-          <div className="pricing-grid">
-            {/* TODO: preço a confirmar */}
-            <article className="price-card"><div><span className="plan-name">ESSENCIAL</span><h3>Para organizar a rotina</h3><p>Comece a tirar informações do papel e centralizar a sua obra.</p></div><div className="price"><small>R$</small><strong>{ess.int}</strong><span>,{ess.cc}<br /><em>/ mês</em></span></div><ul><li>✓ Agenda e lembretes</li><li>✓ Custos por obra</li><li>✓ Registro fotográfico</li><li>✓ Painel web completo</li></ul><a className="sales-button sales-button--outline-dark" href="/cadastro?plano=essencial">Assinar Essencial</a><small className="price-disclaimer">Valor provisório para validação comercial.</small></article>
-            {/* TODO: preço a confirmar */}
-            <article className="price-card price-card--highlight"><span className="popular-label">MAIS COMPLETO</span><div><span className="plan-name">PROFISSIONAL</span><h3>Sua operação organizada</h3><p>Recursos inteligentes para acompanhar mais obras com produtividade.</p></div><div className="price"><small>R$</small><strong>{pro.int}</strong><span>,{pro.cc}<br /><em>/ mês</em></span></div><ul><li>✓ Tudo do plano Essencial</li><li>✓ RDO por voz e PDF</li><li>✓ Nota fiscal por foto</li><li>✓ Compras e cotações</li><li>✓ Histórico de preços e orçamentos</li></ul><a className="sales-button sales-button--accent" href="/cadastro?plano=profissional">Assinar Profissional</a><small className="price-disclaimer">Valor provisório para validação comercial.</small></article>
+          <div className="pricing-grid pricing-grid--3">
+            {cartoes.map((c) => {
+              const p = planos[c.id]
+              const preco = partesPreco(p?.valor ?? c.valorPadrao)
+              const lim = limitesTexto(p, c)
+              return (
+                <article key={c.id} className={`price-card${c.destaque ? ' price-card--highlight' : ''}`}>
+                  {c.destaque && <span className="popular-label">MAIS ESCOLHIDO</span>}
+                  <div><span className="plan-name">{c.rotulo}</span><h3>{c.titulo}</h3><p>{c.texto}</p></div>
+                  <div className="price"><small>R$</small><strong>{preco.int}</strong><span>,{preco.cc}<br /><em>/ mês</em></span></div>
+                  <ul>{c.itens.map((i) => <li key={i}>✓ {i}</li>)}</ul>
+                  <ul className="plan-limits">{lim.map((l) => <li key={l}>{l}</li>)}</ul>
+                  <a className={`sales-button ${c.destaque ? 'sales-button--accent' : 'sales-button--outline-dark'}`} href={`/cadastro?plano=${c.id}`}>Assinar {c.rotulo.charAt(0) + c.rotulo.slice(1).toLowerCase()}</a>
+                </article>
+              )
+            })}
           </div>
+          <p className="pricing-extras">Bateu o limite do mês? Sem precisar trocar de plano: compre um pacote extra direto no WhatsApp — +100 mensagens por R$ 19,90, +50 fotos por R$ 9,90 ou +2h de áudio por R$ 9,90.</p>
         </section>
 
         <section className="final-cta"><span className="cta-detail" aria-hidden="true"></span><div><p className="sales-kicker sales-kicker--light">SUA OBRA PEDE A SUA ATENÇÃO</p><h2>Deixe a organização<br />com a <em>Rosana.</em></h2><p>Comece agora e descubra uma rotina com mais clareza, produtividade e tempo para construir.</p><a className="sales-button sales-button--accent" href="/cadastro">Quero ganhar meu tempo de volta <span>→</span></a></div></section>

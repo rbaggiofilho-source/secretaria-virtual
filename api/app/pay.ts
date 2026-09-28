@@ -2,6 +2,7 @@ import { getEnv } from "../../src/config/env.js";
 import { json, preflight, readJson } from "../../src/auth/http.js";
 import { getPlanoDb } from "../../src/pay/planos-db.js";
 import { mpConfigured, criarAssinatura, consultarAssinatura } from "../../src/pay/mercadopago.js";
+import { processarPagamentoPacote } from "../../src/pay/pacotes.js";
 import {
   registrarLeadPagamento,
   atualizarAssinatura,
@@ -44,7 +45,7 @@ async function assinar(request: Request): Promise<Response> {
   const cpf = String(body.cpf ?? "").trim();
   const endereco = String(body.endereco ?? "").trim();
   const profissao = String(body.profissao ?? "").trim();
-  const plano = await getPlanoDb(String(body.plano ?? "profissional"));
+  const plano = await getPlanoDb(String(body.plano ?? "obra"));
 
   if (!nome || nome.split(/\s+/).length < 2) return json(request, { ok: false, error: "nome_invalido" }, 400);
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json(request, { ok: false, error: "email_invalido" }, 400);
@@ -91,8 +92,15 @@ async function webhook(request: Request, url: URL): Promise<Response> {
     topic = String(body?.type ?? body?.topic ?? topic ?? "");
   }
 
-  // Só interessam eventos de assinatura (preapproval).
   if (!id) return json(request, { ok: true, ignored: true });
+
+  // Pagamento único = pacote extra de uso (Checkout Pro).
+  if (/^payment$/i.test(topic)) {
+    const r = await processarPagamentoPacote(id);
+    return json(request, { ok: true, pacote: r });
+  }
+
+  // Demais: só interessam eventos de assinatura (preapproval).
   if (topic && !/preapproval|subscription/i.test(topic)) return json(request, { ok: true, ignored: true });
 
   const info = await consultarAssinatura(id);

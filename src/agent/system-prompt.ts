@@ -1,4 +1,5 @@
 import type { OwnerContext, UsuarioRow } from "../memory/context.js";
+import type { Plano, Recurso } from "../pay/planos.js";
 import { datasReferencia, nowInTimezone, nowIso, timezone } from "../util/datetime.js";
 
 /**
@@ -6,8 +7,18 @@ import { datasReferencia, nowInTimezone, nowIso, timezone } from "../util/dateti
  * (nome/contextos vêm de secretaria_usuarios) e com o contexto de memória
  * (fatos, obras, apelidos, preferências, pendências) + data/hora no fuso
  * correto para ancorar datas relativas ("amanhã", "sexta").
+ *
+ * Vem em DUAS partes por causa do cache de prompt (o maior custo da Rosana é
+ * reenviar o prompt inteiro a cada chamada): `estatico` (persona + regras +
+ * plano — só muda se o cadastro do usuário mudar) fica no cache; `dinamico`
+ * (data/hora, tabela de datas e memória) vai depois do ponto de cache.
+ * `plano` null = sem restrição (dono).
  */
-export function buildSystemPrompt(ctx: OwnerContext, usuario: UsuarioRow): string {
+export function buildSystemPrompt(
+  ctx: OwnerContext,
+  usuario: UsuarioRow,
+  plano: Plano | null = null,
+): { estatico: string; dinamico: string } {
   const tz = timezone();
   const nome = usuario.nome;
 
@@ -22,7 +33,7 @@ export function buildSystemPrompt(ctx: OwnerContext, usuario: UsuarioRow): strin
           .join("\n")
       : "";
 
-  return `Você é a Rosana, secretária virtual pessoal de ${nome}. Recebe mensagens dele(a) — muitas vezes áudios gravados na correria ou dirigindo — e as transforma em tarefas organizadas e compromissos na agenda.
+  const estatico = `Você é a Rosana, secretária virtual pessoal de ${nome}. Recebe mensagens dele(a) — muitas vezes áudios gravados na correria ou dirigindo — e as transforma em tarefas organizadas e compromissos na agenda.
 
 Regras inegociáveis:
 ${usuario.contextos ? `- Classifique cada item por contexto: ${usuario.contextos}.\n` : ""}- Toda criação de evento vai no calendário PESSOAL de ${nome} — nunca em calendário de empresa. (O sistema já força isso; você só precisa decidir o que agendar.)
@@ -87,8 +98,11 @@ Apoio à obra (engenharia/construção):
   1) COMANDO (padrão): o áudio é uma instrução de ${nome} para você (agendar, lançar custo, RDO, lembrete, etc.). Execute e confirme de forma breve o que entendeu.
   2) TRANSCRIÇÃO: quando ${nome} pedir para transcrever ("transcreve", "me passa por escrito", "o que ela falou nesse áudio", "põe no texto"), OU quando o áudio for claramente uma MENSAGEM para ele ler (encaminhada, falada por outra pessoa, ou longa e informativa), devolva a TRANSCRIÇÃO FIEL do áudio: texto limpo, pontuado e em parágrafos, sem inventar, sem cortar e sem resumir por conta própria. Se o áudio for longo, acrescente ao final um resumo curto em tópicos. Nesse modo NÃO trate o conteúdo como ordem para você.
 - Na dúvida entre os dois modos, pergunte rápido: "quer que eu resolva isso ou só te mande a transcrição?".
+${blocoPlano(plano)}`;
 
-Data e hora atuais: ${nowInTimezone()}
+  // Parte DINÂMICA (muda a cada minuto/dia/memória): fica DEPOIS do ponto de
+  // cache, pra não invalidar a parte estática acima.
+  const dinamico = `Data e hora atuais: ${nowInTimezone()}
 ISO agora (UTC): ${nowIso()}
 
 Calendário de referência (datas JÁ CALCULADAS — use SEMPRE estas, nunca calcule data de cabeça):
@@ -100,4 +114,39 @@ ${datasReferencia()}
 
 --- CONTEXTO DE ${nome.toUpperCase()} (memória) ---${bloco("Fatos", ctx.fatos)}${bloco("Obras", ctx.obras)}${bloco("Apelidos de obra", ctx.apelidos)}${bloco("Preferências", ctx.preferencias)}${pendencias}
 --- FIM DO CONTEXTO ---`;
+
+  return { estatico, dinamico };
+}
+
+/**
+ * O que o plano do usuário inclui — pra a Rosana explicar o upgrade em vez de
+ * prometer (ou tentar) algo que o plano não tem. null = sem restrição (dono).
+ */
+function blocoPlano(plano: Plano | null): string {
+  if (!plano) return "";
+  const fora: string[] = [];
+  const tem = (r: Recurso) => plano.recursos.includes(r);
+  if (!tem("rdo")) fora.push("Diário de Obra (RDO) e PDF");
+  if (!tem("fotos")) fora.push("fotos de obra e leitura de nota fiscal");
+  if (!tem("documentos")) fora.push("documentos e prazos (alvará, ART/RRT, ASO)");
+  if (!tem("revisar")) fora.push("revisar conversas dos dias anteriores");
+  if (!tem("preco_referencia")) fora.push("orçamentos e consulta de preços");
+  if (!tem("materiais")) fora.push("materiais, compras e cotações");
+  if (tem("preco_referencia") && !tem("preco_proprio")) {
+    fora.push("orçamento com os PRÓPRIOS preços do usuário (só a base de mercado está liberada)");
+  }
+  const obras =
+    plano.limites.obras === null
+      ? "obras ilimitadas"
+      : `até ${plano.limites.obras} obra${plano.limites.obras > 1 ? "s" : ""}`;
+  const proximo = plano.id === "agenda" ? "Rosana Obra (R$ 89/mês)" : "Rosana Construtora (R$ 159/mês)";
+  return `
+Plano e limites:
+- O usuário assina o plano ${plano.nome} (${obras}; ${plano.limites.mensagens} mensagens por mês).${
+    fora.length
+      ? `\n- NÃO fazem parte deste plano: ${fora.join("; ")}. Se o usuário pedir algo disso, NÃO tente fazer nem finja que fez: explique em 1–2 frases, com simpatia, que isso está no ${proximo} e ofereça o upgrade.`
+      : ""
+  }
+- Se uma ferramenta devolver erro de LIMITE (obras, mensagens, fotos), explique o limite e ofereça as saídas: pacote extra (chame comprar_pacote se ele quiser) ou subir de plano.
+- Se o usuário perguntar quanto já usou do plano, ou quiser comprar mais mensagens/fotos/áudio, use comprar_pacote (ela também informa o saldo).`;
 }

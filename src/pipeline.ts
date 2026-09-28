@@ -8,6 +8,20 @@ import {
   type UsuarioRow,
 } from "./memory/context.js";
 import { uploadFoto } from "./memory/storage.js";
+import { custoAudioUsd, incrementarUso } from "./memory/uso.js";
+import {
+  avisoOitentaPorCento,
+  menuPacotes,
+  pacoteDoTexto,
+  resolverDireito,
+  saldoDoUsuario,
+  temRecurso,
+  textoLimite,
+  type Direito,
+  type Saldo,
+} from "./pay/cota.js";
+import { iniciarCompraPacote } from "./pay/pacotes.js";
+import { PLANOS } from "./pay/planos.js";
 import { transcribe } from "./stt/index.js";
 import { downloadMedia, sendTextMessage } from "./whatsapp/client.js";
 import type { WhatsAppMessage } from "./whatsapp/types.js";
@@ -56,14 +70,74 @@ export async function handleIncomingMessage(message: WhatsAppMessage): Promise<v
     }
   }
 
+  // Plano e saldo do mês. Falha aqui NUNCA trava o usuário (fail-open): sem
+  // saldo, só não aplicamos limite nesta mensagem.
+  let direito: Direito;
+  try {
+    direito = await resolverDireito(usuario);
+  } catch (err) {
+    logError("resolver plano", err);
+    direito = { plano: PLANOS.construtora, ilimitado: true };
+  }
+  let saldo: Saldo | null = null;
+  if (!direito.ilimitado) {
+    try {
+      saldo = await saldoDoUsuario(usuario, direito);
+    } catch (err) {
+      logError("ler uso do mês", err);
+    }
+  }
+
+  // "PACOTE 100" etc.: gera o link de pagamento sem passar pela IA (funciona
+  // mesmo com o limite estourado, que é justamente quando ele é usado).
+  if (message.type === "text") {
+    const pacoteId = pacoteDoTexto((message as { text: { body: string } }).text.body ?? "");
+    if (pacoteId) {
+      await responderPacote(from, usuario, direito, pacoteId);
+      return;
+    }
+  }
+
+  // Limite de mensagens do mês (limite do plano + pacotes extras).
+  if (saldo && saldo.mensagens.restante <= 0) {
+    await safeReply(from, textoLimite("mensagens", direito));
+    return;
+  }
+  if (message.type === "image") {
+    if (!temRecurso(direito, "fotos")) {
+      await safeReply(from, textoLimite("fotos_fora_do_plano", direito));
+      return;
+    }
+    if (saldo && saldo.fotos.restante <= 0) {
+      await safeReply(from, textoLimite("fotos", direito));
+      return;
+    }
+  }
+
   let userText: string;
+  let audioSeg = 0;
   let images: Array<{ base64: string; mimeType: string }> = [];
   // Caminhos dos arquivos já arquivados no Storage (para o registrar_foto ligar
   // a foto ao arquivo). Vazio quando não há imagem ou o arquivamento falhou.
   const imagePaths: string[] = [];
 
   try {
-    if (message.type === "image") {
+    if (message.type === "audio") {
+      const audioId = (message as { audio: { id: string } }).audio.id;
+      console.log(`[audio] Baixando mídia ${audioId}...`);
+      const { buffer, mimeType } = await downloadMedia(audioId);
+      audioSeg = estimarDuracaoAudioSeg(buffer.length);
+      if (saldo && saldo.audioSeg.restante < audioSeg) {
+        await safeReply(from, textoLimite("audio", direito));
+        return;
+      }
+      console.log(
+        `[audio] Mídia baixada: ${buffer.length} bytes (${mimeType}, ~${audioSeg}s). Transcrevendo...`,
+      );
+      userText = await transcribe({ buffer, mimeType });
+      // Nunca logamos o conteúdo transcrito (é dado do dono) — só o tamanho.
+      console.log(`[audio] Transcrição concluída (${userText.length} caracteres).`);
+    } else if (message.type === "image") {
       // Imagem (foto de obra / nota fiscal): baixa os bytes e manda para o
       // Claude com visão. A legenda da foto vira o texto do usuário.
       const img = (message as { image: { id: string; caption?: string } }).image;
@@ -102,7 +176,7 @@ export async function handleIncomingMessage(message: WhatsAppMessage): Promise<v
       loadRecentHistory(from),
     ]);
 
-    const reply = await runSecretary({
+    const { text: resposta, consumo } = await runSecretary({
       usuario,
       userText,
       images,
@@ -112,7 +186,30 @@ export async function handleIncomingMessage(message: WhatsAppMessage): Promise<v
       wasAudio: message.type === "audio",
       // Sem histórico = primeiro contato: dispara as boas-vindas guiadas.
       primeiroContato: history.length === 0,
+      direito,
     });
+
+    // Uso do mês: conta a mensagem + custo REAL (tokens da API + STT). Não
+    // crítico: falha aqui não impede a resposta.
+    try {
+      await incrementarUso(from, {
+        mensagens: 1,
+        fotos: images.length,
+        audioSeg,
+        chamadasIa: consumo.chamadas,
+        tokensEntrada: consumo.tokensEntrada,
+        tokensSaida: consumo.tokensSaida,
+        tokensCacheLeitura: consumo.tokensCacheLeitura,
+        tokensCacheEscrita: consumo.tokensCacheEscrita,
+        custoUsd: consumo.custoUsd + (audioSeg ? custoAudioUsd(audioSeg) : 0),
+      });
+    } catch (err) {
+      logError("registrar uso", err);
+    }
+    const aviso = saldo
+      ? avisoOitentaPorCento(saldo.mensagens.usado, saldo.mensagens.usado + 1, saldo.mensagens.limite)
+      : null;
+    const reply = aviso ? resposta + aviso : resposta;
 
     // Persiste histórico (não crítico) e responde (crítico). Para imagem sem
     // legenda, registra um marcador legível no histórico.
@@ -121,7 +218,7 @@ export async function handleIncomingMessage(message: WhatsAppMessage): Promise<v
       "user",
       userText.trim() || (images.length ? "[imagem enviada]" : userText),
     );
-    await appendConversation(from, "assistant", reply);
+    await appendConversation(from, "assistant", resposta);
     await sendTextMessage(from, reply);
   } catch (err) {
     logError("agente/calendar/resposta", err);
@@ -132,27 +229,54 @@ export async function handleIncomingMessage(message: WhatsAppMessage): Promise<v
   }
 }
 
-/** Converte a mensagem em texto: usa o corpo (texto) ou transcreve (áudio). */
+/** Converte a mensagem de texto em texto (áudio e imagem são tratados antes). */
 async function resolveUserText(message: WhatsAppMessage): Promise<string> {
   if (message.type === "text") {
     return (message as { text: { body: string } }).text.body ?? "";
   }
 
-  if (message.type === "audio") {
-    const audioId = (message as { audio: { id: string } }).audio.id;
-    console.log(`[audio] Baixando mídia ${audioId}...`);
-    const { buffer, mimeType } = await downloadMedia(audioId);
-    console.log(
-      `[audio] Mídia baixada: ${buffer.length} bytes (${mimeType}). Transcrevendo...`,
-    );
-    const text = await transcribe({ buffer, mimeType });
-    // Nunca logamos o conteúdo transcrito (é dado do dono) — só o tamanho.
-    console.log(`[audio] Transcrição concluída (${text.length} caracteres).`);
-    return text;
-  }
-
-  // Tipos não suportados (imagem, documento, etc.)
+  // Tipos não suportados (documento, vídeo, etc.)
   throw new Error(`Tipo de mensagem não suportado: ${message.type}`);
+}
+
+/**
+ * Duração aproximada de um áudio do WhatsApp pelo tamanho: nota de voz é
+ * OGG/Opus a ~16 kbps ≈ 2 KB por segundo. Serve para a cota de áudio (a
+ * API do WhatsApp não informa a duração no webhook).
+ */
+function estimarDuracaoAudioSeg(bytes: number): number {
+  return Math.max(1, Math.round(bytes / 2000));
+}
+
+/** Responde a "PACOTE X": link de pagamento ou o motivo de não dar. */
+async function responderPacote(
+  from: string,
+  usuario: UsuarioRow,
+  direito: Direito,
+  pacoteId: string,
+): Promise<void> {
+  try {
+    const r = await iniciarCompraPacote(usuario, direito, pacoteId);
+    if (r.ok) {
+      await safeReply(
+        from,
+        `Aqui está o link para pagar o ${r.pacote.nome} (R$ ${r.pacote.valor.toFixed(2).replace(".", ",")}):\n${r.link}\n\nAssim que o pagamento for aprovado, o crédito entra na hora e eu te aviso.`,
+      );
+    } else if (r.motivo === "fora_do_plano") {
+      await safeReply(from, textoLimite("fotos_fora_do_plano", direito));
+    } else if (r.motivo === "pagamento_indisponivel") {
+      await safeReply(
+        from,
+        "A compra de pacotes pelo WhatsApp ainda está sendo liberada. Já avisei o time da Rosana — eles vão falar com você para liberar o seu pacote.",
+      );
+      console.warn(`[pacotes] pedido de ${pacoteId} por ${from} sem Mercado Pago configurado`);
+    } else {
+      await safeReply(from, `Não reconheci esse pacote. Opções:\n\n${menuPacotes(direito)}`);
+    }
+  } catch (err) {
+    logError("comprar pacote", err);
+    await safeReply(from, "Não consegui gerar o link de pagamento agora. Pode tentar de novo em instantes?");
+  }
 }
 
 /** Envia uma resposta sem deixar um erro de envio derrubar o handler. */

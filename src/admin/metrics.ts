@@ -1,4 +1,5 @@
 import { getSupabase } from "../memory/supabase.js";
+import { listUsoMes } from "../memory/uso.js";
 
 /**
  * Métricas do painel de administração. Trabalha sobre os dados REAIS do banco.
@@ -20,6 +21,9 @@ export interface UsuarioAdmin {
   criado_em: string | null;
   assinatura_em: string | null;
   mensagens: number; // proxy de consumo/atividade
+  /** Uso REAL do mês corrente (secretaria_uso): mensagens e custo de IA+STT. */
+  mensagens_mes: number;
+  custo_usd_mes: number;
 }
 
 interface UsuarioRaw {
@@ -59,12 +63,23 @@ async function carregarUsuarios(): Promise<UsuarioAdmin[]> {
     contagem.set(c.user_wa, (contagem.get(c.user_wa) ?? 0) + 1);
   }
 
+  // Uso real do mês (custo medido a partir do usage da API). Falha = zeros.
+  const usoMes = new Map<string, { mensagens: number; custo: number }>();
+  try {
+    for (const u of await listUsoMes()) {
+      usoMes.set(u.user_wa, { mensagens: u.mensagens, custo: u.custo_usd });
+    }
+  } catch (err) {
+    console.error("[admin] uso do mês:", err instanceof Error ? err.message : err);
+  }
+
   // Deduplica por chaveUsuario, somando mensagens das variantes e preferindo a
   // linha mais "completa" (com email/nome).
   const porChave = new Map<string, UsuarioAdmin>();
   for (const u of raw) {
     const chave = chaveUsuario(u);
     const msgs = contagem.get(u.user_wa) ?? 0;
+    const mes = usoMes.get(u.user_wa) ?? { mensagens: 0, custo: 0 };
     const existente = porChave.get(chave);
     if (!existente) {
       porChave.set(chave, {
@@ -79,9 +94,13 @@ async function carregarUsuarios(): Promise<UsuarioAdmin[]> {
         criado_em: u.created_at,
         assinatura_em: u.assinatura_em,
         mensagens: msgs,
+        mensagens_mes: mes.mensagens,
+        custo_usd_mes: mes.custo,
       });
     } else {
       existente.mensagens += msgs;
+      existente.mensagens_mes += mes.mensagens;
+      existente.custo_usd_mes += mes.custo;
       if (!existente.email && u.email) existente.email = u.email;
       if (u.ativo) existente.ativo = true;
       if (u.dono) existente.dono = true;
@@ -102,8 +121,17 @@ export interface OverviewAdmin {
   porPlano: { plano: string; total: number; ativos: number }[];
   porStatusAssinatura: { status: string; total: number }[];
   novosPorDia: { data: string; total: number }[]; // últimos 30 dias
-  topConsumo: { nome: string | null; email: string | null; mensagens: number }[];
+  topConsumo: {
+    nome: string | null;
+    email: string | null;
+    plano: string | null;
+    mensagens: number;
+    mensagens_mes: number;
+    custo_usd_mes: number;
+  }[];
   mensagensTotais: number;
+  /** Custo real de IA+STT do mês corrente (todos os usuários, sem o dono). */
+  custoIaMesUsd: number;
 }
 
 export async function buildOverview(): Promise<OverviewAdmin> {
@@ -157,10 +185,18 @@ export async function buildOverview(): Promise<OverviewAdmin> {
   }
 
   const topConsumo = [...usuarios]
-    .sort((a, b) => b.mensagens - a.mensagens)
+    .sort((a, b) => b.custo_usd_mes - a.custo_usd_mes || b.mensagens - a.mensagens)
     .slice(0, 10)
-    .map((u) => ({ nome: u.nome, email: u.email, mensagens: u.mensagens }));
+    .map((u) => ({
+      nome: u.nome,
+      email: u.email,
+      plano: u.plano,
+      mensagens: u.mensagens,
+      mensagens_mes: u.mensagens_mes,
+      custo_usd_mes: u.custo_usd_mes,
+    }));
   const mensagensTotais = usuarios.reduce((s, u) => s + u.mensagens, 0);
+  const custoIaMesUsd = usuarios.reduce((s, u) => s + u.custo_usd_mes, 0);
 
   return {
     totais: { usuarios: usuarios.length, ativos, pendentes, cancelados, novos30d, saidas30d },
@@ -169,7 +205,20 @@ export async function buildOverview(): Promise<OverviewAdmin> {
     novosPorDia: dias,
     topConsumo,
     mensagensTotais,
+    custoIaMesUsd,
   };
+}
+
+/** Troca o plano de um usuário (todas as variantes do wa; nunca o dono). */
+export async function setUsuarioPlano(userWa: string, plano: string): Promise<void> {
+  const supabase = getSupabase();
+  const { waIdVariants } = await import("../memory/context.js");
+  const { error } = await supabase
+    .from("secretaria_usuarios")
+    .update({ plano })
+    .in("user_wa", waIdVariants(userWa))
+    .eq("dono", false);
+  if (error) throw new Error(`Falha ao trocar plano: ${error.message}`);
 }
 
 /** Lista de usuários para a aba de gestão (dedup, dono incluído no fim). */
