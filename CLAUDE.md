@@ -329,17 +329,18 @@ banco; nada de novo produto. Rodando em **userosana.com.br** (projeto Vercel
 
 ## Planos, limites e pacotes (desde 28/09/2026)
 - **3 planos** (`src/pay/planos.ts`): **Agenda R$ 49** (agenda, memória, custos de
-  1 obra; 250 msgs, sem fotos, 30 min áudio), **Obra R$ 89** (+ RDO/PDF, fotos/NF,
+  1 obra; 250 msgs, sem fotos, 30 min áudio), **Obra R$ 119** (+ RDO/PDF, fotos/NF,
   documentos, revisar conversa, preço de referência; 400 msgs, 50 fotos, 3h, 5
-  obras), **Construtora R$ 159** (+ materiais/cotações, orçamento com os PRÓPRIOS
+  obras), **Construtora R$ 229** (+ materiais/cotações, orçamento com os PRÓPRIOS
   preços; 700 msgs, 300 fotos, 10h, obras ilimitadas). RECURSOS (quais funções)
   são fixos no código; PREÇO e LIMITES são editáveis no /admin (colunas
   `limite_*` em `secretaria_planos`, cache de 5 min). Ids antigos
   `essencial`→obra, `profissional`→construtora. Sem plano (beta) = Construtora.
   Dono = sem limite.
 - **Por que os limites:** custo medido ~US$ 0,015–0,02/mensagem COM cache de
-  prompt (sem cache era ~US$ 0,04). Limites dimensionados p/ custo de IA ≤ ~50%
-  do preço líquido mesmo com a cota inteira usada.
+  prompt (sem cache era ~US$ 0,04). REGRA DE PREÇO (28/09): margem ≥ 48% no
+  PIOR caso (cota inteira usada), já descontando ~11% de taxas ⇒ preço ≥ custo
+  máx / 0,41 (custo máx: Agenda ~R$ 20, Obra ~R$ 48, Construtora ~R$ 93).
 - **Aplicação:** `src/pay/cota.ts` (`resolverDireito`, `saldoDoUsuario`,
   `checarObra`). O pipeline checa a cota ANTES de chamar a IA (mensagens, fotos,
   áudio estimado por bytes ~2 KB/s) e responde sem gastar IA; o agente só recebe
@@ -352,8 +353,8 @@ banco; nada de novo produto. Rodando em **userosana.com.br** (projeto Vercel
 - **Cache de prompt:** system dividido em `estatico` (cacheado) + `dinamico`
   (data/tabela/memória); cache_control nas tools (1h, compartilhado por plano),
   no system estático e no fim das mensagens (loop de tools lê do cache).
-- **Pacotes extras** (`PACOTES`, valem até o fim do mês): +100 msgs R$ 19,90;
-  +300 R$ 49,90; +50 fotos R$ 9,90; +2h áudio R$ 9,90. Compra: usuário manda
+- **Pacotes extras** (`PACOTES`, valem até o fim do mês): +100 msgs R$ 27,90;
+  +300 R$ 82,90; +50 fotos R$ 9,90; +2h áudio R$ 9,90. Compra: usuário manda
   "PACOTE 100/300/FOTOS/AUDIO" (tratado no pipeline SEM IA, funciona com o limite
   estourado) ou a tool `comprar_pacote` → Checkout Pro do MP (pagamento único) →
   webhook `pay?acao=webhook` com type=payment → `processarPagamentoPacote` credita

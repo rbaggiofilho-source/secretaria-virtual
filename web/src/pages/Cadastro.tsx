@@ -19,8 +19,8 @@ interface DadosCadastro {
 type PlanoInfo = { nome: string; preco: string; descricao: string }
 const planosPadrao: Record<PlanoId, PlanoInfo> = {
   agenda: { nome: 'Agenda', preco: 'R$ 49,00/mês', descricao: 'Agenda, lembretes, memória e custos de 1 obra.' },
-  obra: { nome: 'Obra', preco: 'R$ 89,00/mês', descricao: 'Diário de Obra em PDF, notas fiscais por foto e prazos de documentos.' },
-  construtora: { nome: 'Construtora', preco: 'R$ 159,00/mês', descricao: 'Obras ilimitadas, compras e cotações, orçamento com os seus preços.' },
+  obra: { nome: 'Obra', preco: 'R$ 119,00/mês', descricao: 'Diário de Obra em PDF, notas fiscais por foto e prazos de documentos.' },
+  construtora: { nome: 'Construtora', preco: 'R$ 229,00/mês', descricao: 'Obras ilimitadas, compras e cotações, orçamento com os seus preços.' },
 }
 
 function planoDaUrl(): PlanoId {

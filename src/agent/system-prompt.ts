@@ -1,5 +1,5 @@
 import type { OwnerContext, UsuarioRow } from "../memory/context.js";
-import type { Plano, Recurso } from "../pay/planos.js";
+import { PLANOS, type Plano, type Recurso } from "../pay/planos.js";
 import { datasReferencia, nowInTimezone, nowIso, timezone } from "../util/datetime.js";
 
 /**
@@ -139,7 +139,8 @@ function blocoPlano(plano: Plano | null): string {
     plano.limites.obras === null
       ? "obras ilimitadas"
       : `até ${plano.limites.obras} obra${plano.limites.obras > 1 ? "s" : ""}`;
-  const proximo = plano.id === "agenda" ? "Rosana Obra (R$ 89/mês)" : "Rosana Construtora (R$ 159/mês)";
+  const p = plano.id === "agenda" ? PLANOS.obra : PLANOS.construtora;
+  const proximo = `${p.nome} (R$ ${p.valor}/mês)`;
   return `
 Plano e limites:
 - O usuário assina o plano ${plano.nome} (${obras}; ${plano.limites.mensagens} mensagens por mês).${
