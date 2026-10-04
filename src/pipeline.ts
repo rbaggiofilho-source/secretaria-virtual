@@ -23,8 +23,8 @@ import {
 import { iniciarCompraPacote } from "./pay/pacotes.js";
 import { PLANOS } from "./pay/planos.js";
 import { transcribe } from "./stt/index.js";
-import { downloadMedia, sendTextMessage } from "./whatsapp/client.js";
-import type { WhatsAppMessage } from "./whatsapp/types.js";
+import { downloadMedia, sendInteractiveButtons, sendTextMessage } from "./whatsapp/client.js";
+import { interactiveReplyText, type WhatsAppMessage } from "./whatsapp/types.js";
 
 /**
  * Orquestra o fluxo ponta a ponta de UMA mensagem recebida:
@@ -176,7 +176,7 @@ export async function handleIncomingMessage(message: WhatsAppMessage): Promise<v
       loadRecentHistory(from),
     ]);
 
-    const { text: resposta, consumo } = await runSecretary({
+    const { text: resposta, consumo, botoes } = await runSecretary({
       usuario,
       userText,
       images,
@@ -209,7 +209,6 @@ export async function handleIncomingMessage(message: WhatsAppMessage): Promise<v
     const aviso = saldo
       ? avisoOitentaPorCento(saldo.mensagens.usado, saldo.mensagens.usado + 1, saldo.mensagens.limite)
       : null;
-    const reply = aviso ? resposta + aviso : resposta;
 
     // Persiste histórico (não crítico) e responde (crítico). Para imagem sem
     // legenda, registra um marcador legível no histórico.
@@ -218,8 +217,19 @@ export async function handleIncomingMessage(message: WhatsAppMessage): Promise<v
       "user",
       userText.trim() || (images.length ? "[imagem enviada]" : userText),
     );
-    await appendConversation(from, "assistant", resposta);
-    await sendTextMessage(from, reply);
+
+    if (botoes) {
+      // Resposta com botões: o corpo é botoes.body; as opções viram botões.
+      // Guarda um registro legível no histórico (p/ revisar_conversa).
+      const marcador = `${botoes.body}\n[opções: ${botoes.opcoes.map((o) => o.title).join(" | ")}]`;
+      await appendConversation(from, "assistant", marcador);
+      await sendInteractiveButtons(from, botoes.body, botoes.opcoes);
+      // Não perde o aviso de 80% da cota: vai numa mensagem curta à parte.
+      if (aviso) await safeReply(from, aviso.trim());
+    } else {
+      await appendConversation(from, "assistant", resposta);
+      await sendTextMessage(from, aviso ? resposta + aviso : resposta);
+    }
   } catch (err) {
     logError("agente/calendar/resposta", err);
     await safeReply(
@@ -233,6 +243,14 @@ export async function handleIncomingMessage(message: WhatsAppMessage): Promise<v
 async function resolveUserText(message: WhatsAppMessage): Promise<string> {
   if (message.type === "text") {
     return (message as { text: { body: string } }).text.body ?? "";
+  }
+
+  // Resposta a botão/lista interativa: tratamos o título escolhido como se o
+  // usuário tivesse digitado aquele texto.
+  if (message.type === "interactive") {
+    const escolha = interactiveReplyText(message);
+    if (escolha) return escolha;
+    throw new Error("Mensagem interativa sem texto reconhecível");
   }
 
   // Tipos não suportados (documento, vídeo, etc.)

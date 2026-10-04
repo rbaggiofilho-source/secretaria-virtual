@@ -212,6 +212,9 @@ WhatsApp. Eventos de status (sent/delivered/read/failed) são logados.
 `resolver_data` (calcula data futura exata + dia da semana a partir de deslocamento
 dias/semanas/meses — p/ "daqui um mês", "daqui 45 dias", além da tabela de 16 dias),
 `conectar_agenda` (gera link OAuth p/ o usuário conectar a própria agenda),
+`enviar_opcoes` (responde com BOTÕES de resposta rápida do WhatsApp — até 3; o
+modelo põe o texto no corpo e as opções viram botões; o toque volta como se o
+usuário tivesse digitado o rótulo; usado p/ onboarding/primeiras experiências),
 `revisar_conversa` (puxa sob demanda um trecho maior do histórico — últimos N dias,
 padrão 7 — p/ revisar a semana e caçar compromissos não agendados; o contexto de
 toda requisição carrega só as últimas 30 msgs, por custo),
@@ -476,6 +479,32 @@ Abrir CNPJ pra lançar oficialmente e poder cobrar/emitir NF. Estrutura definida
   valer em 2027 (escolha de recolher IBS/CBS no regime regular, fora do DAS —
   relevante pro B2B querer crédito). Decisão de 2027.
 - **Depois do CNPJ:** verificação da empresa na Meta + número BR próprio.
+
+## Roadmap de onboarding (inspirado no Meu Assessor) — 04/10/2026
+Benchmark do concorrente **Meu Assessor** (produto validado, Felipe Titto, ~170k
+seguidores). Copiar só o útil; manter onde a Rosana já é melhor.
+- **Fundação (bloqueia o self-serve):** o MA está em **Meta Production** (qualquer
+  número entra); a Rosana está em **modo dev** (teto 5 + allow-list manual). Todo
+  o onboarding self-service abaixo só vale DEPOIS do CNPJ → verificação na Meta.
+- **① Conexão por código (wa.me):** pós-pagamento, mandar um deep link `wa.me`
+  com um código pré-preenchido; o USUÁRIO envia → abre a janela de 24h sozinho e
+  vincula o número. Resolve o gargalo do OTP preso na janela. (pós-Meta)
+- **② Botões interativos — ✅ FEITO (04/10):** tool `enviar_opcoes` +
+  `sendInteractiveButtons` (client.ts) + parsing de resposta interativa no
+  pipeline (`interactiveReplyText`). Botões de resposta rápida (máx 3) nas
+  primeiras experiências/onboarding. Dá pra testar já no número do dono.
+- **③ Boas-vindas proativa:** 1ª mensagem automática logo após vincular o número
+  (hoje a Rosana espera o usuário falar). (pós-Meta / junto do ①)
+- **④ Agenda interna desacoplada (maior):** o MA guarda o compromisso em agenda
+  PRÓPRIA e o lembrete por WhatsApp chega MESMO sem Google (Google vira espelho
+  opcional, sync bidirecional granular). Hoje a Rosana EXIGE Google p/ agendar.
+  Nova tabela de eventos + cron de lembretes. (depois)
+- **Manter (Rosana já ganha):** vertical de obras (RDO/custos/NF→custo/materiais/
+  preço real), memória mais precisa, visão+voz no contexto de obra.
+- **Pular:** amplitude horizontal (finanças/open finance), Meet/Contatos, time de
+  personas com vídeo — não são o nosso diferencial.
+- **Ligado à NF:** o billing é Mercado Pago (não emite NFS-e). Decisão aberta na
+  seção "Formalização / CNPJ".
 
 ## Pendências abertas
 1. ✅ (17/09) Chaves Anthropic + Groq rotacionadas (novas na Vercel, validadas em

@@ -45,6 +45,69 @@ export async function sendTextMessage(to: string, body: string): Promise<void> {
   console.log(`[whatsapp] Mensagem aceita pela Graph API para ${to} (id=${wamid ?? "?"}).`);
 }
 
+/** Um botão de resposta rápida (reply button) do WhatsApp. */
+export interface BotaoResposta {
+  id: string;
+  title: string;
+}
+
+/**
+ * Envia uma mensagem INTERATIVA com botões de resposta rápida (até 3). Quando o
+ * usuário toca, a Meta devolve uma mensagem `interactive` com o título do botão
+ * — que o pipeline trata como se o usuário tivesse digitado aquele texto.
+ * Como texto puro, precisa estar dentro da janela de 24h (sempre o nosso caso:
+ * é resposta a uma mensagem do usuário). Se não houver botões válidos, cai para
+ * mensagem de texto comum.
+ */
+export async function sendInteractiveButtons(
+  to: string,
+  body: string,
+  buttons: BotaoResposta[],
+): Promise<void> {
+  // Limites da Graph API: no máx. 3 botões; título ≤ 20 chars; id ≤ 256; body ≤ 1024.
+  const limpos = buttons
+    .map((b, i) => ({
+      id: (b.id || `opt_${i + 1}`).slice(0, 256),
+      title: b.title.trim().slice(0, 20),
+    }))
+    .filter((b) => b.title.length > 0)
+    .slice(0, 3);
+
+  if (limpos.length === 0) {
+    await sendTextMessage(to, body);
+    return;
+  }
+
+  const env = getEnv();
+  const url = `${GRAPH_BASE}/${env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${env.WHATSAPP_TOKEN}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to,
+      type: "interactive",
+      interactive: {
+        type: "button",
+        body: { text: body.slice(0, 1024) },
+        action: {
+          buttons: limpos.map((b) => ({ type: "reply", reply: { id: b.id, title: b.title } })),
+        },
+      },
+    }),
+  });
+
+  if (!res.ok) {
+    const detail = await safeErrorText(res);
+    throw new Error(`Falha ao enviar botões no WhatsApp (${res.status}): ${detail}`);
+  }
+  console.log(`[whatsapp] Mensagem com ${limpos.length} botões aceita para ${to}.`);
+}
+
 /**
  * Faz upload de um arquivo (ex.: PDF) para a Media API do WhatsApp e devolve
  * o media_id, que pode então ser enviado como documento. O arquivo fica

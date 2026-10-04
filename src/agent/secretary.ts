@@ -3,8 +3,15 @@ import { getEnv } from "../config/env.js";
 import type { OwnerContext, UsuarioRow } from "../memory/context.js";
 import { custoChamadaUsd } from "../memory/uso.js";
 import type { Direito } from "../pay/cota.js";
+import type { BotaoResposta } from "../whatsapp/client.js";
 import { buildSystemPrompt } from "./system-prompt.js";
 import { runTool, toolsDoPlano } from "./tools.js";
+
+/** Botões de resposta rápida que o agente pediu para enviar (tool enviar_opcoes). */
+export interface BotoesPendentes {
+  body: string;
+  opcoes: BotaoResposta[];
+}
 
 /**
  * Loop de tool use com o Claude (Haiku mais recente por padrão).
@@ -35,7 +42,7 @@ export async function runSecretary(params: {
   primeiroContato?: boolean;
   /** Plano/direitos do usuário: filtra as tools e orienta o prompt. */
   direito: Direito;
-}): Promise<{ text: string; consumo: ConsumoIa }> {
+}): Promise<{ text: string; consumo: ConsumoIa; botoes: BotoesPendentes | null }> {
   const env = getEnv();
   const client = getClient();
   // Quando a entrada veio de áudio, sinaliza para o modelo aplicar a seção
@@ -108,7 +115,11 @@ export async function runSecretary(params: {
 
   // Contexto do turno passado às tools: fila de caminhos das imagens já
   // arquivadas, que o registrar_foto consome para ligar a foto ao arquivo.
-  const toolCtx = { imagePaths: [...(params.imagePaths ?? [])], direito: params.direito };
+  const toolCtx: {
+    imagePaths: string[];
+    direito: Direito;
+    botoes: BotoesPendentes | null;
+  } = { imagePaths: [...(params.imagePaths ?? [])], direito: params.direito, botoes: null };
 
   for (let turn = 0; turn < MAX_TURNS; turn++) {
     const response = await client.messages.create({
@@ -149,14 +160,21 @@ export async function runSecretary(params: {
       continue; // deixa o modelo reagir aos resultados
     }
 
-    // Sem mais tool use: extrai o texto final (resposta sem texto é rara).
-    return { text: extractText(response) || "Ok.", consumo };
+    // Sem mais tool use: extrai o texto final. Se o agente pediu botões
+    // (enviar_opcoes), o texto pode vir vazio — a mensagem vai nos botões.
+    const final = extractText(response);
+    return {
+      text: final || (toolCtx.botoes ? "" : "Ok."),
+      consumo,
+      botoes: toolCtx.botoes,
+    };
   }
 
   // Estourou o limite de turnos — avisa em vez de silenciar.
   return {
     text: "Processei sua mensagem, mas precisei de muitos passos e parei por segurança. Pode repetir de forma mais direta?",
     consumo,
+    botoes: toolCtx.botoes,
   };
 }
 

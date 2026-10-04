@@ -12,6 +12,7 @@ import {
   sendImageMessage,
   sendTextMessage,
   uploadMedia,
+  type BotaoResposta,
 } from "../whatsapp/client.js";
 import {
   atualizarMemoria,
@@ -160,6 +161,29 @@ export const TOOLS: Anthropic.Tool[] = [
         meses: { type: "integer", description: "Meses a somar (pode ser negativo)" },
       },
       required: [],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "enviar_opcoes",
+    description:
+      "Envia sua resposta como uma mensagem com BOTÕES de resposta rápida (até 3) que o usuário toca em vez de digitar. Use com MODERAÇÃO, quando oferecer um conjunto pequeno e claro de próximos passos — principalmente nas PRIMEIRAS experiências/onboarding (ex.: 'o que você quer testar primeiro?') ou quando perguntar algo com poucas opções fechadas. Coloque TODO o texto da mensagem em 'texto' (é o corpo que aparece acima dos botões) e NÃO repita as opções em texto normal — elas já viram botões. Cada opção é um rótulo CURTO (máx 20 caracteres) escrito como se fosse o usuário falando (ex.: 'Lançar um custo', 'Gravar o RDO', 'Marcar compromisso'), porque é esse texto que volta pra você quando ele toca. NÃO use pra respostas longas, listas grandes, ou quando a resposta é texto corrido.",
+    input_schema: {
+      type: "object",
+      properties: {
+        texto: {
+          type: "string",
+          description: "Corpo da mensagem (aparece acima dos botões). Toda a sua resposta vai aqui.",
+        },
+        opcoes: {
+          type: "array",
+          description: "1 a 3 rótulos curtos (máx 20 chars cada) — viram os botões.",
+          items: { type: "string" },
+          minItems: 1,
+          maxItems: 3,
+        },
+      },
+      required: ["texto", "opcoes"],
       additionalProperties: false,
     },
   },
@@ -669,7 +693,11 @@ export async function runTool(
   usuario: UsuarioRow,
   name: string,
   input: Record<string, unknown>,
-  ctx?: { imagePaths?: string[]; direito?: Direito },
+  ctx?: {
+    imagePaths?: string[];
+    direito?: Direito;
+    botoes?: { body: string; opcoes: BotaoResposta[] } | null;
+  },
 ): Promise<{ text: string; isError: boolean }> {
   const userWa = usuario.user_wa;
   const direito = ctx?.direito;
@@ -787,6 +815,35 @@ export async function runTool(
             data: d,
             dia_semana: weekdayBr(d),
             dias_a_partir_de_hoje: daysBetween(todayIsoDate(), d),
+          }),
+        };
+      }
+
+      case "enviar_opcoes": {
+        const texto = String(input.texto ?? "").trim();
+        const opcoes = Array.isArray(input.opcoes) ? input.opcoes : [];
+        const botoes: BotaoResposta[] = opcoes
+          .map((o, i) => ({ id: `opt_${i + 1}`, title: String(o ?? "").trim() }))
+          .filter((b) => b.title.length > 0)
+          .slice(0, 3);
+        if (!texto || botoes.length === 0) {
+          return {
+            isError: true,
+            text: JSON.stringify({
+              ok: false,
+              error: "enviar_opcoes exige 'texto' e ao menos 1 opção. Responda em texto normal.",
+            }),
+          };
+        }
+        // Não envia aqui: registra o pedido no contexto do turno. O pipeline
+        // manda UMA mensagem interativa (texto + botões) como resposta final.
+        if (ctx) ctx.botoes = { body: texto, opcoes: botoes };
+        return {
+          isError: false,
+          text: JSON.stringify({
+            ok: true,
+            instrucao:
+              "Os botões serão enviados como a mensagem final (o 'texto' é o corpo). NÃO escreva mais nada depois disto — não repita as opções nem o texto; encerre o turno sem texto adicional.",
           }),
         };
       }

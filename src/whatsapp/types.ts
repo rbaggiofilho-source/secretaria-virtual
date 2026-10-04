@@ -28,6 +28,22 @@ export interface WhatsAppImageMessage {
   image: { id: string; mime_type?: string; caption?: string; sha256?: string };
 }
 
+/**
+ * Resposta a uma mensagem interativa (o usuário tocou num botão de resposta
+ * rápida ou escolheu um item de lista). A Meta devolve o título escolhido.
+ */
+export interface WhatsAppInteractiveMessage {
+  from: string;
+  id: string;
+  timestamp: string;
+  type: "interactive";
+  interactive: {
+    type?: string;
+    button_reply?: { id?: string; title?: string };
+    list_reply?: { id?: string; title?: string };
+  };
+}
+
 export interface WhatsAppOtherMessage {
   from: string;
   id: string;
@@ -36,10 +52,21 @@ export interface WhatsAppOtherMessage {
   [key: string]: unknown;
 }
 
+/**
+ * Texto escolhido numa mensagem interativa (botão/lista) — tratado como se o
+ * usuário tivesse digitado o título. Vazio se não for uma resposta interativa.
+ */
+export function interactiveReplyText(message: WhatsAppMessage): string {
+  if (message.type !== "interactive") return "";
+  const it = (message as WhatsAppInteractiveMessage).interactive;
+  return (it?.button_reply?.title ?? it?.list_reply?.title ?? "").trim();
+}
+
 export type WhatsAppMessage =
   | WhatsAppTextMessage
   | WhatsAppAudioMessage
   | WhatsAppImageMessage
+  | WhatsAppInteractiveMessage
   | WhatsAppOtherMessage;
 
 export interface WhatsAppWebhookPayload {
