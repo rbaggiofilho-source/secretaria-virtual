@@ -1,4 +1,5 @@
 import { getEnv } from "../../src/config/env.js";
+import { getConfig } from "../../src/memory/config.js";
 import { usuariosAtivosParaNudge } from "../../src/memory/context.js";
 import {
   lembretesVencidos,
@@ -20,20 +21,28 @@ export default {
   async fetch(request: Request): Promise<Response> {
     const env = getEnv();
 
-    // Proteção: só a Vercel Cron (que manda Authorization: Bearer CRON_SECRET).
+    const auth = request.headers.get("authorization");
+
+    // Duas funções no mesmo endpoint (limite de 12 funções serverless do Hobby):
+    //   ?acao=lembretes  → dispara lembretes vencidos (chamado 1×/min pelo pg_cron
+    //                      do Supabase; autentica pelo token do banco OU pelo
+    //                      CRON_SECRET — p/ teste manual).
+    //   (padrão)         → "bom dia" diário (Vercel Cron, 1×/dia; CRON_SECRET).
+    const acao = new URL(request.url).searchParams.get("acao");
+    if (acao === "lembretes") {
+      const token = await getConfig("cron_lembretes_token").catch(() => null);
+      const okCron = !!env.CRON_SECRET && auth === `Bearer ${env.CRON_SECRET}`;
+      const okToken = !!token && auth === `Bearer ${token}`;
+      if (!okCron && !okToken) return new Response("Unauthorized", { status: 401 });
+      return await dispararLembretes();
+    }
+
+    // "Bom dia": só a Vercel Cron (Authorization: Bearer CRON_SECRET).
     if (!env.CRON_SECRET) {
       return new Response("CRON_SECRET não configurado.", { status: 500 });
     }
-    if (request.headers.get("authorization") !== `Bearer ${env.CRON_SECRET}`) {
+    if (auth !== `Bearer ${env.CRON_SECRET}`) {
       return new Response("Unauthorized", { status: 401 });
-    }
-
-    // Duas funções no mesmo endpoint (limite de 12 funções serverless do Hobby):
-    //   ?acao=lembretes  → dispara lembretes vencidos (chamado 1×/min pelo pg_cron)
-    //   (padrão)         → "bom dia" diário (Vercel Cron, 1×/dia)
-    const acao = new URL(request.url).searchParams.get("acao");
-    if (acao === "lembretes") {
-      return await dispararLembretes();
     }
 
     try {
