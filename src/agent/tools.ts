@@ -58,7 +58,7 @@ import { downloadFoto } from "../memory/storage.js";
 import { buscarObraPorNome, listObrasStruct } from "../memory/obras.js";
 import { buscarPrecos } from "../precos/index.js";
 import { getEnv } from "../config/env.js";
-import { addDays, addMonths, daysBetween, formatDateBr, todayIsoDate, weekdayBr } from "../util/datetime.js";
+import { addDays, addMonths, daysBetween, formatDateBr, horaBr, todayIsoDate, weekdayBr } from "../util/datetime.js";
 import type { MemoryKind } from "../memory/supabase.js";
 import { checarObra, resolverDireito, saldoDoUsuario, temRecurso, type Direito } from "../pay/cota.js";
 import { iniciarCompraPacote } from "../pay/pacotes.js";
@@ -167,6 +167,26 @@ export const TOOLS: Anthropic.Tool[] = [
         meses: { type: "integer", description: "Meses a somar (pode ser negativo)" },
       },
       required: [],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "criar_lembrete",
+    description:
+      "Cria um LEMBRETE: a Rosana manda uma mensagem no WhatsApp NA HORA marcada pra lembrar o usuário de algo (ex.: 'me lembra daqui 10 min de ligar pro cliente', 'me lembra amanhã 8h de levar os documentos', 'me avisa às 15h'). Informe o TEXTO do lembrete e QUANDO. Para tempo RELATIVO ('daqui X'), use em_minutos/em_horas/em_dias — NÃO calcule o horário de cabeça, passe o deslocamento que o servidor calcula. Para horário ABSOLUTO, use quando_iso em ISO 8601 com offset -03:00 (pegue a DATA da tabela de referência/resolver_data + a hora; ex.: amanhã 8h = <data de amanhã>T08:00:00-03:00). IMPORTANTE: o lembrete só é ENTREGUE se cair até ~24h depois da última mensagem do usuário (janela do WhatsApp). Se for pra daqui a vários dias, AVISE que pode não chegar caso ele fique sem falar com você.",
+    input_schema: {
+      type: "object",
+      properties: {
+        texto: { type: "string", description: "Do que lembrar (ex.: 'ligar pro cliente')" },
+        em_minutos: { type: "integer", description: "Daqui a N minutos (tempo relativo)" },
+        em_horas: { type: "integer", description: "Daqui a N horas (tempo relativo)" },
+        em_dias: { type: "integer", description: "Daqui a N dias (tempo relativo)" },
+        quando_iso: {
+          type: "string",
+          description: "Horário absoluto ISO 8601 com offset -03:00 (alternativa aos em_*)",
+        },
+      },
+      required: ["texto"],
       additionalProperties: false,
     },
   },
@@ -833,6 +853,57 @@ export async function runTool(
             data: d,
             dia_semana: weekdayBr(d),
             dias_a_partir_de_hoje: daysBetween(todayIsoDate(), d),
+          }),
+        };
+      }
+
+      case "criar_lembrete": {
+        const texto = String(input.texto ?? "").trim();
+        if (!texto) {
+          return {
+            isError: true,
+            text: JSON.stringify({ ok: false, error: "Preciso saber do que te lembrar." }),
+          };
+        }
+        const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+        let quandoMs: number | null = null;
+        const quandoIsoIn = input.quando_iso ? String(input.quando_iso) : "";
+        if (quandoIsoIn && !Number.isNaN(Date.parse(quandoIsoIn))) {
+          quandoMs = Date.parse(quandoIsoIn);
+        } else {
+          const offMin = num(input.em_minutos) + num(input.em_horas) * 60 + num(input.em_dias) * 1440;
+          if (offMin > 0) quandoMs = Date.now() + offMin * 60000;
+        }
+        if (!quandoMs || quandoMs <= Date.now()) {
+          return {
+            isError: true,
+            text: JSON.stringify({
+              ok: false,
+              error:
+                "Me diz QUANDO te lembrar (ex.: 'daqui 10 minutos', 'amanhã 8h'). Use em_minutos/em_horas/em_dias ou quando_iso no futuro.",
+            }),
+          };
+        }
+        const quandoIso = new Date(quandoMs).toISOString();
+        const row = await criarEvento(userWa, {
+          titulo: texto,
+          inicioIso: quandoIso,
+          lembreteEmIso: quandoIso,
+        });
+        const horasAteLa = (quandoMs - Date.now()) / 3600000;
+        return {
+          isError: false,
+          text: JSON.stringify({
+            ok: true,
+            event_id: `i${row.id}`,
+            lembrete: texto,
+            quando: quandoIso,
+            dia_semana: weekdayBr(quandoIso),
+            hora: horaBr(quandoIso),
+            aviso_janela:
+              horasAteLa > 24
+                ? "Esse lembrete é pra daqui a mais de 24h. Ele só chega se você tiver trocado mensagem comigo nas últimas 24h antes dele — se ficar muito tempo sem falar comigo, pode não chegar. Avise o usuário disso."
+                : undefined,
           }),
         };
       }

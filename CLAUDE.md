@@ -106,8 +106,12 @@ WhatsApp. Eventos de status (sent/delivered/read/failed) são logados.
 - `api/cron/bomdia.ts` — "bom dia" diário (Vercel Cron `0 11 * * 1-5` = 8h BRT, seg–sex).
   Envia SÓ para quem mandou mensagem nas últimas 24h (janela da Meta) e com
   `nudge_diario=true`. Protegido por `CRON_SECRET`. Não recupera quem sumiu (fora da janela).
-  Inclui a **agenda de hoje** (de `secretaria_eventos`) — é o único "lembrete"
-  viável no cron 1×/dia do Hobby (lembrete-minuto por evento precisa cron sub-diário).
+  Inclui a **agenda de hoje** (de `secretaria_eventos`). TAMBÉM responde
+  `?acao=lembretes` (mesmo arquivo, p/ caber no limite de 12 funções): dispara os
+  lembretes vencidos (últimas ~2h, marca `lembrete_enviado` só no sucesso). É
+  chamado de MINUTO EM MINUTO pelo **pg_cron do Supabase** (job `disparar_lembretes`
+  via pg_net, lê `cron_secret` do Supabase Vault = o mesmo valor do `CRON_SECRET`
+  da Vercel). O cron DIÁRIO do "bom dia" segue sendo da Vercel (`0 11 * * 1-5`).
 - `api/privacidade.ts` (/privacidade) e `api/termos.ts` (/termos) — páginas legais (LGPD).
 - **Plataforma web (painel):**
   - `src/auth/session.ts` — token de sessão assinado (HMAC com `WHATSAPP_APP_SECRET`,
@@ -226,6 +230,10 @@ ids sem prefixo = evento legado só no Google),
 `dia_da_semana` (dia da semana correto de uma data — modelo não calcula de cabeça),
 `resolver_data` (calcula data futura exata + dia da semana a partir de deslocamento
 dias/semanas/meses — p/ "daqui um mês", "daqui 45 dias", além da tabela de 16 dias),
+`criar_lembrete` (lembrete por HORÁRIO: a Rosana manda msg no WhatsApp na hora
+marcada; relativo via em_minutos/em_horas/em_dias ou absoluto via quando_iso;
+grava lembrete_em em `secretaria_eventos`; disparado pelo pg_cron 1×/min →
+`bomdia?acao=lembretes`; só entrega dentro da janela de 24h do WhatsApp),
 `conectar_agenda` (OPCIONAL — link OAuth p/ ESPELHAR a agenda no Google do usuário;
 agendar/ver já funciona sem Google),
 `enviar_opcoes` (responde com BOTÕES de resposta rápida do WhatsApp — até 3; o
@@ -521,9 +529,11 @@ seguidores). Copiar só o útil; manter onde a Rosana já é melhor.
   é a fonte da verdade; `create/search/update_calendar_event` usam ela e FUNCIONAM
   SEM Google (que virou espelho opcional, ida: create espelha; volta: search mescla
   eventos do Google sem duplicar). Prompt não exige mais conectar. "Bom dia" diário
-  inclui a agenda de hoje. **FALTA (bloqueado):** lembrete-minuto por evento
-  (precisa cron sub-diário — Vercel Pro — + template da Meta p/ enviar fora da
-  janela de 24h). `lembrete_em`/`lembrete_enviado` já existem na tabela p/ isso.
+  inclui a agenda de hoje. **Lembrete por HORÁRIO — ✅ FEITO (04/10):** tool
+  `criar_lembrete` + endpoint `bomdia?acao=lembretes` + **pg_cron do Supabase 1×/min**
+  (não precisou Vercel Pro — o agendador é o pg_cron/pg_net). Entrega dentro da
+  janela de 24h do WhatsApp (lembretes de hoje/amanhã funcionam; os de +24h com o
+  usuário sumido precisam de template da Meta — essa parte segue bloqueada).
 - **Manter (Rosana já ganha):** vertical de obras (RDO/custos/NF→custo/materiais/
   preço real), memória mais precisa, visão+voz no contexto de obra.
 - **Pular:** amplitude horizontal (finanças/open finance), Meet/Contatos, time de

@@ -125,6 +125,41 @@ export async function atualizarEvento(
   return data as EventoRow;
 }
 
+/**
+ * Lembretes VENCIDOS a disparar (de TODOS os usuários) — para o agendador de
+ * minuto. Janela [desdeIso, ateIso] evita reprocessar lembretes muito antigos
+ * (ex.: que não entregaram por estarem fora da janela de 24h do WhatsApp).
+ */
+export async function lembretesVencidos(
+  desdeIso: string,
+  ateIso: string,
+  limite = 50,
+): Promise<EventoRow[]> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from("secretaria_eventos")
+    .select("*")
+    .eq("status", "ativo")
+    .eq("lembrete_enviado", false)
+    .not("lembrete_em", "is", null)
+    .gte("lembrete_em", desdeIso)
+    .lte("lembrete_em", ateIso)
+    .order("lembrete_em", { ascending: true })
+    .limit(limite);
+  if (error) throw new Error(`Falha ao buscar lembretes vencidos: ${error.message}`);
+  return (data ?? []) as EventoRow[];
+}
+
+/** Marca um lembrete como enviado (não reenvia). */
+export async function marcarLembreteEnviado(id: number): Promise<void> {
+  const supabase = getSupabase();
+  const { error } = await supabase
+    .from("secretaria_eventos")
+    .update({ lembrete_enviado: true, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw new Error(`Falha ao marcar lembrete enviado: ${error.message}`);
+}
+
 /** Cancela (soft-delete) um evento interno. Retorna o google_event_id, se houver. */
 export async function cancelarEvento(userWa: string, id: number): Promise<EventoRow | null> {
   const supabase = getSupabase();

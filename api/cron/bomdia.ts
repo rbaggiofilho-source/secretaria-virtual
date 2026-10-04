@@ -1,6 +1,10 @@
 import { getEnv } from "../../src/config/env.js";
 import { usuariosAtivosParaNudge } from "../../src/memory/context.js";
-import { listarEventos } from "../../src/memory/eventos.js";
+import {
+  lembretesVencidos,
+  listarEventos,
+  marcarLembreteEnviado,
+} from "../../src/memory/eventos.js";
 import { horaBr, todayIsoDate, weekdayBr } from "../../src/util/datetime.js";
 import { sendTextMessage } from "../../src/whatsapp/client.js";
 
@@ -22,6 +26,14 @@ export default {
     }
     if (request.headers.get("authorization") !== `Bearer ${env.CRON_SECRET}`) {
       return new Response("Unauthorized", { status: 401 });
+    }
+
+    // Duas funções no mesmo endpoint (limite de 12 funções serverless do Hobby):
+    //   ?acao=lembretes  → dispara lembretes vencidos (chamado 1×/min pelo pg_cron)
+    //   (padrão)         → "bom dia" diário (Vercel Cron, 1×/dia)
+    const acao = new URL(request.url).searchParams.get("acao");
+    if (acao === "lembretes") {
+      return await dispararLembretes();
     }
 
     try {
@@ -72,6 +84,48 @@ export default {
     }
   },
 };
+
+/**
+ * Dispara os lembretes VENCIDOS (de todos os usuários). Chamado de minuto em
+ * minuto pelo pg_cron do Supabase. Só considera lembretes vencidos nas últimas
+ * ~2h: se não entregou nesse prazo (ex.: fora da janela de 24h do WhatsApp),
+ * para de tentar. Marca como enviado só em caso de sucesso.
+ */
+async function dispararLembretes(): Promise<Response> {
+  const agora = Date.now();
+  const desde = new Date(agora - 2 * 60 * 60 * 1000).toISOString();
+  const ate = new Date(agora).toISOString();
+
+  let vencidos: Awaited<ReturnType<typeof lembretesVencidos>> = [];
+  try {
+    vencidos = await lembretesVencidos(desde, ate);
+  } catch (err) {
+    console.error(`[lembretes] erro ao buscar: ${err instanceof Error ? err.message : String(err)}`);
+    return new Response("erro", { status: 500 });
+  }
+
+  let enviados = 0;
+  for (const ev of vencidos) {
+    try {
+      const corpo = `⏰ *Lembrete:* ${ev.titulo}` + (ev.local ? `\n📍 ${ev.local}` : "");
+      await sendTextMessage(ev.user_wa, corpo);
+      await marcarLembreteEnviado(ev.id);
+      enviados++;
+    } catch (err) {
+      // Não marca como enviado: tenta de novo no próximo minuto (até sair da
+      // janela de 2h). Pode falhar se o usuário estiver fora da janela de 24h.
+      console.error(
+        `[lembretes] falha ao enviar um lembrete: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  if (vencidos.length > 0) console.log(`[lembretes] vencidos=${vencidos.length} enviados=${enviados}`);
+  return new Response(JSON.stringify({ ok: true, vencidos: vencidos.length, enviados }), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
+}
 
 /** Mensagem curta, calorosa e útil — com um leve tempero pelo dia da semana. */
 function montarBomDia(nome: string, dia: string, agendaBloco: string): string {
