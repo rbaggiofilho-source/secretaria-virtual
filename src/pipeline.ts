@@ -252,8 +252,12 @@ export async function handleIncomingMessage(message: WhatsAppMessage): Promise<v
       // Não perde o aviso de 80% da cota: vai numa mensagem curta à parte.
       if (aviso) await safeReply(from, aviso.trim());
     } else {
-      await appendConversation(from, "assistant", resposta);
-      await sendTextMessage(from, aviso ? resposta + aviso : resposta);
+      // Sem botões nesta resposta: remove um "👇" solto no fim (o modelo às
+      // vezes gesticula pra botões que não existem — ex.: quando há opções
+      // demais pra caber em 3 botões e ele lista em texto).
+      const limpa = resposta.replace(/\s*👇\s*$/u, "").trimEnd();
+      await appendConversation(from, "assistant", limpa);
+      await sendTextMessage(from, aviso ? limpa + aviso : limpa);
     }
   } catch (err) {
     logError("agente/calendar/resposta", err);
