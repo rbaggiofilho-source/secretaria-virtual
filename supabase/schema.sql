@@ -296,3 +296,25 @@ create index if not exists secretaria_eventos_lembrete_idx
   where lembrete_enviado = false and status = 'ativo';
 
 alter table public.secretaria_eventos enable row level security;
+
+-- Config interna (chave/valor), só backend (service key). Guarda, por exemplo,
+-- cron_lembretes_token (auth do pg_cron que dispara os lembretes).
+create table if not exists public.secretaria_config (
+  chave      text primary key,
+  valor      text not null,
+  created_at timestamptz not null default now()
+);
+alter table public.secretaria_config enable row level security;
+
+-- Agendador dos lembretes (minuto a minuto), via pg_cron + pg_net:
+--   create extension if not exists pg_cron;  create extension if not exists pg_net;
+--   insert into secretaria_config(chave,valor)
+--     values('cron_lembretes_token', encode(gen_random_bytes(24),'hex')) on conflict do nothing;
+--   select cron.schedule('disparar_lembretes','* * * * *', $$
+--     select net.http_post(
+--       url := 'https://secretaria-virtual-seven.vercel.app/api/cron/bomdia?acao=lembretes',
+--       headers := jsonb_build_object('Authorization','Bearer '||
+--         (select valor from public.secretaria_config where chave='cron_lembretes_token'),
+--         'Content-Type','application/json'),
+--       body := '{}'::jsonb);
+--   $$);

@@ -109,9 +109,12 @@ WhatsApp. Eventos de status (sent/delivered/read/failed) são logados.
   Inclui a **agenda de hoje** (de `secretaria_eventos`). TAMBÉM responde
   `?acao=lembretes` (mesmo arquivo, p/ caber no limite de 12 funções): dispara os
   lembretes vencidos (últimas ~2h, marca `lembrete_enviado` só no sucesso). É
-  chamado de MINUTO EM MINUTO pelo **pg_cron do Supabase** (job `disparar_lembretes`
-  via pg_net, lê `cron_secret` do Supabase Vault = o mesmo valor do `CRON_SECRET`
-  da Vercel). O cron DIÁRIO do "bom dia" segue sendo da Vercel (`0 11 * * 1-5`).
+  chamado de MINUTO EM MINUTO pelo **pg_cron do Supabase** (job `disparar_lembretes`,
+  jobid 1, schedule `* * * * *`) via **pg_net** → POST no endpoint com um token
+  guardado em `secretaria_config` (chave `cron_lembretes_token`, gerado DENTRO do
+  banco; o endpoint lê o mesmo token pela service key — sem Vault, sem config
+  manual). Validado (HTTP 200). O cron DIÁRIO do "bom dia" segue sendo da Vercel
+  (`0 11 * * 1-5`). Extensões `pg_cron` + `pg_net` já habilitadas no projeto.
 - `api/privacidade.ts` (/privacidade) e `api/termos.ts` (/termos) — páginas legais (LGPD).
 - **Plataforma web (painel):**
   - `src/auth/session.ts` — token de sessão assinado (HMAC com `WHATSAPP_APP_SECRET`,
@@ -179,6 +182,8 @@ WhatsApp. Eventos de status (sent/delivered/read/failed) são logados.
 - `secretaria_memories` — fatos, obras, apelidos, pendências, preferências (por `user_wa`).
 - `secretaria_conversations` — histórico (role user/assistant).
 - `secretaria_processed_messages` — dedup (PK `wa_message_id`).
+- `secretaria_config` — config interna (chave/valor; só backend). Guarda
+  `cron_lembretes_token` (auth do pg_cron de lembretes). `src/memory/config.ts`.
 - `secretaria_eventos` — AGENDA INTERNA (compromissos) por `user_wa`. Fonte da
   verdade da agenda; funciona SEM Google. Campos: titulo, inicio/fim (timestamptz),
   local, descricao, obra, lembrete_em/lembrete_enviado (preparado p/ lembrete-minuto
