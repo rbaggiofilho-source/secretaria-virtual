@@ -219,8 +219,15 @@ export async function handleIncomingMessage(message: WhatsAppMessage): Promise<v
     );
 
     if (botoes) {
-      // Resposta com botões: o corpo é botoes.body; as opções viram botões.
-      // Guarda um registro legível no histórico (p/ revisar_conversa).
+      // Resposta com botões. Pode vir TEXTO antes (ex.: explicação longa) +
+      // a mensagem de botões (corpo curto). Evita duplicar se o texto for igual
+      // ao corpo dos botões.
+      const temTexto = resposta.trim() && resposta.trim() !== botoes.body.trim();
+      if (temTexto) {
+        await appendConversation(from, "assistant", resposta);
+        await sendTextMessage(from, resposta);
+      }
+      // Registro legível no histórico (p/ revisar_conversa).
       const marcador = `${botoes.body}\n[opções: ${botoes.opcoes.map((o) => o.title).join(" | ")}]`;
       await appendConversation(from, "assistant", marcador);
       await sendInteractiveButtons(from, botoes.body, botoes.opcoes);

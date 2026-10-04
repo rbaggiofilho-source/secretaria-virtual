@@ -121,6 +121,11 @@ export async function runSecretary(params: {
     botoes: BotoesPendentes | null;
   } = { imagePaths: [...(params.imagePaths ?? [])], direito: params.direito, botoes: null };
 
+  // Acumula o texto do assistente ao longo do loop. Importante quando o modelo
+  // escreve a resposta E chama enviar_opcoes no MESMO turno: sem isso, o texto
+  // daquele turno (ex.: a explicação) se perderia ao extrair só o último.
+  const textoPartes: string[] = [];
+
   for (let turn = 0; turn < MAX_TURNS; turn++) {
     const response = await client.messages.create({
       model: env.ANTHROPIC_MODEL,
@@ -133,6 +138,8 @@ export async function runSecretary(params: {
 
     // Guarda o turno do assistente (com blocos de tool_use, se houver).
     messages.push({ role: "assistant", content: response.content });
+    const textoDoTurno = extractText(response);
+    if (textoDoTurno) textoPartes.push(textoDoTurno);
 
     if (response.stop_reason === "tool_use") {
       const toolUses = response.content.filter(
@@ -160,9 +167,9 @@ export async function runSecretary(params: {
       continue; // deixa o modelo reagir aos resultados
     }
 
-    // Sem mais tool use: extrai o texto final. Se o agente pediu botões
-    // (enviar_opcoes), o texto pode vir vazio — a mensagem vai nos botões.
-    const final = extractText(response);
+    // Sem mais tool use: junta o texto acumulado no loop. Se o agente pediu
+    // botões (enviar_opcoes), o texto pode vir vazio — a mensagem vai nos botões.
+    const final = textoPartes.join("\n\n").trim();
     return {
       text: final || (toolCtx.botoes ? "" : "Ok."),
       consumo,
@@ -172,7 +179,9 @@ export async function runSecretary(params: {
 
   // Estourou o limite de turnos — avisa em vez de silenciar.
   return {
-    text: "Processei sua mensagem, mas precisei de muitos passos e parei por segurança. Pode repetir de forma mais direta?",
+    text:
+      textoPartes.join("\n\n").trim() ||
+      "Processei sua mensagem, mas precisei de muitos passos e parei por segurança. Pode repetir de forma mais direta?",
     consumo,
     botoes: toolCtx.botoes,
   };
