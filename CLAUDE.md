@@ -453,10 +453,35 @@ banco; nada de novo produto. Rodando em **userosana.com.br** (projeto Vercel
   visão em nota fiscal real, STT em contexto de obra e, principalmente, o envio
   do PDF (`uploadMedia`/`sendDocumentMessage`) — risco de limite no número de teste.
 
+## Formalização / CNPJ (em andamento — 04/10/2026)
+Abrir CNPJ pra lançar oficialmente e poder cobrar/emitir NF. Estrutura definida
+(confirmar com contador), via Contabilizei:
+- **Tipo:** SLU (sem sócio, patrimônio protegido). **Regime:** Simples Nacional,
+  atividade "Serviços de TI".
+- **CNAE principal:** `6202-3/00` (dev/licenciamento de software customizável =
+  SaaS). Secundárias: `6201-5/01`, `6311-9/00` (provedor de aplicação/hospedagem),
+  `6209-1/00` (suporte). NÃO deixar Consultoria (`6204-0/00`) como principal.
+- **Imposto mínimo:** manter **Fator R ≥ 28%** (via pró-labore) → **Anexo III
+  (começa 6%)** em vez do Anexo V (15,5%). Contador calibra o pró-labore.
+- **PARAMOS AQUI (04/10):** abertura em TRÂMITE; Ricardo buscando o nº do PIS pra
+  finalizar o cadastro na Contabilizei. Retomar quando o CNPJ sair.
+- ⚠️ **NF automática × gateway (DECISÃO ABERTA):** requisito do Ricardo = a cada
+  compra/renovação, mandar a NFS-e pro email do usuário. O billing JÁ construído é
+  **Mercado Pago**, que NÃO emite NFS-e (é só gateway). Então: (A) manter MP +
+  plugar um emissor de NFS-e por API (eNotas / NFE.io / PlugNotas) disparado pelo
+  webhook do MP; ou (B) migrar billing pro **Asaas**, que faz cobrança + NFS-e +
+  email nativo (mas retrabalha a integração MP já pronta). Em qualquer caso é
+  pré-req: inscrição municipal + certificado digital e-CNPJ A1. Decidir com o dono.
+- **Reforma tributária:** 2026 = alíquotas-teste (0,1% IBS + 0,9% CBS); vale pra
+  valer em 2027 (escolha de recolher IBS/CBS no regime regular, fora do DAS —
+  relevante pro B2B querer crédito). Decisão de 2027.
+- **Depois do CNPJ:** verificação da empresa na Meta + número BR próprio.
+
 ## Pendências abertas
 1. ✅ (17/09) Chaves Anthropic + Groq rotacionadas (novas na Vercel, validadas em
    texto+áudio via banco); revogar as antigas nos painéis. ATENÇÃO: créditos
-   Anthropic baixos (~US$ 8 em 17/09) — ativar recarga automática.
+   Anthropic baixos (~US$ 8 em 17/09) — ativar recarga automática (SEM API de
+   saldo: lembrete manual recorrente, trigger trig_01HsEwrnm8JxVdeskexyT7b8).
 2. Testar no WhatsApp os fluxos da vertical (custos, RDO, foto/NF, PDF).
 3. Configurar alertas de crédito baixo nos painéis Anthropic + Groq (não há API de
    saldo; a Rosana não consegue avisar sozinha).
