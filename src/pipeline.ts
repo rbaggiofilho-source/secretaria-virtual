@@ -23,7 +23,12 @@ import {
 import { iniciarCompraPacote } from "./pay/pacotes.js";
 import { PLANOS } from "./pay/planos.js";
 import { transcribe } from "./stt/index.js";
-import { downloadMedia, sendInteractiveButtons, sendTextMessage } from "./whatsapp/client.js";
+import {
+  downloadMedia,
+  sendInteractiveButtons,
+  sendTextMessage,
+  type BotaoResposta,
+} from "./whatsapp/client.js";
 import { interactiveReplyText, type WhatsAppMessage } from "./whatsapp/types.js";
 
 /**
@@ -210,6 +215,15 @@ export async function handleIncomingMessage(message: WhatsAppMessage): Promise<v
       ? avisoOitentaPorCento(saldo.mensagens.usado, saldo.mensagens.usado + 1, saldo.mensagens.limite)
       : null;
 
+    // Rede de segurança determinística: se a mensagem é um "o que você faz /
+    // por onde começo" (ou o 1º contato) e o modelo NÃO gerou botões, o próprio
+    // código anexa botões de início — não depende do Haiku chamar enviar_opcoes.
+    const botoesFinais =
+      botoes ??
+      (queremBotoesDeInicio(userText) || history.length === 0
+        ? { body: "É só tocar pra começar 👇", opcoes: botoesIniciais(direito) }
+        : null);
+
     // Persiste histórico (não crítico) e responde (crítico). Para imagem sem
     // legenda, registra um marcador legível no histórico.
     await appendConversation(
@@ -218,19 +232,19 @@ export async function handleIncomingMessage(message: WhatsAppMessage): Promise<v
       userText.trim() || (images.length ? "[imagem enviada]" : userText),
     );
 
-    if (botoes) {
+    if (botoesFinais && botoesFinais.opcoes.length > 0) {
       // Resposta com botões. Pode vir TEXTO antes (ex.: explicação longa) +
       // a mensagem de botões (corpo curto). Evita duplicar se o texto for igual
       // ao corpo dos botões.
-      const temTexto = resposta.trim() && resposta.trim() !== botoes.body.trim();
+      const temTexto = resposta.trim() && resposta.trim() !== botoesFinais.body.trim();
       if (temTexto) {
         await appendConversation(from, "assistant", resposta);
         await sendTextMessage(from, resposta);
       }
       // Registro legível no histórico (p/ revisar_conversa).
-      const marcador = `${botoes.body}\n[opções: ${botoes.opcoes.map((o) => o.title).join(" | ")}]`;
+      const marcador = `${botoesFinais.body}\n[opções: ${botoesFinais.opcoes.map((o) => o.title).join(" | ")}]`;
       await appendConversation(from, "assistant", marcador);
-      await sendInteractiveButtons(from, botoes.body, botoes.opcoes);
+      await sendInteractiveButtons(from, botoesFinais.body, botoesFinais.opcoes);
       // Não perde o aviso de 80% da cota: vai numa mensagem curta à parte.
       if (aviso) await safeReply(from, aviso.trim());
     } else {
@@ -311,6 +325,39 @@ async function safeReply(to: string, body: string): Promise<void> {
   } catch (err) {
     logError("envio de resposta de fallback", err);
   }
+}
+
+/** Normaliza p/ casar frase sem depender de acento/maiúscula. */
+function normaliza(s: string): string {
+  return s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+}
+
+/**
+ * A mensagem é um pedido de "o que você faz / por onde começo"? Nesses momentos
+ * oferecemos botões de início de forma DETERMINÍSTICA (não dependemos do modelo
+ * chamar enviar_opcoes, que o Haiku às vezes ignora).
+ */
+function queremBotoesDeInicio(texto: string): boolean {
+  const t = normaliza(texto).trim();
+  if (t.length > 60) return false; // frases longas não são "o que você faz?"
+  return (
+    /\bo que (voce|vc)\b.*\b(faz|pode fazer|consegue|faria|sabe fazer)\b/.test(t) ||
+    /\bme (diz|conta|fala|explica|mostra)\b.*\bo que\b.*\b(faz|pode)\b/.test(t) ||
+    /\bpor onde\b.*\bcomec/.test(t) ||
+    /\bcomo\b.*\bcomec/.test(t) ||
+    /\b(quero|vamos|bora)\b.*\bcomec/.test(t) ||
+    /\bme ajuda a comec/.test(t) ||
+    /\bo que (voce|vc) (faz|pode)\b/.test(t)
+  );
+}
+
+/** Botões de ação iniciais, respeitando o que o plano libera (máx 3). */
+function botoesIniciais(direito: Direito): BotaoResposta[] {
+  const b: BotaoResposta[] = [{ id: "ini_agenda", title: "Marcar compromisso" }];
+  if (temRecurso(direito, "custos")) b.push({ id: "ini_custo", title: "Lançar um custo" });
+  if (b.length < 3 && temRecurso(direito, "rdo")) b.push({ id: "ini_rdo", title: "Gravar o RDO" });
+  if (b.length < 3 && temRecurso(direito, "fotos")) b.push({ id: "ini_foto", title: "Mandar nota fiscal" });
+  return b.slice(0, 3);
 }
 
 function logError(step: string, err: unknown): void {
