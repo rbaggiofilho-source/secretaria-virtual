@@ -42,7 +42,12 @@ export async function runSecretary(params: {
   primeiroContato?: boolean;
   /** Plano/direitos do usuário: filtra as tools e orienta o prompt. */
   direito: Direito;
-}): Promise<{ text: string; consumo: ConsumoIa; botoes: BotoesPendentes | null }> {
+}): Promise<{
+  text: string;
+  consumo: ConsumoIa;
+  botoes: BotoesPendentes | null;
+  sugestaoBotoes: BotoesPendentes | null;
+}> {
   const env = getEnv();
   const client = getClient();
   // Quando a entrada veio de áudio, sinaliza para o modelo aplicar a seção
@@ -119,7 +124,13 @@ export async function runSecretary(params: {
     imagePaths: string[];
     direito: Direito;
     botoes: BotoesPendentes | null;
-  } = { imagePaths: [...(params.imagePaths ?? [])], direito: params.direito, botoes: null };
+    sugestaoBotoes: BotoesPendentes | null;
+  } = {
+    imagePaths: [...(params.imagePaths ?? [])],
+    direito: params.direito,
+    botoes: null,
+    sugestaoBotoes: null,
+  };
 
   // Acumula o texto do assistente ao longo do loop. Importante quando o modelo
   // escreve a resposta E chama enviar_opcoes no MESMO turno: sem isso, o texto
@@ -174,6 +185,7 @@ export async function runSecretary(params: {
       text: final || (toolCtx.botoes ? "" : "Ok."),
       consumo,
       botoes: toolCtx.botoes,
+      sugestaoBotoes: toolCtx.sugestaoBotoes,
     };
   }
 
@@ -184,6 +196,7 @@ export async function runSecretary(params: {
       "Processei sua mensagem, mas precisei de muitos passos e parei por segurança. Pode repetir de forma mais direta?",
     consumo,
     botoes: toolCtx.botoes,
+    sugestaoBotoes: toolCtx.sugestaoBotoes,
   };
 }
 

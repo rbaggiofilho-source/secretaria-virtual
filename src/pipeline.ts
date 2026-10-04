@@ -181,7 +181,7 @@ export async function handleIncomingMessage(message: WhatsAppMessage): Promise<v
       loadRecentHistory(from),
     ]);
 
-    const { text: resposta, consumo, botoes } = await runSecretary({
+    const { text: resposta, consumo, botoes, sugestaoBotoes } = await runSecretary({
       usuario,
       userText,
       images,
@@ -215,14 +215,18 @@ export async function handleIncomingMessage(message: WhatsAppMessage): Promise<v
       ? avisoOitentaPorCento(saldo.mensagens.usado, saldo.mensagens.usado + 1, saldo.mensagens.limite)
       : null;
 
-    // Rede de segurança determinística: se a mensagem é um "o que você faz /
-    // por onde começo" (ou o 1º contato) e o modelo NÃO gerou botões, o próprio
-    // código anexa botões de início — não depende do Haiku chamar enviar_opcoes.
-    const botoesFinais =
-      botoes ??
-      (queremBotoesDeInicio(userText) || history.length === 0
+    // Botões a enviar, por ordem de preferência (determinístico — não depende do
+    // Haiku chamar enviar_opcoes):
+    //  1) o que o modelo pediu explicitamente (enviar_opcoes);
+    //  2) botões de início, se a mensagem é "o que você faz / por onde começo"
+    //     ou é o 1º contato;
+    //  3) botões de CONTINUAÇÃO sugeridos por uma ação concluída (criar evento,
+    //     lançar custo, registrar RDO).
+    const inicio =
+      queremBotoesDeInicio(userText) || history.length === 0
         ? { body: "É só tocar pra começar 👇", opcoes: botoesIniciais(direito) }
-        : null);
+        : null;
+    const botoesFinais = botoes ?? inicio ?? sugestaoBotoes;
 
     // Persiste histórico (não crítico) e responde (crítico). Para imagem sem
     // legenda, registra um marcador legível no histórico.

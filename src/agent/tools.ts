@@ -697,8 +697,20 @@ export async function runTool(
     imagePaths?: string[];
     direito?: Direito;
     botoes?: { body: string; opcoes: BotaoResposta[] } | null;
+    sugestaoBotoes?: { body: string; opcoes: BotaoResposta[] } | null;
   },
 ): Promise<{ text: string; isError: boolean }> {
+  // Sugere botões de continuação após uma ação concluída (ex.: criou evento →
+  // "Ver a semana"/"Marcar outro"). Só o 1º da vez (não clobber) e só como
+  // FALLBACK: o pipeline prefere um enviar_opcoes explícito do modelo.
+  const sugerirBotoes = (body: string, titulos: string[]) => {
+    if (ctx && !ctx.sugestaoBotoes) {
+      ctx.sugestaoBotoes = {
+        body,
+        opcoes: titulos.map((t, i) => ({ id: `s_${i + 1}`, title: t })),
+      };
+    }
+  };
   const userWa = usuario.user_wa;
   const direito = ctx?.direito;
 
@@ -893,6 +905,7 @@ export async function runTool(
               ? input.reminder_minutes
               : undefined,
         }, calAuth);
+        sugerirBotoes("Quer fazer mais alguma coisa?", ["Ver a semana", "Marcar outro"]);
         return {
           isError: false,
           text: JSON.stringify({
@@ -1148,6 +1161,7 @@ export async function runTool(
           descricao: input.descricao ? String(input.descricao) : null,
           data: input.data ? String(input.data) : null,
         });
+        sugerirBotoes("Quer fazer mais alguma coisa?", ["Ver relatório", "Lançar outro"]);
         return {
           isError: false,
           text: JSON.stringify({
@@ -1187,6 +1201,7 @@ export async function runTool(
           materiais: input.materiais ? String(input.materiais) : null,
         });
         const totalEfetivo = row.efetivo.reduce((s, e) => s + (Number(e.qtd) || 0), 0);
+        sugerirBotoes("Quer fazer mais alguma coisa?", ["Gerar o PDF", "Ver o diário"]);
         return {
           isError: false,
           text: JSON.stringify({

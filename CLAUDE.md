@@ -491,8 +491,14 @@ seguidores). Copiar só o útil; manter onde a Rosana já é melhor.
   vincula o número. Resolve o gargalo do OTP preso na janela. (pós-Meta)
 - **② Botões interativos — ✅ FEITO (04/10):** tool `enviar_opcoes` +
   `sendInteractiveButtons` (client.ts) + parsing de resposta interativa no
-  pipeline (`interactiveReplyText`). Botões de resposta rápida (máx 3) nas
-  primeiras experiências/onboarding. Dá pra testar já no número do dono.
+  pipeline (`interactiveReplyText`). Como o Haiku teimava em "fingir" botões com
+  👇 em texto, os botões viraram DETERMINÍSTICOS no pipeline: (a) botões de
+  INÍCIO quando a msg é "o que você faz / por onde começo" ou no 1º contato
+  (`queremBotoesDeInicio`/`botoesIniciais`); (b) botões de CONTINUAÇÃO após uma
+  ação concluída (criar evento → "Ver a semana"/"Marcar outro"; lançar custo →
+  "Ver relatório"/"Lançar outro"; RDO → "Gerar o PDF"/"Ver o diário"), via
+  `ctx.sugestaoBotoes` em runTool. Precedência: enviar_opcoes do modelo > início
+  > sugestão. Validado no WhatsApp do dono.
 - **③ Boas-vindas proativa:** 1ª mensagem automática logo após vincular o número
   (hoje a Rosana espera o usuário falar). (pós-Meta / junto do ①)
 - **④ Agenda interna desacoplada (maior):** o MA guarda o compromisso em agenda
