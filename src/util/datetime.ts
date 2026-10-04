@@ -31,6 +31,17 @@ export function nowIso(): string {
   return new Date().toISOString();
 }
 
+/** Hora "HH:mm" (no fuso do dono) de um datetime ISO. "" se inválido. */
+export function horaBr(iso: string): string {
+  const dt = new Date(iso);
+  if (Number.isNaN(dt.getTime())) return "";
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: timezone(),
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(dt);
+}
+
 /** Data de hoje no fuso do dono, no formato "YYYY-MM-DD". */
 export function todayIsoDate(): string {
   return new Intl.DateTimeFormat("en-CA", {

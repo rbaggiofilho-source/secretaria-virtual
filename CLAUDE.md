@@ -6,10 +6,12 @@
 > obra, transcrição). Última atualização deste doc: 22/08/2026.
 
 ## Regra sagrada
-Eventos SEMPRE no Google Agenda **pessoal do usuário da conversa** (resolvido
-pelo servidor via `secretaria_usuarios`; dono usa `GOOGLE_CALENDAR_ID` da env),
-NUNCA em calendário de empresa e NUNCA no calendário de outro usuário. O modelo
-não escolhe calendarId — forçado no código.
+Compromissos são **isolados por `user_wa`** — NUNCA aparecem pra outro usuário
+nem num calendário de empresa. A **agenda interna da Rosana** (`secretaria_eventos`)
+é a fonte da verdade e funciona SEM Google (desde 04/10/2026). Quando o usuário
+conecta o Google, o evento é ESPELHADO no Google Agenda **pessoal dele** (dono =
+`GOOGLE_CALENDAR_ID`; beta = `primary` via OAuth) — nunca de empresa, nunca de
+outro usuário. O modelo não escolhe calendarId nem user_wa — forçado no código.
 
 ## Usuários (multi-usuário desde 22/08/2026)
 - Autorização pela tabela **`secretaria_usuarios`** (linha ativa = número
@@ -94,13 +96,18 @@ WhatsApp. Eventos de status (sent/delivered/read/failed) são logados.
 - `src/memory/context.ts` + `supabase.ts` — acesso a dados (memória, histórico, custos, RDO, fotos, documentos, dedup).
 - `src/memory/storage.ts` — arquivos das fotos no Supabase Storage (bucket privado `secretaria-fotos`; upload no ingest, download p/ reenvio).
 - `src/stt/{index,groq,openai}.ts` — transcrição.
-- `src/calendar/google.ts` — Google Agenda (conta de serviço OU OAuth por usuário; `CalendarAuth`).
+- `src/memory/eventos.ts` — AGENDA INTERNA (CRUD de `secretaria_eventos`): criar,
+  listar (janela), atualizar, cancelar, getEvento. Fonte da verdade da agenda.
+- `src/calendar/google.ts` — Google Agenda (conta de serviço OU OAuth por usuário;
+  `CalendarAuth`). Usado só como ESPELHO opcional da agenda interna.
 - `src/oauth/google.ts` — OAuth Google (URL de consentimento, troca de code, state assinado).
 - `src/oauth/page.ts` — páginas HTML de fim do fluxo OAuth (sucesso/erro).
 - `api/cadastro.ts` — site de cadastro do beta. `api/oauth/{start,callback}.ts` — fluxo OAuth.
 - `api/cron/bomdia.ts` — "bom dia" diário (Vercel Cron `0 11 * * 1-5` = 8h BRT, seg–sex).
   Envia SÓ para quem mandou mensagem nas últimas 24h (janela da Meta) e com
   `nudge_diario=true`. Protegido por `CRON_SECRET`. Não recupera quem sumiu (fora da janela).
+  Inclui a **agenda de hoje** (de `secretaria_eventos`) — é o único "lembrete"
+  viável no cron 1×/dia do Hobby (lembrete-minuto por evento precisa cron sub-diário).
 - `api/privacidade.ts` (/privacidade) e `api/termos.ts` (/termos) — páginas legais (LGPD).
 - **Plataforma web (painel):**
   - `src/auth/session.ts` — token de sessão assinado (HMAC com `WHATSAPP_APP_SECRET`,
@@ -168,6 +175,11 @@ WhatsApp. Eventos de status (sent/delivered/read/failed) são logados.
 - `secretaria_memories` — fatos, obras, apelidos, pendências, preferências (por `user_wa`).
 - `secretaria_conversations` — histórico (role user/assistant).
 - `secretaria_processed_messages` — dedup (PK `wa_message_id`).
+- `secretaria_eventos` — AGENDA INTERNA (compromissos) por `user_wa`. Fonte da
+  verdade da agenda; funciona SEM Google. Campos: titulo, inicio/fim (timestamptz),
+  local, descricao, obra, lembrete_em/lembrete_enviado (preparado p/ lembrete-minuto
+  futuro), google_event_id (espelho no Google, quando conectado), status
+  (ativo/cancelado). Funções em `src/memory/eventos.ts`.
 - `secretaria_auth_codes` — códigos OTP do painel web, usados p/ criar/redefinir
   senha (PK `user_wa`; `code_hash`, `expires_at`, `attempts`, `last_sent_at`).
 - `secretaria_senhas` — senhas do painel (PK `user_wa`; `senha_hash` scrypt,
@@ -207,11 +219,15 @@ WhatsApp. Eventos de status (sent/delivered/read/failed) são logados.
   por item+obra e pode lançar no custo (lancar_custo).
 
 ## Ferramentas do agente
-`create_calendar_event`, `update_calendar_event`, `search_calendar_events`,
+`create_calendar_event`/`update_calendar_event`/`search_calendar_events` (AGENDA
+INTERNA `secretaria_eventos` como fonte da verdade — FUNCIONA SEM Google; se o
+Google estiver conectado, espelha/lê de lá também. event_id interno = `i<n>`;
+ids sem prefixo = evento legado só no Google),
 `dia_da_semana` (dia da semana correto de uma data — modelo não calcula de cabeça),
 `resolver_data` (calcula data futura exata + dia da semana a partir de deslocamento
 dias/semanas/meses — p/ "daqui um mês", "daqui 45 dias", além da tabela de 16 dias),
-`conectar_agenda` (gera link OAuth p/ o usuário conectar a própria agenda),
+`conectar_agenda` (OPCIONAL — link OAuth p/ ESPELHAR a agenda no Google do usuário;
+agendar/ver já funciona sem Google),
 `enviar_opcoes` (responde com BOTÕES de resposta rápida do WhatsApp — até 3; o
 modelo põe o texto no corpo e as opções viram botões; o toque volta como se o
 usuário tivesse digitado o rótulo; usado p/ onboarding/primeiras experiências),
@@ -501,10 +517,13 @@ seguidores). Copiar só o útil; manter onde a Rosana já é melhor.
   > sugestão. Validado no WhatsApp do dono.
 - **③ Boas-vindas proativa:** 1ª mensagem automática logo após vincular o número
   (hoje a Rosana espera o usuário falar). (pós-Meta / junto do ①)
-- **④ Agenda interna desacoplada (maior):** o MA guarda o compromisso em agenda
-  PRÓPRIA e o lembrete por WhatsApp chega MESMO sem Google (Google vira espelho
-  opcional, sync bidirecional granular). Hoje a Rosana EXIGE Google p/ agendar.
-  Nova tabela de eventos + cron de lembretes. (depois)
+- **④ Agenda interna desacoplada — ✅ NÚCLEO FEITO (04/10):** `secretaria_eventos`
+  é a fonte da verdade; `create/search/update_calendar_event` usam ela e FUNCIONAM
+  SEM Google (que virou espelho opcional, ida: create espelha; volta: search mescla
+  eventos do Google sem duplicar). Prompt não exige mais conectar. "Bom dia" diário
+  inclui a agenda de hoje. **FALTA (bloqueado):** lembrete-minuto por evento
+  (precisa cron sub-diário — Vercel Pro — + template da Meta p/ enviar fora da
+  janela de 24h). `lembrete_em`/`lembrete_enviado` já existem na tabela p/ isso.
 - **Manter (Rosana já ganha):** vertical de obras (RDO/custos/NF→custo/materiais/
   preço real), memória mais precisa, visão+voz no contexto de obra.
 - **Pular:** amplitude horizontal (finanças/open finance), Meet/Contatos, time de

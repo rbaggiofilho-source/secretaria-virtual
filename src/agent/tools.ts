@@ -5,6 +5,12 @@ import {
   updateCalendarEvent,
   type CalendarAuth,
 } from "../calendar/google.js";
+import {
+  atualizarEvento,
+  criarEvento,
+  getEvento,
+  listarEventos,
+} from "../memory/eventos.js";
 import { oauthConfigured, signState } from "../oauth/google.js";
 import { buildRdoPdf } from "../pdf/rdo.js";
 import {
@@ -70,7 +76,7 @@ export const TOOLS: Anthropic.Tool[] = [
   {
     name: "create_calendar_event",
     description:
-      "Cria um evento no calendário PESSOAL do usuário (sempre o pessoal, nunca calendário de empresa). Use datas em ISO 8601 com offset do fuso America/Sao_Paulo (ex.: 2026-08-15T09:00:00-03:00). Em caso de erro, avise o usuário.",
+      "Marca um compromisso na agenda do usuário. FUNCIONA SEMPRE, mesmo sem Google conectado (fica guardado na agenda da Rosana). Se o usuário tiver conectado o Google, o evento também é espelhado lá automaticamente. NÃO exija conectar o Google para agendar. Use datas em ISO 8601 com offset do fuso America/Sao_Paulo (ex.: 2026-08-15T09:00:00-03:00; pegue a data da tabela de referência ou de resolver_data, nunca de cabeça).",
     input_schema: {
       type: "object",
       properties: {
@@ -108,7 +114,7 @@ export const TOOLS: Anthropic.Tool[] = [
   {
     name: "search_calendar_events",
     description:
-      "Busca eventos do calendário pessoal numa janela de tempo. Use antes de atualizar um evento existente.",
+      "Lista os compromissos do usuário numa janela de tempo (ex.: hoje, esta semana). Lê a agenda da Rosana e também o Google, se conectado. Use quando o usuário pedir a agenda do dia/semana, e antes de atualizar um evento (pra pegar o event_id).",
     input_schema: {
       type: "object",
       properties: {
@@ -190,7 +196,7 @@ export const TOOLS: Anthropic.Tool[] = [
   {
     name: "conectar_agenda",
     description:
-      "Envia ao usuário um link para ele conectar a PRÓPRIA agenda do Google à Rosana (login/autorização Google). Use quando o usuário ainda não tem a agenda conectada e quer criar/ver compromissos, ou quando ele pedir para conectar/trocar a agenda (inclusive se pedir 'outro link' / 'de novo' — SEMPRE chame a tool de novo, nunca reaproveite um link anterior). O PRÓPRIO SISTEMA já envia o link numa mensagem separada; você NÃO deve escrever, copiar nem inventar a URL — só confirme em 1 frase que enviou.",
+      "Envia ao usuário um link para conectar a PRÓPRIA agenda do Google (login/autorização Google). É OPCIONAL: agendar e ver compromissos já funciona sem Google (agenda interna da Rosana). Use SÓ quando o usuário PEDIR para sincronizar/conectar com o Google, trocar a conta, ou pedir 'outro link'/'de novo' (SEMPRE chame a tool de novo, nunca reaproveite um link anterior). O PRÓPRIO SISTEMA já envia o link numa mensagem separada; você NÃO deve escrever, copiar nem inventar a URL — só confirme em 1 frase que enviou.",
     input_schema: {
       type: "object",
       properties: {},
@@ -892,44 +898,135 @@ export async function runTool(
       }
 
       case "create_calendar_event": {
+        // Agenda INTERNA é a fonte da verdade: cria SEMPRE, mesmo sem Google.
+        // Se o Google estiver conectado, espelha lá (best-effort).
+        const titulo = String(input.title);
+        const inicioIso = String(input.start_iso);
+        const fimIso = input.end_iso ? String(input.end_iso) : null;
+        const local = input.location ? String(input.location) : null;
+        const descricao = input.description ? String(input.description) : null;
+        const reminderMin =
+          typeof input.reminder_minutes === "number" ? input.reminder_minutes : null;
+        const lembreteEmIso =
+          reminderMin != null && !Number.isNaN(Date.parse(inicioIso))
+            ? new Date(Date.parse(inicioIso) - reminderMin * 60000).toISOString()
+            : null;
+
+        let googleEventId: string | null = null;
+        let googleFalhou = false;
         const calAuth = await resolveCalAuth();
-        if (!calAuth) return { isError: true, text: SEM_CALENDARIO };
-        const ev = await createCalendarEvent({
-          title: String(input.title),
-          startIso: String(input.start_iso),
-          endIso: String(input.end_iso),
-          location: input.location ? String(input.location) : undefined,
-          description: input.description ? String(input.description) : undefined,
-          reminderMinutes:
-            typeof input.reminder_minutes === "number"
-              ? input.reminder_minutes
-              : undefined,
-        }, calAuth);
+        if (calAuth) {
+          try {
+            const ev = await createCalendarEvent(
+              {
+                title: titulo,
+                startIso: inicioIso,
+                endIso: fimIso ?? inicioIso,
+                location: local ?? undefined,
+                description: descricao ?? undefined,
+                reminderMinutes: reminderMin ?? undefined,
+              },
+              calAuth,
+            );
+            googleEventId = ev.id || null;
+          } catch {
+            googleFalhou = true; // segue: o evento vai pra agenda interna mesmo assim
+          }
+        }
+
+        const row = await criarEvento(userWa, {
+          titulo,
+          inicioIso,
+          fimIso,
+          local,
+          descricao,
+          lembreteEmIso,
+          googleEventId,
+        });
         sugerirBotoes("Quer fazer mais alguma coisa?", ["Ver a semana", "Marcar outro"]);
         return {
           isError: false,
           text: JSON.stringify({
             ok: true,
-            event_id: ev.id,
-            title: ev.title,
-            start: ev.start,
-            end: ev.end,
-            dia_semana: ev.start ? weekdayBr(ev.start) : null,
-            link: ev.htmlLink,
+            event_id: `i${row.id}`,
+            title: row.titulo,
+            start: row.inicio,
+            end: row.fim,
+            dia_semana: weekdayBr(row.inicio),
+            sincronizado_google: !!googleEventId,
+            google_falhou: googleFalhou || undefined,
+            nota: calAuth
+              ? undefined
+              : "Compromisso salvo na agenda da Rosana (funciona sem Google). Se quiser que apareça TAMBÉM no seu Google Agenda, é só pedir pra conectar — opcional.",
           }),
         };
       }
 
       case "update_calendar_event": {
+        const rawId = String(input.event_id);
+        // Evento da agenda interna (id "i<n>").
+        if (/^i\d+$/.test(rawId)) {
+          const id = Number(rawId.slice(1));
+          const atual = await getEvento(userWa, id);
+          if (!atual) {
+            return {
+              isError: true,
+              text: JSON.stringify({ ok: false, error: "Não achei esse compromisso na agenda." }),
+            };
+          }
+          const inicioIso = input.start_iso ? String(input.start_iso) : null;
+          const fimIso = input.end_iso ? String(input.end_iso) : undefined;
+          const row = await atualizarEvento(userWa, id, {
+            titulo: input.title ? String(input.title) : null,
+            inicioIso,
+            fimIso,
+            local: input.location !== undefined ? (input.location ? String(input.location) : null) : undefined,
+          });
+          // Espelha a alteração no Google, se o evento tiver espelho.
+          if (atual.google_event_id) {
+            const calAuth = await resolveCalAuth();
+            if (calAuth) {
+              try {
+                await updateCalendarEvent(
+                  {
+                    eventId: atual.google_event_id,
+                    startIso: inicioIso ?? undefined,
+                    endIso: fimIso,
+                    title: input.title ? String(input.title) : undefined,
+                    location: input.location ? String(input.location) : undefined,
+                  },
+                  calAuth,
+                );
+              } catch {
+                /* o evento interno já foi atualizado; só o espelho falhou */
+              }
+            }
+          }
+          return {
+            isError: false,
+            text: JSON.stringify({
+              ok: true,
+              event_id: `i${row.id}`,
+              title: row.titulo,
+              start: row.inicio,
+              end: row.fim,
+              dia_semana: weekdayBr(row.inicio),
+            }),
+          };
+        }
+        // Evento legado só no Google (criado antes da agenda interna ou fora dela).
         const calAuth = await resolveCalAuth();
         if (!calAuth) return { isError: true, text: SEM_CALENDARIO };
-        const ev = await updateCalendarEvent({
-          eventId: String(input.event_id),
-          startIso: input.start_iso ? String(input.start_iso) : undefined,
-          endIso: input.end_iso ? String(input.end_iso) : undefined,
-          title: input.title ? String(input.title) : undefined,
-          location: input.location ? String(input.location) : undefined,
-        }, calAuth);
+        const ev = await updateCalendarEvent(
+          {
+            eventId: rawId,
+            startIso: input.start_iso ? String(input.start_iso) : undefined,
+            endIso: input.end_iso ? String(input.end_iso) : undefined,
+            title: input.title ? String(input.title) : undefined,
+            location: input.location ? String(input.location) : undefined,
+          },
+          calAuth,
+        );
         return {
           isError: false,
           text: JSON.stringify({
@@ -944,23 +1041,44 @@ export async function runTool(
       }
 
       case "search_calendar_events": {
-        const calAuth = await resolveCalAuth();
-        if (!calAuth) return { isError: true, text: SEM_CALENDARIO };
-        const events = await searchCalendarEvents(
-          String(input.start_iso),
-          String(input.end_iso),
-          calAuth,
+        const startIso = String(input.start_iso);
+        const endIso = String(input.end_iso);
+        // Agenda interna (fonte da verdade) + eventos do Google (se conectado),
+        // sem duplicar os que já são espelho de um evento interno.
+        const internos = await listarEventos(userWa, startIso, endIso);
+        const idsEspelhados = new Set(
+          internos.map((e) => e.google_event_id).filter((x): x is string => !!x),
         );
-        return {
-          isError: false,
-          text: JSON.stringify({
-            ok: true,
-            events: events.map((e) => ({
-              ...e,
-              dia_semana: e.start ? weekdayBr(e.start) : null,
-            })),
-          }),
-        };
+        const eventos: Array<Record<string, unknown>> = internos.map((e) => ({
+          event_id: `i${e.id}`,
+          title: e.titulo,
+          start: e.inicio,
+          end: e.fim,
+          local: e.local,
+          dia_semana: weekdayBr(e.inicio),
+          fonte: "interna",
+        }));
+        const calAuth = await resolveCalAuth();
+        if (calAuth) {
+          try {
+            const gEvents = await searchCalendarEvents(startIso, endIso, calAuth);
+            for (const g of gEvents) {
+              if (g.id && idsEspelhados.has(g.id)) continue;
+              eventos.push({
+                event_id: g.id,
+                title: g.title,
+                start: g.start,
+                end: g.end,
+                dia_semana: g.start ? weekdayBr(g.start) : null,
+                fonte: "google",
+              });
+            }
+          } catch {
+            /* se o Google falhar, mostramos ao menos a agenda interna */
+          }
+        }
+        eventos.sort((a, b) => String(a.start ?? "").localeCompare(String(b.start ?? "")));
+        return { isError: false, text: JSON.stringify({ ok: true, events: eventos }) };
       }
 
       case "save_memory": {

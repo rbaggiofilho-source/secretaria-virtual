@@ -267,3 +267,32 @@ create table if not exists public.secretaria_pacotes_compras (
 
 create index if not exists secretaria_pacotes_user_idx on public.secretaria_pacotes_compras (user_wa, mes);
 alter table public.secretaria_pacotes_compras enable row level security;
+
+-- Agenda INTERNA da Rosana (compromissos). Fonte da verdade da agenda; funciona
+-- SEM Google. Quando o usuário conecta o Google, o evento é ESPELHADO lá
+-- (google_event_id). Isolado por user_wa.
+create table if not exists public.secretaria_eventos (
+  id               bigint generated always as identity primary key,
+  user_wa          text        not null,
+  titulo           text        not null,
+  inicio           timestamptz not null,
+  fim              timestamptz,
+  local            text,
+  descricao        text,
+  obra             text,
+  lembrete_em      timestamptz,
+  lembrete_enviado boolean     not null default false,
+  google_event_id  text,
+  status           text        not null default 'ativo'
+                   check (status in ('ativo','cancelado')),
+  created_at       timestamptz not null default now(),
+  updated_at       timestamptz not null default now()
+);
+
+create index if not exists secretaria_eventos_user_inicio_idx
+  on public.secretaria_eventos (user_wa, inicio);
+create index if not exists secretaria_eventos_lembrete_idx
+  on public.secretaria_eventos (lembrete_em)
+  where lembrete_enviado = false and status = 'ativo';
+
+alter table public.secretaria_eventos enable row level security;

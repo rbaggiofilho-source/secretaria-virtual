@@ -1,6 +1,7 @@
 import { getEnv } from "../../src/config/env.js";
 import { usuariosAtivosParaNudge } from "../../src/memory/context.js";
-import { todayIsoDate, weekdayBr } from "../../src/util/datetime.js";
+import { listarEventos } from "../../src/memory/eventos.js";
+import { horaBr, todayIsoDate, weekdayBr } from "../../src/util/datetime.js";
 import { sendTextMessage } from "../../src/whatsapp/client.js";
 
 /**
@@ -25,12 +26,33 @@ export default {
 
     try {
       const usuarios = await usuariosAtivosParaNudge();
-      const dia = weekdayBr(todayIsoDate());
+      const hoje = todayIsoDate();
+      const dia = weekdayBr(hoje);
       let enviados = 0;
 
       for (const u of usuarios) {
         try {
-          await sendTextMessage(u.user_wa, montarBomDia(u.nome, dia));
+          // Agenda de hoje (agenda interna da Rosana). Único "lembrete" viável
+          // no cron diário do Hobby; não derruba o bom dia se falhar.
+          let agendaBloco = "";
+          try {
+            const evs = await listarEventos(
+              u.user_wa,
+              `${hoje}T00:00:00-03:00`,
+              `${hoje}T23:59:59-03:00`,
+            );
+            if (evs.length > 0) {
+              const linhas = evs
+                .map((e) => `• ${horaBr(e.inicio)} — ${e.titulo}${e.local ? ` (${e.local})` : ""}`)
+                .join("\n");
+              agendaBloco = `\n\n📅 *Sua agenda de hoje:*\n${linhas}`;
+            }
+          } catch (err) {
+            console.error(
+              `[bomdia] falha ao ler agenda de um usuário: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          }
+          await sendTextMessage(u.user_wa, montarBomDia(u.nome, dia, agendaBloco));
           enviados++;
         } catch (err) {
           console.error(
@@ -52,7 +74,7 @@ export default {
 };
 
 /** Mensagem curta, calorosa e útil — com um leve tempero pelo dia da semana. */
-function montarBomDia(nome: string, dia: string): string {
+function montarBomDia(nome: string, dia: string, agendaBloco: string): string {
   const primeiro = nome.split(/\s+/)[0] || nome;
   const tempero =
     dia === "sexta-feira"
@@ -60,6 +82,9 @@ function montarBomDia(nome: string, dia: string): string {
       : dia === "segunda-feira"
         ? "Semana nova começando. 💪"
         : `Hoje é ${dia}.`;
+  if (agendaBloco) {
+    return `${primeiro}, bom dia! ${tempero}${agendaBloco}\n\nQuer que eu te ajude com mais alguma coisa? 👷`;
+  }
   return (
     `${primeiro}, bom dia! ${tempero}\n\n` +
     "Como posso te ajudar hoje? Quer ver sua *agenda de hoje* ou suas *pendências*? " +
