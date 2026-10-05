@@ -67,6 +67,32 @@ export async function resolveUsuarioAtivo(input: string): Promise<UsuarioRow | n
   return null;
 }
 
+/**
+ * Escolhe PRA QUAL variante do wa_id mandar o OTP. A pessoa pode estar cadastrada
+ * em duas formas (com/sem o nono dígito) e a Meta só ENTREGA numa delas — mandar
+ * pra errada dá 200 mas não chega (armadilha do nono dígito). Então preferimos a
+ * variante com mensagem recebida mais recente (prova de que entrega E está na
+ * janela de 24h). Sem histórico, cai na própria user_wa.
+ */
+async function destinoDeEntrega(userWa: string): Promise<string> {
+  const variantes = waIdVariants(userWa);
+  if (variantes.length <= 1) return userWa;
+  try {
+    const supabase = getSupabase();
+    const { data } = await supabase
+      .from("secretaria_conversations")
+      .select("user_wa, created_at")
+      .in("user_wa", variantes)
+      .eq("role", "user")
+      .order("created_at", { ascending: false })
+      .limit(1);
+    const melhor = (data?.[0] as { user_wa: string } | undefined)?.user_wa;
+    return melhor ?? userWa;
+  } catch {
+    return userWa;
+  }
+}
+
 /** Gera e envia um código de login para o número, se ele for autorizado. */
 export async function requestLoginCode(input: string): Promise<RequestResult> {
   const usuario = await resolveUsuarioAtivo(input);
@@ -101,7 +127,7 @@ export async function requestLoginCode(input: string): Promise<RequestResult> {
 
   try {
     await sendTextMessage(
-      usuario.user_wa,
+      await destinoDeEntrega(usuario.user_wa),
       `Seu código de acesso ao painel da Rosana é ${code}.\n\n` +
         `Ele vale por 10 minutos. Se não foi você que pediu, ignore esta mensagem — ninguém entra sem o código.`,
     );
