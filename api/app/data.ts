@@ -298,6 +298,7 @@ export default {
             const m = await getMembro(empresa.id, membroId);
             if (!m) return json(request, { ok: false, error: "membro_nao_encontrado" }, 404);
             if (ehMaster(empresa, m.user_wa)) return json(request, { ok: false, error: "master_imutavel" }, 400);
+            if (m.status === "ativo") return json(request, { ok: false, error: "ja_ativo" }, 400);
             const wa = await reconvidarMembro(empresa.id, membroId);
             if (wa) await mandarMensagemConvite(empresa.nome, wa);
             return json(request, { ok: true });

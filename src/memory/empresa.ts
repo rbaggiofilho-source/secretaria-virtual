@@ -235,7 +235,11 @@ export async function atualizarMembro(
   if (error) throw new Error(`Falha ao atualizar membro: ${error.message}`);
 }
 
-/** Volta um membro para 'convidado' (re-envio do convite). Retorna o wa. */
+/**
+ * Volta um membro para 'convidado' (re-envio do convite). Retorna o wa, ou null
+ * se não aplicável. NUNCA reverte quem já está ATIVO (evita desfazer um aceite
+ * por um clique de reenvio com a tela desatualizada).
+ */
 export async function reconvidarMembro(empresaId: number, membroId: number): Promise<string | null> {
   const supabase = getSupabase();
   const { data, error } = await supabase
@@ -244,6 +248,7 @@ export async function reconvidarMembro(empresaId: number, membroId: number): Pro
     .eq("empresa_id", empresaId)
     .eq("id", membroId)
     .neq("papel", "admin")
+    .in("status", ["convidado", "recusado", "removido"])
     .select("user_wa")
     .maybeSingle();
   if (error) throw new Error(`Falha ao reconvidar: ${error.message}`);
