@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { BarChart3, BookOpenText, Building2, Building, CalendarDays, ChevronLeft, FileClock, Images, LayoutDashboard, LogOut, PackageSearch, Settings, Sparkles, UserRound } from 'lucide-react'
+import { BarChart3, BookOpenText, Building2, Building, CalendarDays, ChevronLeft, FileClock, Images, LayoutDashboard, LogOut, PackageSearch, Sparkles, UserRound } from 'lucide-react'
 import { Logo } from './Logo'
 import type { Usuario } from '../lib/api'
 
@@ -54,9 +54,6 @@ export function Sidebar({
           </NavLink>
           <NavLink to="/painel/conta" onClick={onClose} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
             <UserRound size={19} /><span>Minha conta</span>
-          </NavLink>
-          <NavLink to="/painel/config" onClick={onClose} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-            <Settings size={19} /><span>Configurações</span>
           </NavLink>
           <button className="nav-item" onClick={onLogout}><LogOut size={19} /><span>Sair</span></button>
           <div className="profile"><div className="avatar">{iniciais(usuario.nome)}</div><div><strong>{usuario.nome}</strong><small>{subtitulo}</small></div></div>

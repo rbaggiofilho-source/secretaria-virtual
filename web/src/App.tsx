@@ -18,6 +18,7 @@ import { MinhaConta } from './pages/MinhaConta'
 import { Configuracoes } from './pages/Configuracoes'
 import { AdminApp } from './pages/Admin'
 import { getSession, getToken, setToken, type Usuario } from './lib/api'
+import { aplicarTema, getTema } from './lib/theme'
 import { Logo } from './components/Logo'
 
 type Estado =
@@ -65,6 +66,8 @@ function RotaPainel({ estado, onLogout }: { estado: Estado; onLogout: () => void
 
 export function App() {
   const [estado, setEstado] = useState<Estado>({ fase: 'checando' })
+
+  useEffect(() => { aplicarTema(getTema()) }, [])
 
   useEffect(() => {
     let vivo = true

@@ -405,6 +405,7 @@ export interface EmpresaInfo {
   plano: string
   teto_membros: number
   assinatura_status: string
+  dono_wa: string
   usados: number
 }
 export interface PlanoEmpresa {
@@ -417,8 +418,10 @@ export interface MembroEmpresa {
   id: number
   user_wa: string
   nome: string | null
+  cargo: string | null
   papel: 'admin' | 'engenheiro'
   status: 'convidado' | 'ativo' | 'recusado' | 'removido'
+  master: boolean
 }
 export interface ObraEmpresa {
   id: number
@@ -430,6 +433,7 @@ export interface ObraEmpresa {
 }
 export interface EmpresaPayload {
   empresa: EmpresaInfo | null
+  master?: boolean
   membros?: MembroEmpresa[]
   obras?: ObraEmpresa[]
   planosEmpresa?: PlanoEmpresa[]
@@ -448,8 +452,13 @@ function postEmpresa(body: Record<string, unknown>) {
 }
 export const assinarEmpresa = (planoId: string) => postEmpresa({ acao: 'assinar', planoId })
 export const criarEmpresa = (nome: string, teto_membros?: number) => postEmpresa({ acao: 'criar', nome, teto_membros })
-export const convidarColaborador = (nome: string, numero: string) => postEmpresa({ acao: 'convidar', nome, numero })
+export const convidarColaborador = (nome: string, numero: string, cargo?: string) =>
+  postEmpresa({ acao: 'convidar', nome, numero, cargo })
 export const removerMembro = (membroId: number) => postEmpresa({ acao: 'remover', membroId })
+export const promoverMembro = (membroId: number, papel: 'admin' | 'engenheiro') =>
+  postEmpresa({ acao: 'promover', membroId, papel })
+export const definirCargoMembro = (membroId: number, cargo: string) => postEmpresa({ acao: 'cargo', membroId, cargo })
+export const renomearEmpresa = (nome: string) => postEmpresa({ acao: 'renomear', nome })
 export const criarObraEmpresa = (nome: string, cliente?: string, endereco?: string) =>
   postEmpresa({ acao: 'criar_obra', nome, cliente, endereco })
 export const atribuirObra = (obraId: number, userWas: string[]) => postEmpresa({ acao: 'atribuir', obraId, userWas })

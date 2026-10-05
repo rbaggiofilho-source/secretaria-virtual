@@ -1,12 +1,9 @@
-import { useEffect, useState, type FormEvent } from 'react'
-import { CalendarDays, Gauge, KeyRound, LogOut, Trash2, UserRound } from 'lucide-react'
+import { useState, type FormEvent } from 'react'
+import { KeyRound, LogOut, Moon, Sun, Trash2 } from 'lucide-react'
 import { PageHead } from '../components/Page'
 import { usePanel } from '../components/PanelLayout'
-import { getMeuPlano, trocarSenha, type PlanoUsuario, type UsoItem } from '../lib/api'
-
-function usoTexto(u: UsoItem, unidade = ''): string {
-  return u.limite === null ? `${u.usado}${unidade} (sem limite)` : `${u.usado}${unidade} de ${u.limite}${unidade}`
-}
+import { trocarSenha } from '../lib/api'
+import { getTema, setTema, type Tema } from '../lib/theme'
 
 const ERRO_MSG: Record<string, string> = {
   senha_atual_incorreta: 'A senha atual está incorreta.',
@@ -16,14 +13,18 @@ const ERRO_MSG: Record<string, string> = {
 }
 
 export function Configuracoes() {
-  const { usuario, onLogout } = usePanel()
+  const { onLogout } = usePanel()
   const [atual, setAtual] = useState('')
   const [nova, setNova] = useState('')
   const [confirma, setConfirma] = useState('')
   const [loading, setLoading] = useState(false)
   const [msg, setMsg] = useState<{ tipo: 'ok' | 'erro'; texto: string } | null>(null)
-  const [plano, setPlano] = useState<PlanoUsuario | null>(null)
-  useEffect(() => { getMeuPlano().then(setPlano).catch(() => {}) }, [])
+  const [tema, setTemaState] = useState<Tema>(getTema())
+
+  function trocarTema(t: Tema) {
+    setTema(t)
+    setTemaState(t)
+  }
 
   async function salvar(e: FormEvent) {
     e.preventDefault()
@@ -44,39 +45,17 @@ export function Configuracoes() {
 
   return (
     <section className="page">
-      <PageHead eyebrow="SUA CONTA" title="Configurações" subtitle="Seus dados e ações da conta." />
+      <PageHead eyebrow="CONFIGURAÇÕES" title="Configurações" subtitle="Aparência, senha e ações da conta." />
 
       <div className="config-grid">
         <article className="config-card">
-          <div className="config-icon"><UserRound size={20} /></div>
-          <h3>Perfil</h3>
-          <dl>
-            <div><dt>Nome</dt><dd>{usuario.nome}</dd></div>
-            <div><dt>Tipo de conta</dt><dd>{usuario.dono ? 'Dono' : 'Cliente'}</dd></div>
-            {usuario.profissao && <div><dt>Profissão</dt><dd>{usuario.profissao}</dd></div>}
-            {usuario.contextos && <div><dt>Contextos</dt><dd>{usuario.contextos}</dd></div>}
-          </dl>
-        </article>
-
-        <article className="config-card">
-          <div className="config-icon"><Gauge size={20} /></div>
-          <h3>Seu plano</h3>
-          {!plano ? <p>Carregando…</p> : (
-            <dl>
-              <div><dt>Plano</dt><dd>{plano.plano.ilimitado ? 'Sem limite (dono)' : plano.plano.nome}</dd></div>
-              <div><dt>Mensagens no mês</dt><dd>{usoTexto(plano.uso.mensagens)}</dd></div>
-              <div><dt>Fotos/notas no mês</dt><dd>{plano.uso.fotos.limite === 0 ? 'Não incluso no plano' : usoTexto(plano.uso.fotos)}</dd></div>
-              <div><dt>Áudio no mês</dt><dd>{usoTexto(plano.uso.audioMin, ' min')}</dd></div>
-              <div><dt>Obras</dt><dd>{plano.plano.limiteObras === null ? 'Ilimitadas' : `Até ${plano.plano.limiteObras}`}</dd></div>
-            </dl>
-          )}
-          {plano && !plano.plano.ilimitado && <p>Precisa de mais? Mande <b>“PACOTE 100”</b> para a Rosana no WhatsApp (+100 mensagens) ou peça para subir de plano.</p>}
-        </article>
-
-        <article className="config-card">
-          <div className="config-icon"><CalendarDays size={20} /></div>
-          <h3>Google Agenda</h3>
-          <p>Seus compromissos são criados na sua agenda pessoal. Para conectar ou reconectar, mande <b>“conectar agenda”</b> para a Rosana no WhatsApp.</p>
+          <div className="config-icon">{tema === 'dark' ? <Moon size={20} /> : <Sun size={20} />}</div>
+          <h3>Aparência</h3>
+          <p>Escolha o tema do painel.</p>
+          <div className="tema-switch">
+            <button className={`tema-opt ${tema === 'light' ? 'tema-opt--on' : ''}`} onClick={() => trocarTema('light')}><Sun size={16} /> Claro</button>
+            <button className={`tema-opt ${tema === 'dark' ? 'tema-opt--on' : ''}`} onClick={() => trocarTema('dark')}><Moon size={16} /> Escuro</button>
+          </div>
         </article>
 
         <article className="config-card config-card--wide">

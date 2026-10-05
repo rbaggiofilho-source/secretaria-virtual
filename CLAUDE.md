@@ -169,8 +169,18 @@ WhatsApp. Eventos de status (sent/delivered/read/failed) são logados.
     token no localStorage), `pages/{Landing,Cadastro,Login,VisaoGeral,Obras,Custos,
     Diario,Fotos,Documentos,Materiais,Atividade,Empresa,MinhaConta,Configuracoes}.tsx`, `styles/{global,landing}.css`.
     A aba **"Minha empresa"** (`pages/Empresa.tsx`, rota `/painel/empresa`) é o
-    painel do admin da versão corporativa (criar empresa, equipe/convites, obras +
-    atribuição de engenheiros).
+    painel do admin da versão corporativa: cabeçalho (nome + Ativo, renomear só
+    master), **Plano e vagas** (só leitura; gerido em Minha conta), **Equipe**
+    (nome/telefone/**cargo**/papel + convidar/remover/**promover a admin** — só
+    master; `promoverMembro`/`definirCargoMembro`/`renomearEmpresa`), **Obras da
+    empresa** (criar + atribuir colaboradores, botão "Todos"). **Papéis:** MASTER
+    (dono, `ehMaster` compara `dono_wa`) mexe em nome/plano/equipe; ADMIN
+    (promovido) vê tudo + gerencia obras/clientes/contexto, mas NÃO equipe/plano/
+    nome. Permissões no servidor (data?recurso=empresa, `soMaster()`).
+    **Minha conta** virou o lugar de **gerir a assinatura da empresa** (seletor de
+    plano, só master) + link p/ Configurações. **Configurações** (saiu do menu
+    lateral; acessada por Minha conta) = trocar senha + **tema claro/escuro**
+    (`lib/theme.ts`, `data-theme` no `<html>`, bloco `[data-theme="dark"]` no CSS).
     A aba **"Atividade"** (`pages/Atividade.tsx`, rota `/painel/atividade`) mostra
     "Programados" (lembretes futuros) + "Entregues" (lembretes/resumos enviados,
     com status) via GET `data?recurso=atividade`.
