@@ -15,6 +15,7 @@ export function Fotos() {
   const [obras, setObras] = useState<ObraResumo[]>([])
   const [erro, setErro] = useState<string | null>(null)
   const [sel, setSel] = useState<string | null>(null)
+  const [aberta, setAberta] = useState<FotoItem | null>(null)
 
   useEffect(() => {
     let vivo = true
@@ -47,10 +48,16 @@ export function Fotos() {
               <div className="foto-grid">
                 {filtradas.map((f) => (
                   <figure className="foto-card" key={f.id}>
-                    <div className="foto-thumb">
+                    <button
+                      type="button"
+                      className="foto-thumb"
+                      onClick={() => f.url && setAberta(f)}
+                      disabled={!f.url}
+                      aria-label="Ampliar foto"
+                    >
                       {f.url ? <img src={f.url} alt={f.descricao ?? 'Foto'} loading="lazy" /> : <span className="foto-off">imagem indisponível</span>}
                       <span className={`foto-tag foto-tag--${f.tipo}`}>{TIPO_LABEL[f.tipo] ?? f.tipo}</span>
-                    </div>
+                    </button>
                     <figcaption>
                       <p>{f.descricao ?? 'Sem descrição'}</p>
                       <small>{formatDate(f.data)}</small>
@@ -62,6 +69,21 @@ export function Fotos() {
           </>
         )}
       </PageState>
+
+      {aberta && aberta.url && (
+        <div className="lightbox" onClick={() => setAberta(null)} role="dialog" aria-modal="true">
+          <div className="lightbox-inner" onClick={(e) => e.stopPropagation()}>
+            <img src={aberta.url} alt={aberta.descricao ?? 'Foto'} />
+            <div className="lightbox-bar">
+              <span>{aberta.descricao ?? 'Sem descrição'}</span>
+              <span className="lightbox-actions">
+                <a href={aberta.url} target="_blank" rel="noopener noreferrer" download>Baixar</a>
+                <button type="button" onClick={() => setAberta(null)}>Fechar</button>
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   )
 }

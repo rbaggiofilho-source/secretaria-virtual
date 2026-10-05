@@ -6,8 +6,10 @@ import {
   loadOwnerContext,
   loadRecentHistory,
   registrarFoto,
+  waIdVariants,
   type UsuarioRow,
 } from "./memory/context.js";
+import { listObrasStruct } from "./memory/obras.js";
 import { convitePendente } from "./memory/empresa.js";
 import { setConfig } from "./memory/config.js";
 import { tratarConvite } from "./corp/convites.js";
@@ -228,7 +230,7 @@ export async function handleIncomingMessage(message: WhatsAppMessage): Promise<v
     // obra inferida da legenda ("salva na pasta do catamarã" → catamarã) e a
     // descrição = o que a Rosana respondeu. Não crítico: falha aqui não derruba.
     if (imagensNaoRegistradas.length > 0) {
-      const obraInferida = inferirObraDaLegenda(userText);
+      const obraInferida = await resolverObraDaFoto(from, userText);
       for (const caminho of imagensNaoRegistradas) {
         try {
           await registrarFoto(from, {
@@ -440,19 +442,66 @@ function botoesIniciais(direito: Direito): BotaoResposta[] {
   return b.slice(0, 3);
 }
 
+/** Normaliza p/ comparar nomes de obra (sem acento, minúsculo, sem espaços extras). */
+function normObra(s: string): string {
+  return s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+}
+
 /**
- * Infere o nome da obra a partir da legenda da foto, p/ o fallback de registro.
- * Ex.: "Salve na pasta do catamarã" → "catamarã"; "foto da obra do centro" →
- * "centro". Sem pista clara → null (vai pro balde "Sem obra" no painel).
+ * Extrai um CANDIDATO a nome de obra da legenda da foto. Pega padrões comuns:
+ * "pasta/álbum/galeria do X", "salva/coloca/guarda ... no/na/em X", e por fim
+ * "no/na/em X" no fim. Sem pista → null.
  */
-function inferirObraDaLegenda(legenda: string): string | null {
+function candidatoObra(legenda: string): string | null {
   const t = (legenda || "").trim();
   if (!t) return null;
-  const m = t.match(/\b(?:pasta|obra|projeto)\s+d[aeo]s?\s+(.+)$/i);
-  if (m && m[1]) {
-    return m[1].replace(/[.!?]+$/u, "").trim().slice(0, 80) || null;
+  const pats = [
+    /\b(?:pasta|obra|projeto|galeria|[áa]lbum)\s+d[aeo]s?\s+(.+)$/i,
+    /\b(?:salv\w*|guard\w*|coloc\w*|p[õo]e\w*|bot\w*|adicion\w*|arquiv\w*)\b.*?\b(?:na|no|em|dentro\s+d[aeo]s?)\s+(.+)$/i,
+    /\b(?:na|no|em)\s+(.+)$/i,
+  ];
+  for (const p of pats) {
+    const m = t.match(p);
+    if (m && m[1]) {
+      const nome = m[1]
+        .replace(/[.!?]+$/u, "")
+        .replace(/\b(pasta|galeria|[áa]lbum)\b/gi, "")
+        .trim()
+        .slice(0, 80);
+      if (nome) return nome;
+    }
   }
   return null;
+}
+
+/**
+ * Resolve a obra da foto no fallback: pega o candidato da legenda e tenta casar
+ * com uma obra JÁ CADASTRADA (sem acento/maiúsculas) p/ usar o NOME CANÔNICO —
+ * assim a foto cai na pasta certa do painel em vez de criar uma obra ad-hoc
+ * divergente (ex.: "catamarã" digitado → obra cadastrada "Catamara"). Se não
+ * casar, usa o candidato como foi dito; sem candidato, procura qualquer obra
+ * cadastrada mencionada na legenda; nada → null ("Sem obra").
+ */
+async function resolverObraDaFoto(from: string, legenda: string): Promise<string | null> {
+  let obras: { nome: string }[] = [];
+  try {
+    const listas = await Promise.all(waIdVariants(from).map((wa) => listObrasStruct(wa).catch(() => [])));
+    obras = listas.flat().map((o) => ({ nome: o.nome }));
+  } catch {
+    /* sem cadastro acessível: segue com o candidato puro */
+  }
+  const cand = candidatoObra(legenda);
+  if (cand) {
+    const nc = normObra(cand);
+    const hit =
+      obras.find((o) => normObra(o.nome) === nc) ??
+      obras.find((o) => normObra(o.nome).includes(nc) || nc.includes(normObra(o.nome)));
+    return hit ? hit.nome : cand;
+  }
+  // Sem candidato explícito: alguma obra cadastrada citada na legenda?
+  const nl = normObra(legenda);
+  const mencion = obras.find((o) => o.nome && nl.includes(normObra(o.nome)));
+  return mencion ? mencion.nome : null;
 }
 
 function logError(step: string, err: unknown): void {
