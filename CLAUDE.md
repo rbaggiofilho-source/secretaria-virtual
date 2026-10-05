@@ -501,6 +501,21 @@ banco; nada de novo produto. Rodando em **userosana.com.br** (projeto Vercel
 ---
 
 ## Armadilhas já resolvidas (NÃO repetir)
+- **Tool duplicada derrubava 100% do atendimento do DONO (05/10):** sintoma =
+  toda mensagem do dono (texto E foto) respondia "Tive um problema ao processar"
+  (o fallback genérico do `catch` no pipeline). Causa real (capturada gravando o
+  erro exato na config `ultimo_erro_visao`): a API da Anthropic rejeitava o
+  request inteiro com **400 "tools: Tool names must be unique."**. `criar_empresa`/
+  `convidar_colaborador` estão no array `TOOLS` SEM entrada em `TOOL_RECURSO` →
+  caíam no default "base" e entravam em `toolsDoPlano` p/ todos; aí
+  `toolsCorporativas(dono)` anexava as MESMAS duas de novo → duplicata só p/ o
+  dono (engenheiro não-dono recebia `[]` e funcionava — por isso parecia "só
+  foto"). Regressão desde a Fase 1 corporativa. Correção: `toolsDoPlano` exclui
+  `NOMES_CORP`; as corporativas saem SÓ de `toolsCorporativas`; + `dedupTools` no
+  `secretary.ts` como rede de segurança. LIÇÃO: tool nova que também é condicional
+  por usuário NÃO pode cair no filtro de plano; o fallback genérico do pipeline
+  esconde o erro real — por isso existe o gravador `ultimo_erro_visao` (setConfig)
+  p/ ver a causa raiz de falhas no WhatsApp.
 - **ESM na Vercel:** `"type":"module"`, imports relativos terminam em `.js`,
   tsconfig `NodeNext`, **sem** script `build`. Não mexer.
 - **Limite de 12 funções serverless (Vercel Hobby) (22/09):** cada arquivo em
