@@ -223,6 +223,7 @@ main { padding: 31px 34px 20px; max-width: 1600px; margin: auto; }.welcome { dis
 .obra-atrib-head strong { font-size: 13.5px; color: #24312e; }
 .obra-atrib-head small { font-size: 11px; color: var(--muted); }
 .obra-atrib-vazio { font-size: 12px; color: var(--muted); margin: 0; }
+.atrib-pend { font-style: normal; font-size: 10.5px; color: #a67c3a; }
 .obra-atrib-membros { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-bottom: 10px; }
 .emp-head { margin-bottom: 14px; }
 .emp-title { display: flex; align-items: center; gap: 12px; font: 700 26px Manrope; letter-spacing: -.7px; margin: 0 0 4px; color: #21302c; }

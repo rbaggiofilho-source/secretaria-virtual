@@ -68,8 +68,13 @@ export function Empresa() {
     recarregar().catch(() => setErro('Não consegui carregar a empresa.')).finally(() => setCarregando(false))
   }, [])
 
-  // Só ENGENHEIROS ativos entram na atribuição por obra (o admin/master vê tudo).
-  const engenheiros = useMemo(() => membros.filter((m) => m.status === 'ativo' && m.papel !== 'admin'), [membros])
+  // Colaboradores atribuíveis por obra: ativos E convidados (pré-atribuição; o
+  // admin/master vê tudo automaticamente, então fica de fora). A atribuição de
+  // um convidado passa a valer quando ele aceitar o convite.
+  const engenheiros = useMemo(
+    () => membros.filter((m) => (m.status === 'ativo' || m.status === 'convidado') && m.papel !== 'admin'),
+    [membros],
+  )
   const planoAtual = useMemo(() => planos.find((p) => p.id === info?.plano) ?? null, [planos, info])
 
   async function acao<T>(fn: () => Promise<T>, okMsg: string, erros: Record<string, string> = {}) {
@@ -265,7 +270,10 @@ function ObraAtribuicao({
             {engenheiros.map((m) => (
               <label key={m.id} className="config-check" style={{ marginBottom: 0 }}>
                 <input type="checkbox" checked={sel.includes(m.user_wa)} onChange={() => toggle(m.user_wa)} />
-                <span>{m.nome ?? fmtWa(m.user_wa)}{m.cargo ? ` · ${m.cargo}` : ''}</span>
+                <span>
+                  {m.nome ?? fmtWa(m.user_wa)}{m.cargo ? ` · ${m.cargo}` : ''}
+                  {m.status === 'convidado' && <em className="atrib-pend"> · convite pendente</em>}
+                </span>
               </label>
             ))}
           </div>
