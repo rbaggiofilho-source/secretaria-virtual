@@ -32,6 +32,8 @@ import {
   removerMembro,
 } from "../../src/memory/empresa.js";
 import { enviarConvite } from "../../src/corp/convites.js";
+import { resolverEscopoPainel } from "../../src/corp/escopo.js";
+import { buildDashboardEmpresa, buildObrasEmpresa } from "../../src/app/empresaView.js";
 import { signedFotoUrl } from "../../src/memory/storage.js";
 import { json, preflight, readJson } from "../../src/auth/http.js";
 import { checarObra, resolverDireito, saldoDoUsuario } from "../../src/pay/cota.js";
@@ -53,28 +55,36 @@ export default {
 
     try {
       if (request.method === "GET") {
+        // Versão corporativa (Fase 3): se o usuário é ENGENHEIRO de uma empresa,
+        // as leituras do painel passam a ler os dados COMPARTILHADOS das obras
+        // atribuídas a ele (de qualquer membro). Admin/pessoal → esc = null.
+        const esc = await resolverEscopoPainel(wa).catch(() => null);
+        const le = esc?.leitura;
         switch (recurso) {
           case "dashboard":
-            return json(request, { ok: true, data: await buildDashboard(wa, getEnv().TIMEZONE) });
+            return json(request, {
+              ok: true,
+              data: esc ? await buildDashboardEmpresa(esc, getEnv().TIMEZONE) : await buildDashboard(wa, getEnv().TIMEZONE),
+            });
           case "obras":
-            return json(request, { ok: true, obras: await buildObras(wa) });
+            return json(request, { ok: true, obras: esc ? await buildObrasEmpresa(esc) : await buildObras(wa) });
           case "custos": {
             const rel = await relatorioCustos(wa, {
               obra: p.get("obra"),
               desde: p.get("desde"),
               ate: p.get("ate"),
-            });
+            }, le);
             return json(request, { ok: true, ...rel });
           }
           case "rdo":
-            return json(request, { ok: true, rdos: await consultarRDO(wa, { obra: p.get("obra") }) });
+            return json(request, { ok: true, rdos: await consultarRDO(wa, { obra: p.get("obra") }, le) });
           case "documentos":
             return json(request, {
               ok: true,
               documentos: await consultarDocumentos(wa, {
                 obra: p.get("obra"),
                 incluirArquivados: p.get("arquivados") === "1",
-              }),
+              }, le),
             });
           case "materiais":
             return json(request, {
@@ -82,13 +92,13 @@ export default {
               materiais: await consultarMateriais(wa, {
                 obra: p.get("obra"),
                 status: (p.get("status") as MaterialStatus | null) || null,
-              }),
+              }, le),
             });
           case "fotos": {
             const fotos = await consultarFotos(wa, {
               obra: p.get("obra"),
               tipo: (p.get("tipo") as TipoFoto | null) || null,
-            });
+            }, le);
             const comUrl = await Promise.all(
               fotos.map(async (f) => ({
                 id: f.id,

@@ -11,6 +11,32 @@ import { removeFotos } from "./storage.js";
 // revisar dias anteriores sob demanda, existe loadHistorySince + tool revisar_conversa.
 const RECENT_HISTORY_LIMIT = 30;
 
+/**
+ * Escopo de LEITURA para a versão corporativa (Fase 3): em vez de filtrar por um
+ * único `user_wa`, lê os lançamentos de QUALQUER membro da empresa (`recorders`)
+ * restrito às obras acessíveis (`obras`, por NOME). Quando ausente, a leitura
+ * segue pessoal (por `user_wa`) — comportamento idêntico ao de antes.
+ */
+export interface LeituraEscopo {
+  recorders: string[];
+  obras: string[];
+}
+
+/** Aplica o escopo a uma query: pessoal (eq user_wa) ou empresa (in recorders + in obra). */
+function aplicarEscopo<T>(query: T, userWa: string, escopo?: LeituraEscopo): T {
+  const q = query as unknown as {
+    in: (col: string, vals: string[]) => T;
+    eq: (col: string, val: string) => T;
+  };
+  if (escopo) {
+    return (q.in("user_wa", escopo.recorders) as unknown as { in: (c: string, v: string[]) => T }).in(
+      "obra",
+      escopo.obras,
+    );
+  }
+  return q.eq("user_wa", userWa);
+}
+
 export interface OwnerContext {
   fatos: string[];
   obras: string[];
@@ -379,13 +405,14 @@ export interface RelatorioCustos {
 export async function relatorioCustos(
   userWa: string,
   filtros: { obra?: string | null; desde?: string | null; ate?: string | null } = {},
+  escopo?: LeituraEscopo,
 ): Promise<RelatorioCustos> {
   const supabase = getSupabase();
   let query = supabase
     .from("secretaria_custos")
     .select("id, obra, categoria, valor, descricao, data")
-    .eq("user_wa", userWa)
     .order("data", { ascending: false });
+  query = aplicarEscopo(query, userWa, escopo);
 
   if (filtros.obra) query = query.ilike("obra", `%${filtros.obra}%`);
   if (filtros.desde) query = query.gte("data", filtros.desde);
@@ -469,13 +496,14 @@ export async function registrarRDO(
 export async function consultarRDO(
   userWa: string,
   filtros: { obra?: string | null; desde?: string | null; ate?: string | null } = {},
+  escopo?: LeituraEscopo,
 ): Promise<RdoRow[]> {
   const supabase = getSupabase();
   let query = supabase
     .from("secretaria_rdo")
     .select("*")
-    .eq("user_wa", userWa)
     .order("data", { ascending: false });
+  query = aplicarEscopo(query, userWa, escopo);
 
   if (filtros.obra) query = query.ilike("obra", `%${filtros.obra}%`);
   if (filtros.desde) query = query.gte("data", filtros.desde);
@@ -552,13 +580,14 @@ export async function consultarFotos(
     desde?: string | null;
     ate?: string | null;
   } = {},
+  escopo?: LeituraEscopo,
 ): Promise<FotoRow[]> {
   const supabase = getSupabase();
   let query = supabase
     .from("secretaria_fotos")
     .select("*")
-    .eq("user_wa", userWa)
     .order("data", { ascending: false });
+  query = aplicarEscopo(query, userWa, escopo);
 
   if (filtros.obra) query = query.ilike("obra", `%${filtros.obra}%`);
   if (filtros.tipo) query = query.eq("tipo", filtros.tipo);
@@ -1031,13 +1060,14 @@ export async function consultarDocumentos(
     tipo?: TipoDocumento | null;
     incluirArquivados?: boolean;
   } = {},
+  escopo?: LeituraEscopo,
 ): Promise<DocumentoRow[]> {
   const supabase = getSupabase();
   let query = supabase
     .from("secretaria_documentos")
     .select("*")
-    .eq("user_wa", userWa)
     .order("vencimento", { ascending: true, nullsFirst: false });
+  query = aplicarEscopo(query, userWa, escopo);
 
   if (!filtros.incluirArquivados) query = query.eq("status", "ativo");
   if (filtros.obra) query = query.ilike("obra", `%${filtros.obra}%`);
@@ -1170,13 +1200,14 @@ export async function registrarMaterial(
 export async function consultarMateriais(
   userWa: string,
   filtros: { obra?: string | null; status?: MaterialStatus | null } = {},
+  escopo?: LeituraEscopo,
 ): Promise<MaterialRow[]> {
   const supabase = getSupabase();
   let query = supabase
     .from("secretaria_materiais")
     .select("*")
-    .eq("user_wa", userWa)
     .order("updated_at", { ascending: false });
+  query = aplicarEscopo(query, userWa, escopo);
 
   if (filtros.obra) query = query.ilike("obra", `%${filtros.obra}%`);
   if (filtros.status) query = query.eq("status", filtros.status);

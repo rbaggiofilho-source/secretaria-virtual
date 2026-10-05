@@ -216,6 +216,59 @@ export async function listarMembros(empresaId: number): Promise<MembroRow[]> {
   return (data ?? []) as MembroRow[];
 }
 
+/** Membership ATIVA do wa (admin ou engenheiro), com a empresa. Null se nenhuma. */
+export async function membershipAtiva(
+  wa: string,
+): Promise<{ empresa: EmpresaRow; membro: MembroRow } | null> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from("secretaria_empresa_membros")
+    .select("*, secretaria_empresas!inner(*)")
+    .in("user_wa", waIdVariants(wa))
+    .eq("status", "ativo")
+    .limit(1);
+  if (error) throw new Error(`Falha ao buscar membership: ${error.message}`);
+  const row = data?.[0] as (MembroRow & { secretaria_empresas: EmpresaRow }) | undefined;
+  if (!row) return null;
+  const { secretaria_empresas, ...membro } = row;
+  return { empresa: secretaria_empresas, membro: membro as MembroRow };
+}
+
+/** Todos os user_wa dos membros ATIVOS da empresa, já expandidos em variantes. */
+export async function wasDosMembros(empresaId: number): Promise<string[]> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from("secretaria_empresa_membros")
+    .select("user_wa")
+    .eq("empresa_id", empresaId)
+    .eq("status", "ativo");
+  if (error) throw new Error(`Falha ao listar wa dos membros: ${error.message}`);
+  const out = new Set<string>();
+  for (const r of (data ?? []) as Array<{ user_wa: string }>) {
+    for (const v of waIdVariants(r.user_wa)) out.add(v);
+  }
+  return [...out];
+}
+
+/** Nomes das obras da empresa ATRIBUÍDAS a um wa (via secretaria_obra_membros). */
+export async function obrasAtribuidas(empresaId: number, wa: string): Promise<string[]> {
+  const supabase = getSupabase();
+  const { data: vinc, error } = await supabase
+    .from("secretaria_obra_membros")
+    .select("obra_id")
+    .in("user_wa", waIdVariants(wa));
+  if (error) throw new Error(`Falha ao listar obras atribuídas: ${error.message}`);
+  const ids = (vinc ?? []).map((r) => (r as { obra_id: number }).obra_id);
+  if (ids.length === 0) return [];
+  const { data: obras, error: e2 } = await supabase
+    .from("secretaria_obras")
+    .select("nome")
+    .eq("empresa_id", empresaId)
+    .in("id", ids);
+  if (e2) throw new Error(`Falha ao resolver obras atribuídas: ${e2.message}`);
+  return (obras ?? []).map((r) => (r as { nome: string }).nome);
+}
+
 /** Busca um membro pelo id, confirmando que é da empresa informada. */
 export async function getMembro(empresaId: number, membroId: number): Promise<MembroRow | null> {
   const supabase = getSupabase();

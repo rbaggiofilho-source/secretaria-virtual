@@ -661,9 +661,22 @@ Benchmark do APP (não só WhatsApp). Copiar só o útil; manter a aposta VERTIC
     estende o roteador, SEM novo arquivo em /api. Funções novas em
     `src/memory/empresa.ts` (removerMembro, listarObrasEmpresa, criarObraEmpresa,
     membrosDaObra, definirMembrosDaObra, obraDaEmpresa, getMembro).
-  - **Falta:** Fase 3 (aplicar o escopo por obra nas leituras/escritas — o
-    engenheiro vê no painel e via Rosana só as obras atribuídas, com os dados
-    compartilhados da empresa), Fase 4 (planos-empresa por teto no billing).
+  - **✅ Fase 3a (05/10) — leitura do engenheiro no PAINEL:** o engenheiro
+    (membro ativo não-admin) passa a ver no painel SÓ as obras atribuídas a ele,
+    com os dados COMPARTILHADOS da empresa (lançamentos de qualquer membro).
+    Como: as 5 leituras de `context.ts` (relatorioCustos/consultarRDO/
+    consultarDocumentos/consultarMateriais/consultarFotos) ganharam um
+    `escopo?: LeituraEscopo` opcional ({recorders, obras}) — quando ausente, a
+    leitura segue pessoal (zero regressão). `src/corp/escopo.ts`
+    (`resolverEscopoPainel`) resolve o engenheiro → {obras atribuídas, recorders
+    = wa de todos os membros}; `src/app/empresaView.ts` (`buildObrasEmpresa`,
+    `buildDashboardEmpresa`) agrega os cartões e o dashboard escopados.
+    `api/app/data.ts` (GET) usa o escopo nos recursos dashboard/obras/custos/rdo/
+    documentos/materiais/fotos; admin e usuário pessoal seguem no fluxo pessoal.
+    OBS: o engenheiro loga no painel criando senha por OTP ("primeiro acesso").
+  - **Falta:** Fase 3b (lado Rosana/WhatsApp: a IA conhecer as obras da empresa do
+    engenheiro + escopo de ESCRITA/leitura no agente; e agregação do ADMIN vendo o
+    que a equipe lançou), Fase 4 (planos-empresa por teto no billing).
 - **Portáveis menores:** link público de agendamento (visita/vistoria, estilo
   Calendly); "análise personalizada" (relatório sob medida); PWA instalável em vez
   de app nativo; tema claro/escuro. **Pular:** finanças/Open Finance, Meet/Contatos,
