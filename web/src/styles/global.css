@@ -171,6 +171,26 @@ main { padding: 31px 34px 20px; max-width: 1600px; margin: auto; }.welcome { dis
 .config-msg--erro { background: #f8e9e4; color: #9e4a2e; }
 @media (max-width: 760px) { .config-form-row { grid-template-columns: 1fr; } .page-head { flex-direction: column; align-items: stretch; } .page-head-right { flex-wrap: wrap; } }
 
+/* ---------- Atividade ("O que a Rosana fez por você") ---------- */
+.ativ-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 17px; }
+.ativ-col { padding: 6px 4px 8px; }
+.ativ-head { display: flex; align-items: center; gap: 9px; padding: 16px 19px 13px; border-bottom: 1px solid #ebeae3; color: #3b665c; }
+.ativ-head h3 { margin: 0; font: 700 14px Manrope; color: #2c3936; }
+.ativ-count { margin-left: auto; background: #e8f0ed; color: #397164; font-size: 11px; font-weight: 700; border-radius: 20px; min-width: 22px; padding: 2px 8px; text-align: center; }
+.ativ-vazio { padding: 22px 20px; color: var(--muted); font-size: 12.5px; }
+.ativ-lista { list-style: none; margin: 0; padding: 0; }
+.ativ-item { display: grid; grid-template-columns: 34px 1fr auto; align-items: center; gap: 12px; padding: 13px 19px; border-bottom: 1px solid #eeede7; }
+.ativ-item:last-child { border-bottom: 0; }
+.ativ-ico { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 8px; background: #eef1ef; color: #52605c; }
+.ativ-ico--prog { background: #e8f0f1; color: #527c8b; }
+.ativ-ico--ok { background: #e7f0eb; color: #477462; }
+.ativ-ico--falha { background: #f7e3dd; color: #b0462c; }
+.ativ-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ativ-txt strong { font-size: 12.5px; color: #2c3936; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ativ-txt small { font-size: 10.5px; color: #8a9490; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ativ-quando { font-size: 10.5px; font-weight: 600; color: #6e7975; white-space: nowrap; }
+@media (max-width: 760px) { .ativ-cols { grid-template-columns: 1fr; } }
+
 /* ---------- Cadastro de obra: card + modal ---------- */
 .obra-top { position: relative; }
 .obra-title { display: flex; flex-direction: column; gap: 5px; }

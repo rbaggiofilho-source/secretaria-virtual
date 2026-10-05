@@ -324,3 +324,19 @@ alter table public.secretaria_usuarios
   add column if not exists resumo_hora text not null default '08:00',
   add column if not exists lembrete_antecedencia_min integer not null default 30,
   add column if not exists resumo_ultimo date;
+
+-- Log das ações PROATIVAS da Rosana (lembretes/resumos enviados), p/ a aba
+-- "O que a Rosana fez por você". Os "Programados" vêm de secretaria_eventos.
+create table if not exists public.secretaria_acoes (
+  id         bigint generated always as identity primary key,
+  user_wa    text not null,
+  tipo       text not null,                         -- 'lembrete' | 'resumo'
+  titulo     text not null,
+  detalhe    text,
+  status     text not null default 'entregue',      -- 'entregue' | 'falha'
+  ref        text,                                  -- id do evento/recurso (opcional)
+  created_at timestamptz not null default now()
+);
+create index if not exists secretaria_acoes_user_idx
+  on public.secretaria_acoes (user_wa, created_at desc);
+alter table public.secretaria_acoes enable row level security;

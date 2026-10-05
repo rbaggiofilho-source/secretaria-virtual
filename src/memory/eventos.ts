@@ -150,6 +150,27 @@ export async function lembretesVencidos(
   return (data ?? []) as EventoRow[];
 }
 
+/**
+ * Lembretes PROGRAMADOS (futuros, ainda não enviados) de UM usuário — para a aba
+ * "O que a Rosana fez por você" (seção "Programados"). Mais cedo primeiro.
+ */
+export async function lembretesProgramados(userWa: string, limite = 50): Promise<EventoRow[]> {
+  const supabase = getSupabase();
+  const agora = new Date().toISOString();
+  const { data, error } = await supabase
+    .from("secretaria_eventos")
+    .select("*")
+    .eq("user_wa", userWa)
+    .eq("status", "ativo")
+    .eq("lembrete_enviado", false)
+    .not("lembrete_em", "is", null)
+    .gte("lembrete_em", agora)
+    .order("lembrete_em", { ascending: true })
+    .limit(limite);
+  if (error) throw new Error(`Falha ao buscar lembretes programados: ${error.message}`);
+  return (data ?? []) as EventoRow[];
+}
+
 /** Marca um lembrete como enviado (não reenvia). */
 export async function marcarLembreteEnviado(id: number): Promise<void> {
   const supabase = getSupabase();

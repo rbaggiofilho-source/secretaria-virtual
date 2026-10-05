@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { BarChart3, BookOpenText, Building2, CalendarDays, ChevronLeft, FileClock, Images, LayoutDashboard, LogOut, PackageSearch, Settings, UserRound } from 'lucide-react'
+import { BarChart3, BookOpenText, Building2, CalendarDays, ChevronLeft, FileClock, Images, LayoutDashboard, LogOut, PackageSearch, Settings, Sparkles, UserRound } from 'lucide-react'
 import { Logo } from './Logo'
 import type { Usuario } from '../lib/api'
 
@@ -11,6 +11,7 @@ const items = [
   { label: 'Fotos', icon: Images, to: '/painel/fotos' },
   { label: 'Documentos', icon: FileClock, to: '/painel/documentos' },
   { label: 'Materiais', icon: PackageSearch, to: '/painel/materiais' },
+  { label: 'Atividade', icon: Sparkles, to: '/painel/atividade' },
 ]
 
 function iniciais(nome: string): string {

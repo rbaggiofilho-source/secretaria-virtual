@@ -372,6 +372,31 @@ export function salvarConta(dados: ContaUpdate) {
   })
 }
 
+// ---------- O que a Rosana fez por você (log de ações) ----------
+
+export interface AcaoProgramada {
+  id: number
+  titulo: string
+  local: string | null
+  quando: string | null
+  inicio: string
+}
+export interface AcaoEntregue {
+  id: number
+  tipo: string
+  titulo: string
+  detalhe: string | null
+  status: string
+  quando: string
+}
+
+/** Lembretes programados (futuros) + ações já entregues (lembretes/resumos). */
+export function getAtividade() {
+  return call<{ ok: boolean; programados: AcaoProgramada[]; entregues: AcaoEntregue[] }>(
+    '/api/app/data?recurso=atividade',
+  )
+}
+
 /** Troca a senha estando logado (exige a senha atual). */
 export function trocarSenha(senhaAtual: string, novaSenha: string) {
   return call<{ ok: boolean }>('/api/app/auth?acao=change-password', {

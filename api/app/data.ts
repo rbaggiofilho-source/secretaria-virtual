@@ -17,6 +17,8 @@ import {
   type TipoFoto,
 } from "../../src/memory/context.js";
 import { salvarObra, excluirObra, type ObraStatus } from "../../src/memory/obras.js";
+import { listarAcoes } from "../../src/memory/acoes.js";
+import { lembretesProgramados } from "../../src/memory/eventos.js";
 import { signedFotoUrl } from "../../src/memory/storage.js";
 import { json, preflight, readJson } from "../../src/auth/http.js";
 import { checarObra, resolverDireito, saldoDoUsuario } from "../../src/pay/cota.js";
@@ -119,6 +121,31 @@ export default {
             const perfil = await getPerfil(wa);
             if (!perfil) return json(request, { ok: false, error: "usuario_nao_encontrado" }, 404);
             return json(request, { ok: true, conta: perfil });
+          }
+          case "atividade": {
+            // Aba "O que a Rosana fez por você": programados + entregues.
+            const [programados, entregues] = await Promise.all([
+              lembretesProgramados(wa),
+              listarAcoes(wa),
+            ]);
+            return json(request, {
+              ok: true,
+              programados: programados.map((e) => ({
+                id: e.id,
+                titulo: e.titulo,
+                local: e.local,
+                quando: e.lembrete_em,
+                inicio: e.inicio,
+              })),
+              entregues: entregues.map((a) => ({
+                id: a.id,
+                tipo: a.tipo,
+                titulo: a.titulo,
+                detalhe: a.detalhe,
+                status: a.status,
+                quando: a.created_at,
+              })),
+            });
           }
           default:
             return json(request, { error: "recurso_desconhecido" }, 400);

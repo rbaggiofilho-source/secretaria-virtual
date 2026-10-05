@@ -1,4 +1,5 @@
 import { getEnv } from "../../src/config/env.js";
+import { registrarAcao } from "../../src/memory/acoes.js";
 import { getConfig } from "../../src/memory/config.js";
 import {
   marcarResumoEnviado,
@@ -130,6 +131,13 @@ async function dispararLembretes(): Promise<{ vencidos: number; enviados: number
       const corpo = `⏰ *Lembrete:* ${ev.titulo}` + (ev.local ? `\n📍 ${ev.local}` : "");
       await sendTextMessage(ev.user_wa, corpo);
       await marcarLembreteEnviado(ev.id);
+      await registrarAcao(ev.user_wa, {
+        tipo: "lembrete",
+        titulo: ev.titulo,
+        detalhe: ev.local,
+        status: "entregue",
+        ref: String(ev.id),
+      });
       enviados++;
     } catch (err) {
       // Não marca como enviado: tenta de novo no próximo minuto (até sair da
@@ -167,6 +175,12 @@ async function dispararResumos(): Promise<{ elegiveis: number; enviados: number 
     try {
       await sendTextMessage(u.user_wa, montarBomDia(u.nome, dia, await agendaDeHoje(u.user_wa, hoje)));
       await marcarResumoEnviado(u.user_wa, hoje);
+      await registrarAcao(u.user_wa, {
+        tipo: "resumo",
+        titulo: "Resumo diário",
+        detalhe: `Bom dia + agenda de ${dia}`,
+        status: "entregue",
+      });
       enviados++;
     } catch (err) {
       console.error(`[resumo] falha ao enviar: ${err instanceof Error ? err.message : String(err)}`);

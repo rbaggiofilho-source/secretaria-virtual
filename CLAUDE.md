@@ -131,12 +131,15 @@ WhatsApp. Eventos de status (sent/delivered/read/failed) são logados.
   - **Dois roteadores** (p/ caber no limite de 12 funções do Hobby — ver Armadilhas):
     - `api/app/auth.ts` — `?acao=login|request-code|set-password|change-password` (POST)
       e `?acao=session` (GET).
-    - `api/app/data.ts` — `?recurso=dashboard|obras|custos|rdo|documentos|materiais|fotos|plano|conta`
+    - `api/app/data.ts` — `?recurso=dashboard|obras|custos|rdo|documentos|materiais|fotos|plano|conta|atividade`
       (GET) e POST `?recurso=obras` (cria/edita obra) / `?recurso=conta` (salva
       cadastro + preferências da aba "Minha conta": nome/nome_completo/email/
       profissão + resumo_hora/antecedência + nudge_diario; número conectado e
       assinatura são só leitura). `src/app/{dashboard,obras}.ts` agregam;
       `getPerfil`/`atualizarPerfil`/`setPreferencias`/`setNudgeDiario` (context.ts).
+      GET `?recurso=atividade` = aba "O que a Rosana fez por você": `programados`
+      (lembretes futuros de `secretaria_eventos` via `lembretesProgramados`) +
+      `entregues` (ações enviadas de `secretaria_acoes` via `listarAcoes`).
       `signedFotoUrl` (storage.ts) = URL temporária p/ exibir foto sem abrir o bucket.
     - `api/app/rdo-pdf.ts` — download do PDF do RDO por obra (função à parte, binário).
     - `api/app/pay.ts` — pagamento/assinatura (Mercado Pago), PÚBLICO (sem token):
@@ -162,7 +165,10 @@ WhatsApp. Eventos de status (sent/delivered/read/failed) são logados.
     `web/src/App.tsx` (rotas + portão de sessão), `components/PanelLayout.tsx`
     (moldura + `Outlet`), `components/Sidebar.tsx` (NavLink), `lib/api.ts` (cliente +
     token no localStorage), `pages/{Landing,Cadastro,Login,VisaoGeral,Obras,Custos,
-    Diario,Fotos,Documentos,Materiais,MinhaConta,Configuracoes}.tsx`, `styles/{global,landing}.css`.
+    Diario,Fotos,Documentos,Materiais,Atividade,MinhaConta,Configuracoes}.tsx`, `styles/{global,landing}.css`.
+    A aba **"Atividade"** (`pages/Atividade.tsx`, rota `/painel/atividade`) mostra
+    "Programados" (lembretes futuros) + "Entregues" (lembretes/resumos enviados,
+    com status) via GET `data?recurso=atividade`.
     A aba **"Minha conta"** (`pages/MinhaConta.tsx`, rota `/painel/conta`) edita o
     cadastro (nome/e-mail/profissão), mostra o número conectado (só leitura) e a
     assinatura, e ajusta as preferências (horário do resumo + antecedência do
@@ -218,6 +224,11 @@ WhatsApp. Eventos de status (sent/delivered/read/failed) são logados.
   resumo_ultimo (date, dedup do resumo diário) — preferências).
   Fonte da verdade da autorização. Lead pago entra com ativo=false/status
   'pendente_pagamento'; o webhook do MP liga ativo=true quando 'authorized'.
+- `secretaria_acoes` — LOG das ações proativas da Rosana (lembretes/resumos que
+  ela ENVIOU) por `user_wa`: tipo, titulo, detalhe, status (entregue/falha), ref
+  (id do evento), created_at. Alimenta a aba "Atividade" (seção "Entregues");
+  gravado em `src/memory/acoes.ts` (`registrarAcao`/`listarAcoes`), nunca derruba
+  o envio. Os "Programados" vêm de `secretaria_eventos` (lembrete futuro).
 - `secretaria_admins` — administradores do painel `/admin` (PK email; nome,
   senha_hash scrypt, ultimo_login). INDEPENDENTE de `secretaria_usuarios`/wa.
 - `secretaria_planos` — planos vendáveis (PK id essencial/profissional; nome,
@@ -585,8 +596,14 @@ Benchmark do APP (não só WhatsApp). Copiar só o útil; manter a aposta VERTIC
      resumo + antecedência do lembrete + liga/desliga o resumo diário). Backend:
      roteador `api/app/data.ts` `?recurso=conta` (GET + POST) — SEM novo arquivo em
      /api (limite de 12 funções); `getPerfil`/`atualizarPerfil` em context.ts.
-  3. **Aba "O que a Rosana fez por você"** — log de ações/lembretes enviados com
-     status de entrega (inspirado em "Trabalho entregue": Programados/Entregues).
+  3. ✅ **Aba "O que a Rosana fez por você" (05/10)** — `pages/Atividade.tsx`
+     (rota `/painel/atividade`, link no menu). Duas colunas: **Programados**
+     (lembretes futuros de `secretaria_eventos`) e **Entregues** (lembretes +
+     resumos enviados, com status, de `secretaria_acoes`). Log gravado em
+     `bomdia.ts` no sucesso do envio (`registrarAcao`, tabela nova
+     `secretaria_acoes`). Backend: `data?recurso=atividade` (estende o roteador,
+     SEM novo arquivo em /api). FUTURO: logar também ações do agente (custo/RDO/
+     evento criado) — hoje só os envios proativos.
   4. **Dossiê/relatório da obra pro cliente** — versão vertical da "área do
      contador"; argumento de venda.
 - **Portáveis menores:** link público de agendamento (visita/vistoria, estilo
