@@ -8,6 +8,7 @@ import {
   type UsuarioRow,
 } from "./memory/context.js";
 import { convitePendente } from "./memory/empresa.js";
+import { setConfig } from "./memory/config.js";
 import { tratarConvite } from "./corp/convites.js";
 import { resolverEscopoEngenheiro } from "./corp/escopo.js";
 import { uploadFoto } from "./memory/storage.js";
@@ -286,6 +287,29 @@ export async function handleIncomingMessage(message: WhatsAppMessage): Promise<v
     }
   } catch (err) {
     logError("agente/calendar/resposta", err);
+    // Diagnóstico da VISÃO: quando havia imagem, grava o erro exato (status +
+    // mensagem da API, sem segredos nem conteúdo) numa chave de config que dá
+    // pra ler do banco — a visão nunca foi testada em produção e falha de forma
+    // genérica no WhatsApp. Não bloqueia a resposta ao usuário.
+    if (images.length > 0) {
+      try {
+        const e = err as { status?: number; name?: string; message?: string };
+        const tamKb = Math.round((images[0]?.base64.length ?? 0) * 0.75 / 1024);
+        await setConfig(
+          "ultimo_erro_visao",
+          JSON.stringify({
+            quando: new Date().toISOString(),
+            status: e.status ?? null,
+            nome: e.name ?? null,
+            mensagem: (e.message ?? String(err)).slice(0, 600),
+            mime: images[0]?.mimeType ?? null,
+            imagem_kb: tamKb,
+          }),
+        );
+      } catch (err2) {
+        logError("gravar diagnóstico de visão", err2);
+      }
+    }
     await safeReply(
       from,
       "Tive um problema ao processar sua solicitação e talvez nada tenha sido agendado. Pode repetir a última mensagem?",

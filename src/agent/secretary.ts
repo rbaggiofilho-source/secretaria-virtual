@@ -113,7 +113,7 @@ export async function runSecretary(params: {
       type: "image",
       source: {
         type: "base64",
-        media_type: img.mimeType as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
+        media_type: normalizarMediaType(img.mimeType),
         data: img.base64,
       },
     }));
@@ -254,6 +254,21 @@ function comCacheNoFim(messages: Anthropic.MessageParam[]): Anthropic.MessagePar
   }
   copia[copia.length - 1] = { ...ultima, content: blocos };
   return copia;
+}
+
+/**
+ * Normaliza o mime da imagem para um dos 4 tipos aceitos pela visão do Claude.
+ * O WhatsApp manda "image/jpeg" (foto comprimida no app), mas blindamos contra
+ * maiúsculas, parâmetros ("image/jpeg; codecs=…") e sinônimos (jpg → jpeg).
+ * Tipo não suportado (ex.: HEIC enviado como arquivo) vira erro claro.
+ */
+function normalizarMediaType(mime: string): "image/jpeg" | "image/png" | "image/gif" | "image/webp" {
+  const base = (mime || "").split(";")[0]!.trim().toLowerCase();
+  if (base === "image/jpg" || base === "image/jpeg") return "image/jpeg";
+  if (base === "image/png") return "image/png";
+  if (base === "image/gif") return "image/gif";
+  if (base === "image/webp") return "image/webp";
+  throw new Error(`mime_de_imagem_nao_suportado:${base || "desconhecido"}`);
 }
 
 function extractText(response: Anthropic.Message): string {
