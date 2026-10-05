@@ -82,6 +82,17 @@ export async function criarEmpresa(
   if (e2 && !e2.message.includes("duplicate")) {
     throw new Error(`Falha ao registrar admin da empresa: ${e2.message}`);
   }
+
+  // As obras que o admin JÁ tinha (pessoais) viram as obras da empresa — assim o
+  // contexto que ele montou é reaproveitado e nada "some" do painel ao criar a
+  // empresa. Só adota obras ainda sem empresa.
+  const { error: e3 } = await supabase
+    .from("secretaria_obras")
+    .update({ empresa_id: empresa.id })
+    .in("user_wa", waIdVariants(donoWa))
+    .is("empresa_id", null);
+  if (e3) console.error(`[empresa] falha ao adotar obras do admin: ${e3.message}`);
+
   return empresa;
 }
 

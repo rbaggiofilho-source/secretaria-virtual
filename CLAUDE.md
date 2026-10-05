@@ -240,7 +240,9 @@ WhatsApp. Eventos de status (sent/delivered/read/failed) são logados.
   - `secretaria_empresa_membros` — membros (empresa_id; user_wa; nome; papel
     admin|engenheiro; status convidado|ativo|recusado|removido; convidado_em;
     respondido_em). unique(empresa_id,user_wa). Funções em `src/memory/empresa.ts`
-    (`criarEmpresa`, `empresaComoAdmin`, `empresaDoMembro`, `convitePendente`,
+    (`criarEmpresa` [ADOTA as obras pessoais do admin → empresa_id, pra não
+    "sumir" obras ao criar a empresa e já virar o contexto da empresa],
+    `empresaComoAdmin`, `empresaDoMembro`, `convitePendente`,
     `convidarMembro` [checa teto], `responderConvite`, `listarMembros`, `canonWa`).
   - `secretaria_obra_membros` — quais engenheiros entram em cada obra (obra_id;
     user_wa). Base do acesso POR OBRA (aplicação do escopo = Fase 3).
@@ -520,6 +522,16 @@ banco; nada de novo produto. Rodando em **userosana.com.br** (projeto Vercel
   p/ salvar listas numa chamada; (b) regra dura no prompt: NUNCA confirmar
   "registrei/anotei" sem chamar save_memory no mesmo turno, e listar sempre a
   partir de get_pending, não "de cabeça".
+
+- **Obras "sumiram" ao criar a empresa (05/10):** quando o dono criou a empresa,
+  o painel passou a tratá-lo como admin (`resolverEscopoAdmin`) e a montagem de
+  obras deixou de incluir as obras PESSOAIS (que têm `empresa_id` null) — pareciam
+  perdidas (os dados NUNCA foram apagados). Correção: `criarEmpresa` agora ADOTA
+  as obras pessoais do admin (seta `empresa_id`), então viram obras da empresa e
+  reaparecem; os dados do Ricardo foram adotados manualmente p/ a empresa 1.
+- **Sidebar com rolagem própria (05/10):** em telas baixas os botões de baixo do
+  menu ficavam fora da tela (obrigava diminuir o zoom). `.sidebar` ganhou
+  `overflow-y: auto` (rolagem independente da área branca).
 
 ## Convenções
 - Commit/push só na branch de produção; deploy é automático ao dar push.
