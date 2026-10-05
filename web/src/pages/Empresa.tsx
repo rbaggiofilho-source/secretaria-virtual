@@ -77,7 +77,9 @@ export function Empresa() {
     recarregar().catch(() => setErro('Não consegui carregar a empresa.')).finally(() => setCarregando(false))
   }, [])
 
-  const ativos = useMemo(() => membros.filter((m) => m.status === 'ativo'), [membros])
+  // Só ENGENHEIROS ativos entram na atribuição por obra: o admin já vê todas as
+  // obras da empresa automaticamente, então não precisa (nem deve) ser marcado.
+  const ativos = useMemo(() => membros.filter((m) => m.status === 'ativo' && m.papel !== 'admin'), [membros])
 
   async function acao<T>(fn: () => Promise<T>, okMsg: string, erros: Record<string, string> = {}) {
     setMsg(null); setBusy(true)
