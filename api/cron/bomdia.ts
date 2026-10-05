@@ -1,12 +1,16 @@
 import { getEnv } from "../../src/config/env.js";
 import { getConfig } from "../../src/memory/config.js";
-import { usuariosAtivosParaNudge } from "../../src/memory/context.js";
+import {
+  marcarResumoEnviado,
+  usuariosAtivosParaNudge,
+  usuariosParaResumo,
+} from "../../src/memory/context.js";
 import {
   lembretesVencidos,
   listarEventos,
   marcarLembreteEnviado,
 } from "../../src/memory/eventos.js";
-import { horaBr, todayIsoDate, weekdayBr } from "../../src/util/datetime.js";
+import { horaAgoraHHMM, horaBr, todayIsoDate, weekdayBr } from "../../src/util/datetime.js";
 import { sendTextMessage } from "../../src/whatsapp/client.js";
 
 /**
@@ -34,7 +38,14 @@ export default {
       const okCron = !!env.CRON_SECRET && auth === `Bearer ${env.CRON_SECRET}`;
       const okToken = !!token && auth === `Bearer ${token}`;
       if (!okCron && !okToken) return new Response("Unauthorized", { status: 401 });
-      return await dispararLembretes();
+      // Tique de minuto: dispara lembretes vencidos E os resumos diários no
+      // horário escolhido por cada usuário.
+      const lemb = await dispararLembretes();
+      const res = await dispararResumos();
+      return new Response(JSON.stringify({ ok: true, lembretes: lemb, resumos: res }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
     }
 
     // "Bom dia": só a Vercel Cron (Authorization: Bearer CRON_SECRET).
@@ -100,7 +111,7 @@ export default {
  * ~2h: se não entregou nesse prazo (ex.: fora da janela de 24h do WhatsApp),
  * para de tentar. Marca como enviado só em caso de sucesso.
  */
-async function dispararLembretes(): Promise<Response> {
+async function dispararLembretes(): Promise<{ vencidos: number; enviados: number }> {
   const agora = Date.now();
   const desde = new Date(agora - 2 * 60 * 60 * 1000).toISOString();
   const ate = new Date(agora).toISOString();
@@ -110,7 +121,7 @@ async function dispararLembretes(): Promise<Response> {
     vencidos = await lembretesVencidos(desde, ate);
   } catch (err) {
     console.error(`[lembretes] erro ao buscar: ${err instanceof Error ? err.message : String(err)}`);
-    return new Response("erro", { status: 500 });
+    return { vencidos: 0, enviados: 0 };
   }
 
   let enviados = 0;
@@ -130,10 +141,54 @@ async function dispararLembretes(): Promise<Response> {
   }
 
   if (vencidos.length > 0) console.log(`[lembretes] vencidos=${vencidos.length} enviados=${enviados}`);
-  return new Response(JSON.stringify({ ok: true, vencidos: vencidos.length, enviados }), {
-    status: 200,
-    headers: { "Content-Type": "application/json" },
-  });
+  return { vencidos: vencidos.length, enviados };
+}
+
+/**
+ * Resumo diário ("bom dia" com a agenda de hoje) no HORÁRIO escolhido por cada
+ * usuário (`resumo_hora`). Chamado a cada minuto; envia a quem já passou do
+ * horário hoje e ainda não recebeu. Só dias úteis. Dedup por data (resumo_ultimo).
+ */
+async function dispararResumos(): Promise<{ elegiveis: number; enviados: number }> {
+  const hoje = todayIsoDate();
+  const dia = weekdayBr(hoje);
+  if (dia === "sábado" || dia === "domingo") return { elegiveis: 0, enviados: 0 };
+
+  let usuarios: Array<{ user_wa: string; nome: string }> = [];
+  try {
+    usuarios = await usuariosParaResumo(horaAgoraHHMM(), hoje);
+  } catch (err) {
+    console.error(`[resumo] erro ao buscar: ${err instanceof Error ? err.message : String(err)}`);
+    return { elegiveis: 0, enviados: 0 };
+  }
+
+  let enviados = 0;
+  for (const u of usuarios) {
+    try {
+      await sendTextMessage(u.user_wa, montarBomDia(u.nome, dia, await agendaDeHoje(u.user_wa, hoje)));
+      await marcarResumoEnviado(u.user_wa, hoje);
+      enviados++;
+    } catch (err) {
+      console.error(`[resumo] falha ao enviar: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  if (usuarios.length > 0) console.log(`[resumo] elegiveis=${usuarios.length} enviados=${enviados}`);
+  return { elegiveis: usuarios.length, enviados };
+}
+
+/** Bloco "Sua agenda de hoje" (vazio se não há eventos ou se falhar). */
+async function agendaDeHoje(userWa: string, hoje: string): Promise<string> {
+  try {
+    const evs = await listarEventos(userWa, `${hoje}T00:00:00-03:00`, `${hoje}T23:59:59-03:00`);
+    if (evs.length === 0) return "";
+    const linhas = evs
+      .map((e) => `• ${horaBr(e.inicio)} — ${e.titulo}${e.local ? ` (${e.local})` : ""}`)
+      .join("\n");
+    return `\n\n📅 *Sua agenda de hoje:*\n${linhas}`;
+  } catch (err) {
+    console.error(`[resumo] falha ao ler agenda: ${err instanceof Error ? err.message : String(err)}`);
+    return "";
+  }
 }
 
 /** Mensagem curta, calorosa e útil — com um leve tempero pelo dia da semana. */

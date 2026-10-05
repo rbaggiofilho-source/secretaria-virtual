@@ -582,6 +582,10 @@ export interface UsuarioRow {
   nudge_diario: boolean;
   /** Plano da assinatura (agenda/obra/construtora; null = beta/legado). */
   plano?: string | null;
+  /** Horário do resumo diário "HH:MM" no fuso do usuário (default 08:00). */
+  resumo_hora?: string | null;
+  /** Antecedência padrão (min) do lembrete automático de compromisso (default 30). */
+  lembrete_antecedencia_min?: number | null;
 }
 
 /** Busca o usuário pelo wa_id. Retorna null se não cadastrado. */
@@ -589,7 +593,9 @@ export async function getUsuario(userWa: string): Promise<UsuarioRow | null> {
   const supabase = getSupabase();
   const { data, error } = await supabase
     .from("secretaria_usuarios")
-    .select("user_wa, nome, calendar_id, contextos, profissao, dono, ativo, nudge_diario, plano")
+    .select(
+      "user_wa, nome, calendar_id, contextos, profissao, dono, ativo, nudge_diario, plano, resumo_hora, lembrete_antecedencia_min",
+    )
     .eq("user_wa", userWa)
     .maybeSingle();
 
@@ -651,6 +657,85 @@ export async function usuariosAtivosParaNudge(): Promise<Array<{ user_wa: string
     out.push(u);
   }
   return out;
+}
+
+/**
+ * Usuários para o RESUMO diário AGORA: ativos, nudge ligado, ativos nas últimas
+ * 24h (janela da Meta), cujo `resumo_hora` já chegou hoje (`<= nowHHMM`) e que
+ * ainda NÃO receberam o resumo hoje (`resumo_ultimo <> hoje`). Dedup por pessoa.
+ * Chamado de minuto em minuto pelo pg_cron (via bomdia?acao=lembretes).
+ */
+export async function usuariosParaResumo(
+  nowHHMM: string,
+  hojeIso: string,
+): Promise<Array<{ user_wa: string; nome: string }>> {
+  const supabase = getSupabase();
+  const desde = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+  const { data: conv, error: e1 } = await supabase
+    .from("secretaria_conversations")
+    .select("user_wa")
+    .eq("role", "user")
+    .gt("created_at", desde);
+  if (e1) throw new Error(`Falha ao buscar ativos (resumo): ${e1.message}`);
+  const ativos = [...new Set((conv ?? []).map((r) => (r as { user_wa: string }).user_wa))];
+  if (ativos.length === 0) return [];
+
+  const { data: users, error: e2 } = await supabase
+    .from("secretaria_usuarios")
+    .select("user_wa, nome, resumo_hora, resumo_ultimo")
+    .in("user_wa", ativos)
+    .eq("ativo", true)
+    .eq("nudge_diario", true)
+    .lte("resumo_hora", nowHHMM);
+  if (e2) throw new Error(`Falha ao filtrar usuários do resumo: ${e2.message}`);
+
+  const vistos = new Set<string>();
+  const out: Array<{ user_wa: string; nome: string }> = [];
+  for (const u of (users ?? []) as Array<{
+    user_wa: string;
+    nome: string;
+    resumo_ultimo: string | null;
+  }>) {
+    if (u.resumo_ultimo === hojeIso) continue; // já recebeu hoje
+    const chave = waIdVariants(u.user_wa).sort()[0] ?? u.user_wa;
+    if (vistos.has(chave)) continue;
+    vistos.add(chave);
+    out.push({ user_wa: u.user_wa, nome: u.nome });
+  }
+  return out;
+}
+
+/** Marca que o resumo diário já foi enviado hoje (todas as variantes). */
+export async function marcarResumoEnviado(userWa: string, hojeIso: string): Promise<void> {
+  const supabase = getSupabase();
+  const { error } = await supabase
+    .from("secretaria_usuarios")
+    .update({ resumo_ultimo: hojeIso })
+    .in("user_wa", waIdVariants(userWa));
+  if (error) throw new Error(`Falha ao marcar resumo enviado: ${error.message}`);
+}
+
+/**
+ * Atualiza preferências do usuário (horário do resumo e antecedência do lembrete).
+ * `resumoHora` em "HH:MM" (24h). `antecedenciaMin` em minutos. Todas as variantes.
+ */
+export async function setPreferencias(
+  userWa: string,
+  prefs: { resumoHora?: string | null; antecedenciaMin?: number | null },
+): Promise<void> {
+  const patch: Record<string, unknown> = {};
+  if (prefs.resumoHora && /^\d{2}:\d{2}$/.test(prefs.resumoHora)) patch.resumo_hora = prefs.resumoHora;
+  if (typeof prefs.antecedenciaMin === "number" && prefs.antecedenciaMin >= 0) {
+    patch.lembrete_antecedencia_min = Math.floor(prefs.antecedenciaMin);
+  }
+  if (Object.keys(patch).length === 0) return;
+  const supabase = getSupabase();
+  const { error } = await supabase
+    .from("secretaria_usuarios")
+    .update(patch)
+    .in("user_wa", waIdVariants(userWa));
+  if (error) throw new Error(`Falha ao salvar preferências: ${error.message}`);
 }
 
 /**

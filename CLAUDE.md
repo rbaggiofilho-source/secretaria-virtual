@@ -103,13 +103,14 @@ WhatsApp. Eventos de status (sent/delivered/read/failed) são logados.
 - `src/oauth/google.ts` — OAuth Google (URL de consentimento, troca de code, state assinado).
 - `src/oauth/page.ts` — páginas HTML de fim do fluxo OAuth (sucesso/erro).
 - `api/cadastro.ts` — site de cadastro do beta. `api/oauth/{start,callback}.ts` — fluxo OAuth.
-- `api/cron/bomdia.ts` — "bom dia" diário (Vercel Cron `0 11 * * 1-5` = 8h BRT, seg–sex).
-  Envia SÓ para quem mandou mensagem nas últimas 24h (janela da Meta) e com
-  `nudge_diario=true`. Protegido por `CRON_SECRET`. Não recupera quem sumiu (fora da janela).
-  Inclui a **agenda de hoje** (de `secretaria_eventos`). TAMBÉM responde
-  `?acao=lembretes` (mesmo arquivo, p/ caber no limite de 12 funções): dispara os
-  lembretes vencidos (últimas ~2h, marca `lembrete_enviado` só no sucesso). É
-  chamado de MINUTO EM MINUTO pelo **pg_cron do Supabase** (job `disparar_lembretes`,
+- `api/cron/bomdia.ts` — tique de minuto + resumo diário. `?acao=lembretes` (o que
+  o pg_cron chama 1×/min) faz DUAS coisas: (a) dispara os lembretes vencidos
+  (últimas ~2h, marca `lembrete_enviado` só no sucesso) e (b) envia o RESUMO diário
+  ("bom dia" + **agenda de hoje** de `secretaria_eventos`) no HORÁRIO escolhido por
+  cada usuário (`resumo_hora`, dedup por `resumo_ultimo`, só dias úteis, só quem
+  está na janela de 24h + `nudge_diario`). O cron DIÁRIO fixo da Vercel foi REMOVIDO
+  (o resumo agora é por horário via pg_cron); a rota sem `?acao` continua existindo
+  só p/ teste manual. É chamado de MINUTO EM MINUTO pelo **pg_cron do Supabase** (job `disparar_lembretes`,
   jobid 1, schedule `* * * * *`) via **pg_net** → POST no endpoint com um token
   guardado em `secretaria_config` (chave `cron_lembretes_token`, gerado DENTRO do
   banco; o endpoint lê o mesmo token pela service key — sem Vault, sem config
@@ -204,7 +205,9 @@ WhatsApp. Eventos de status (sent/delivered/read/failed) são logados.
 - `secretaria_usuarios` — usuários autorizados (PK user_wa; nome, calendar_id,
   contextos, dono, ativo, nudge_diario; + nome_completo, cpf, endereco, profissao,
   status do cadastro do beta; + email, plano, assinatura_status (nenhuma/pendente/
-  authorized/paused/cancelled), mp_preapproval_id, assinatura_em — onboarding pago).
+  authorized/paused/cancelled), mp_preapproval_id, assinatura_em — onboarding pago;
+  + resumo_hora ('HH:MM', default 08:00), lembrete_antecedencia_min (default 30),
+  resumo_ultimo (date, dedup do resumo diário) — preferências).
   Fonte da verdade da autorização. Lead pago entra com ativo=false/status
   'pendente_pagamento'; o webhook do MP liga ativo=true quando 'authorized'.
 - `secretaria_admins` — administradores do painel `/admin` (PK email; nome,
@@ -251,7 +254,9 @@ toda requisição carrega só as últimas 30 msgs, por custo),
 evita duplicar/contradizer), `concluir_pendencia` (marca pendência resolvida),
 `resumo_geral` (panorama/export de tudo salvo),
 `excluir_meus_dados` (exclusão de conta LGPD; exige a frase "EXCLUIR MEUS DADOS";
-dono é blindado), `configurar_lembrete_diario` (liga/desliga o "bom dia"),
+dono é blindado), `configurar_lembrete_diario` (liga/desliga o resumo diário),
+`configurar_preferencias` (horário do resumo `resumo_hora` HH:MM + antecedência
+padrão do lembrete automático `lembrete_antecedencia_min`),
 `registrar_custo`, `relatorio_custos`,
 `registrar_rdo`, `consultar_rdo`, `registrar_foto`, `consultar_fotos`,
 `enviar_foto` (reenvia imagem arquivada), `gerar_rdo_pdf`,
@@ -545,6 +550,38 @@ seguidores). Copiar só o útil; manter onde a Rosana já é melhor.
   personas com vídeo — não são o nosso diferencial.
 - **Ligado à NF:** o billing é Mercado Pago (não emite NFS-e). Decisão aberta na
   seção "Formalização / CNPJ".
+
+## Insights do APP do Meu Assessor + melhorias (05/10/2026)
+Benchmark do APP (não só WhatsApp). Copiar só o útil; manter a aposta VERTICAL.
+- **Sinal estratégico:** o MA vai MUITO horizontal + fintech (Finanças completo,
+  Recebimentos/saldo/transferências, Links de cobrança, Open Finance, Gmail lê
+  boletos, "Área do contador", Pesquisas, Projetos, time de 6 personas). Quanto
+  mais eles incham, mais espaço sobra pra uma ferramenta FOCADA em obra. NÃO imitar
+  a largura — aprofundar no canteiro.
+- **Modelo de negócio (adaptar):** plano **anual** (eles empurram "Pro Anual");
+  **multi-usuário por conta** (convites/códigos de acesso → ARPU por assento, ex.:
+  construtora com vários engenheiros); **"Área do contador"** → análogo vertical =
+  **dossiê/ponte com o CLIENTE da obra** (transparência). PULAR: recebíveis/fintech.
+- **Melhorias aprovadas (ordem):**
+  1. ✅ **Preferências + lembrete automático (05/10)** — colunas `resumo_hora` e
+     `lembrete_antecedencia_min` em secretaria_usuarios; `create_calendar_event` já
+     agenda lembrete automático na antecedência padrão; resumo diário no horário
+     escolhido (minute pg_cron, `bomdia?acao=lembretes` faz lembretes + resumos);
+     Vercel cron diário removido. Tool `configurar_preferencias`. FALTA: expor essas
+     prefs na aba "Minha conta" do painel (item 2).
+  2. **Aba "Minha conta" no painel** (pedido do Ricardo): ver/editar cadastro —
+     nome, e-mail, telefone/WhatsApp conectado (telefone é o wa_id; trocar depende
+     do fluxo de conexão por código/Meta), **gerenciar assinatura/pagamento**,
+     preferências (resumo/antecedência). Backend via roteador `api/app/data.ts`
+     (`?recurso=conta` GET + update) — NÃO criar arquivo novo (limite de 12 funções).
+  3. **Aba "O que a Rosana fez por você"** — log de ações/lembretes enviados com
+     status de entrega (inspirado em "Trabalho entregue": Programados/Entregues).
+  4. **Dossiê/relatório da obra pro cliente** — versão vertical da "área do
+     contador"; argumento de venda.
+- **Portáveis menores:** link público de agendamento (visita/vistoria, estilo
+  Calendly); "análise personalizada" (relatório sob medida); PWA instalável em vez
+  de app nativo; tema claro/escuro. **Pular:** finanças/Open Finance, Meet/Contatos,
+  time de personas, central de ajuda gigante.
 
 ## Pendências abertas
 1. ✅ (17/09) Chaves Anthropic + Groq rotacionadas (novas na Vercel, validadas em

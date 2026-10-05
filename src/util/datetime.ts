@@ -31,6 +31,16 @@ export function nowIso(): string {
   return new Date().toISOString();
 }
 
+/** Hora atual "HH:MM" (24h) no fuso do dono — p/ comparar com horário do resumo. */
+export function horaAgoraHHMM(): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: timezone(),
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date());
+}
+
 /** Hora "HH:mm" (no fuso do dono) de um datetime ISO. "" se inválido. */
 export function horaBr(iso: string): string {
   const dt = new Date(iso);

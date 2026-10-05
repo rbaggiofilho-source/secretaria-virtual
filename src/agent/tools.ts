@@ -44,6 +44,7 @@ import {
   saveMemory,
   setDocumentoLembrete,
   setNudgeDiario,
+  setPreferencias,
   type CategoriaCusto,
   type Cotacao,
   type DocumentoRow,
@@ -326,13 +327,30 @@ export const TOOLS: Anthropic.Tool[] = [
   {
     name: "configurar_lembrete_diario",
     description:
-      "Liga ou desliga a mensagem de 'bom dia' diária (dias úteis de manhã, um lembrete pra ajudar). Use quando o usuário pedir para PARAR de receber ('não quero mensagem de bom dia', 'para de me mandar de manhã') → ativar=false; ou para VOLTAR a receber → ativar=true. Só existe liga/desliga por enquanto (o horário é fixo, manhã em dias úteis); se ele pedir outro horário/dia, explique que por ora é só de manhã nos dias úteis.",
+      "Liga ou desliga o resumo diário (o 'bom dia' com a agenda do dia, nos dias úteis). Use quando o usuário pedir para PARAR ('não quero mensagem de bom dia') → ativar=false; ou para VOLTAR → ativar=true. Para mudar o HORÁRIO do resumo, use configurar_preferencias.",
     input_schema: {
       type: "object",
       properties: {
-        ativar: { type: "boolean", description: "true = receber o bom dia; false = parar de receber" },
+        ativar: { type: "boolean", description: "true = receber o resumo; false = parar" },
       },
       required: ["ativar"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "configurar_preferencias",
+    description:
+      "Ajusta as preferências do usuário: o HORÁRIO do resumo diário (resumo_hora, formato 'HH:MM' 24h, ex.: '07:30') e/ou a ANTECEDÊNCIA padrão do lembrete automático de compromisso em minutos (lembrete_antecedencia_min; ex.: 60 = avisa 1h antes; 0 = não avisar automaticamente). Use quando o usuário pedir coisas como 'me manda o resumo às 7h', 'me avisa 1 hora antes das reuniões', 'não quero lembrete automático'. Informe só o que ele quer mudar. Confirme em 1 frase o que ficou configurado.",
+    input_schema: {
+      type: "object",
+      properties: {
+        resumo_hora: { type: "string", description: "Horário do resumo 'HH:MM' (24h)" },
+        lembrete_antecedencia_min: {
+          type: "integer",
+          description: "Minutos de antecedência do lembrete automático (0 = desligado)",
+        },
+      },
+      required: [],
       additionalProperties: false,
     },
   },
@@ -976,8 +994,18 @@ export async function runTool(
         const fimIso = input.end_iso ? String(input.end_iso) : null;
         const local = input.location ? String(input.location) : null;
         const descricao = input.description ? String(input.description) : null;
+        // Sem reminder explícito, usa a antecedência padrão do usuário (lembrete
+        // automático de compromisso via WhatsApp). 0 = sem lembrete.
+        const antecPadrao =
+          typeof usuario.lembrete_antecedencia_min === "number"
+            ? usuario.lembrete_antecedencia_min
+            : 30;
         const reminderMin =
-          typeof input.reminder_minutes === "number" ? input.reminder_minutes : null;
+          typeof input.reminder_minutes === "number"
+            ? input.reminder_minutes
+            : antecPadrao > 0
+              ? antecPadrao
+              : null;
         const lembreteEmIso =
           reminderMin != null && !Number.isNaN(Date.parse(inicioIso))
             ? new Date(Date.parse(inicioIso) - reminderMin * 60000).toISOString()
@@ -1281,6 +1309,37 @@ export async function runTool(
         const ativar = input.ativar === true;
         await setNudgeDiario(userWa, ativar);
         return { isError: false, text: JSON.stringify({ ok: true, nudge_diario: ativar }) };
+      }
+
+      case "configurar_preferencias": {
+        const resumoHora =
+          typeof input.resumo_hora === "string" && /^\d{2}:\d{2}$/.test(input.resumo_hora)
+            ? input.resumo_hora
+            : null;
+        const antecedenciaMin =
+          typeof input.lembrete_antecedencia_min === "number" &&
+          input.lembrete_antecedencia_min >= 0
+            ? Math.floor(input.lembrete_antecedencia_min)
+            : null;
+        if (resumoHora === null && antecedenciaMin === null) {
+          return {
+            isError: true,
+            text: JSON.stringify({
+              ok: false,
+              error:
+                "Nada pra mudar. resumo_hora deve ser 'HH:MM' e lembrete_antecedencia_min um número ≥ 0.",
+            }),
+          };
+        }
+        await setPreferencias(userWa, { resumoHora, antecedenciaMin });
+        return {
+          isError: false,
+          text: JSON.stringify({
+            ok: true,
+            resumo_hora: resumoHora ?? undefined,
+            lembrete_antecedencia_min: antecedenciaMin ?? undefined,
+          }),
+        };
       }
 
       case "get_pending": {

@@ -318,3 +318,9 @@ alter table public.secretaria_config enable row level security;
 --         'Content-Type','application/json'),
 --       body := '{}'::jsonb);
 --   $$);
+
+-- Preferências do usuário (resumo diário + lembrete automático de compromisso):
+alter table public.secretaria_usuarios
+  add column if not exists resumo_hora text not null default '08:00',
+  add column if not exists lembrete_antecedencia_min integer not null default 30,
+  add column if not exists resumo_ultimo date;
