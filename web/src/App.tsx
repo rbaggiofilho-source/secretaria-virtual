@@ -12,6 +12,7 @@ import { Diario } from './pages/Diario'
 import { Fotos } from './pages/Fotos'
 import { Documentos } from './pages/Documentos'
 import { Materiais } from './pages/Materiais'
+import { MinhaConta } from './pages/MinhaConta'
 import { Configuracoes } from './pages/Configuracoes'
 import { AdminApp } from './pages/Admin'
 import { getSession, getToken, setToken, type Usuario } from './lib/api'
@@ -104,6 +105,7 @@ export function App() {
           <Route path="fotos" element={<Fotos />} />
           <Route path="documentos" element={<Documentos />} />
           <Route path="materiais" element={<Materiais />} />
+          <Route path="conta" element={<MinhaConta />} />
           <Route path="config" element={<Configuracoes />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

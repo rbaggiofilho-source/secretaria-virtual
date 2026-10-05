@@ -738,6 +738,66 @@ export async function setPreferencias(
   if (error) throw new Error(`Falha ao salvar preferências: ${error.message}`);
 }
 
+/** Dados da aba "Minha conta" do painel (cadastro + assinatura + preferências). */
+export interface PerfilRow {
+  nome: string;
+  nome_completo: string | null;
+  email: string | null;
+  profissao: string | null;
+  /** wa_id conectado (somente leitura no painel — trocar depende do fluxo Meta). */
+  user_wa: string;
+  dono: boolean;
+  plano: string | null;
+  assinatura_status: string | null;
+  assinatura_em: string | null;
+  nudge_diario: boolean;
+  resumo_hora: string | null;
+  lembrete_antecedencia_min: number | null;
+}
+
+/** Lê o perfil completo do usuário para a aba "Minha conta". */
+export async function getPerfil(userWa: string): Promise<PerfilRow | null> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from("secretaria_usuarios")
+    .select(
+      "user_wa, nome, nome_completo, email, profissao, dono, plano, assinatura_status, assinatura_em, nudge_diario, resumo_hora, lembrete_antecedencia_min",
+    )
+    .eq("user_wa", userWa)
+    .maybeSingle();
+  if (error) throw new Error(`Falha ao buscar perfil: ${error.message}`);
+  return (data as PerfilRow | null) ?? null;
+}
+
+/**
+ * Atualiza os campos EDITÁVEIS do perfil no painel (todas as variantes de wa_id).
+ * Só nome, nome_completo, email e profissão — número conectado e assinatura são
+ * geridos por outros fluxos (Meta / Mercado Pago). Campos ausentes ficam como estão.
+ */
+export async function atualizarPerfil(
+  userWa: string,
+  dados: {
+    nome?: string | null;
+    nomeCompleto?: string | null;
+    email?: string | null;
+    profissao?: string | null;
+  },
+): Promise<void> {
+  const patch: Record<string, unknown> = {};
+  const limpo = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
+  if (typeof dados.nome === "string" && dados.nome.trim()) patch.nome = dados.nome.trim();
+  if (dados.nomeCompleto !== undefined) patch.nome_completo = limpo(dados.nomeCompleto);
+  if (dados.email !== undefined) patch.email = limpo(dados.email);
+  if (dados.profissao !== undefined) patch.profissao = limpo(dados.profissao);
+  if (Object.keys(patch).length === 0) return;
+  const supabase = getSupabase();
+  const { error } = await supabase
+    .from("secretaria_usuarios")
+    .update(patch)
+    .in("user_wa", waIdVariants(userWa));
+  if (error) throw new Error(`Falha ao salvar perfil: ${error.message}`);
+}
+
 /**
  * Gera as variantes de wa_id de um número BR de celular. A Meta pode entregar
  * COM ou SEM o nono dígito, então guardamos as duas formas (12 e 13 dígitos)

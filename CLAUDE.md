@@ -131,8 +131,12 @@ WhatsApp. Eventos de status (sent/delivered/read/failed) são logados.
   - **Dois roteadores** (p/ caber no limite de 12 funções do Hobby — ver Armadilhas):
     - `api/app/auth.ts` — `?acao=login|request-code|set-password|change-password` (POST)
       e `?acao=session` (GET).
-    - `api/app/data.ts` — `?recurso=dashboard|obras|custos|rdo|documentos|materiais|fotos`
-      (GET) e `?recurso=obras` (POST cria obra). `src/app/{dashboard,obras}.ts` agregam.
+    - `api/app/data.ts` — `?recurso=dashboard|obras|custos|rdo|documentos|materiais|fotos|plano|conta`
+      (GET) e POST `?recurso=obras` (cria/edita obra) / `?recurso=conta` (salva
+      cadastro + preferências da aba "Minha conta": nome/nome_completo/email/
+      profissão + resumo_hora/antecedência + nudge_diario; número conectado e
+      assinatura são só leitura). `src/app/{dashboard,obras}.ts` agregam;
+      `getPerfil`/`atualizarPerfil`/`setPreferencias`/`setNudgeDiario` (context.ts).
       `signedFotoUrl` (storage.ts) = URL temporária p/ exibir foto sem abrir o bucket.
     - `api/app/rdo-pdf.ts` — download do PDF do RDO por obra (função à parte, binário).
     - `api/app/pay.ts` — pagamento/assinatura (Mercado Pago), PÚBLICO (sem token):
@@ -158,7 +162,11 @@ WhatsApp. Eventos de status (sent/delivered/read/failed) são logados.
     `web/src/App.tsx` (rotas + portão de sessão), `components/PanelLayout.tsx`
     (moldura + `Outlet`), `components/Sidebar.tsx` (NavLink), `lib/api.ts` (cliente +
     token no localStorage), `pages/{Landing,Cadastro,Login,VisaoGeral,Obras,Custos,
-    Diario,Fotos,Documentos,Materiais,Configuracoes}.tsx`, `styles/{global,landing}.css`.
+    Diario,Fotos,Documentos,Materiais,MinhaConta,Configuracoes}.tsx`, `styles/{global,landing}.css`.
+    A aba **"Minha conta"** (`pages/MinhaConta.tsx`, rota `/painel/conta`) edita o
+    cadastro (nome/e-mail/profissão), mostra o número conectado (só leitura) e a
+    assinatura, e ajusta as preferências (horário do resumo + antecedência do
+    lembrete + liga/desliga o resumo diário) via POST `data?recurso=conta`.
     `web/vercel.json` = SPA fallback + cache.
 - Exclusão de conta: `excluirDadosUsuario` (context.ts) apaga tudo por wa_id + arquivos do Storage (`removeFotos`).
 - `src/whatsapp/{client,signature,types}.ts` — envio (texto/documento/upload de mídia), HMAC, tipos.
@@ -567,13 +575,16 @@ Benchmark do APP (não só WhatsApp). Copiar só o útil; manter a aposta VERTIC
      `lembrete_antecedencia_min` em secretaria_usuarios; `create_calendar_event` já
      agenda lembrete automático na antecedência padrão; resumo diário no horário
      escolhido (minute pg_cron, `bomdia?acao=lembretes` faz lembretes + resumos);
-     Vercel cron diário removido. Tool `configurar_preferencias`. FALTA: expor essas
-     prefs na aba "Minha conta" do painel (item 2).
-  2. **Aba "Minha conta" no painel** (pedido do Ricardo): ver/editar cadastro —
-     nome, e-mail, telefone/WhatsApp conectado (telefone é o wa_id; trocar depende
-     do fluxo de conexão por código/Meta), **gerenciar assinatura/pagamento**,
-     preferências (resumo/antecedência). Backend via roteador `api/app/data.ts`
-     (`?recurso=conta` GET + update) — NÃO criar arquivo novo (limite de 12 funções).
+     Vercel cron diário removido. Tool `configurar_preferencias`. As prefs também
+     são editáveis na aba "Minha conta" do painel (item 2).
+  2. ✅ **Aba "Minha conta" no painel (05/10)** — `pages/MinhaConta.tsx` (rota
+     `/painel/conta`, link no Sidebar). Edita cadastro (nome/nome_completo/e-mail/
+     profissão); mostra o número de WhatsApp conectado FORMATADO (só leitura —
+     trocar depende do fluxo Meta) e a assinatura (plano + situação + desde, só
+     leitura — gerir é pela Rosana no WhatsApp); e ajusta preferências (horário do
+     resumo + antecedência do lembrete + liga/desliga o resumo diário). Backend:
+     roteador `api/app/data.ts` `?recurso=conta` (GET + POST) — SEM novo arquivo em
+     /api (limite de 12 funções); `getPerfil`/`atualizarPerfil` em context.ts.
   3. **Aba "O que a Rosana fez por você"** — log de ações/lembretes enviados com
      status de entrega (inspirado em "Trabalho entregue": Programados/Entregues).
   4. **Dossiê/relatório da obra pro cliente** — versão vertical da "área do

@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { BarChart3, BookOpenText, Building2, CalendarDays, ChevronLeft, FileClock, Images, LayoutDashboard, LogOut, PackageSearch, Settings } from 'lucide-react'
+import { BarChart3, BookOpenText, Building2, CalendarDays, ChevronLeft, FileClock, Images, LayoutDashboard, LogOut, PackageSearch, Settings, UserRound } from 'lucide-react'
 import { Logo } from './Logo'
 import type { Usuario } from '../lib/api'
 
@@ -48,6 +48,9 @@ export function Sidebar({
         </nav>
         <div className="sidebar-bottom">
           <div className="calendar-state"><span><CalendarDays size={18} /></span><div><strong>Google Agenda</strong><small><i /> Conectada</small></div></div>
+          <NavLink to="/painel/conta" onClick={onClose} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+            <UserRound size={19} /><span>Minha conta</span>
+          </NavLink>
           <NavLink to="/painel/config" onClick={onClose} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
             <Settings size={19} /><span>Configurações</span>
           </NavLink>

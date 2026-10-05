@@ -9,6 +9,10 @@ import {
   consultarMateriais,
   consultarFotos,
   getUsuario,
+  getPerfil,
+  atualizarPerfil,
+  setPreferencias,
+  setNudgeDiario,
   type MaterialStatus,
   type TipoFoto,
 } from "../../src/memory/context.js";
@@ -110,12 +114,49 @@ export default {
               },
             });
           }
+          case "conta": {
+            // Aba "Minha conta": cadastro + assinatura + preferências.
+            const perfil = await getPerfil(wa);
+            if (!perfil) return json(request, { ok: false, error: "usuario_nao_encontrado" }, 404);
+            return json(request, { ok: true, conta: perfil });
+          }
           default:
             return json(request, { error: "recurso_desconhecido" }, 400);
         }
       }
 
       if (request.method === "POST") {
+        if (recurso === "conta") {
+          // Atualiza dados de cadastro + preferências da aba "Minha conta".
+          const body = await readJson(request);
+          const str = (v: unknown) => (typeof v === "string" ? v : undefined);
+          const email = str(body.email);
+          if (email && email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+            return json(request, { ok: false, error: "email_invalido" }, 400);
+          }
+          await atualizarPerfil(wa, {
+            nome: str(body.nome),
+            nomeCompleto: str(body.nome_completo),
+            email,
+            profissao: str(body.profissao),
+          });
+          // Preferências (horário do resumo + antecedência do lembrete).
+          const resumoHora = str(body.resumo_hora);
+          const antec =
+            typeof body.lembrete_antecedencia_min === "number"
+              ? body.lembrete_antecedencia_min
+              : undefined;
+          if ((resumoHora && resumoHora.trim()) || typeof antec === "number") {
+            await setPreferencias(wa, {
+              resumoHora: resumoHora ? resumoHora.trim() : null,
+              antecedenciaMin: typeof antec === "number" ? antec : null,
+            });
+          }
+          // Resumo diário ligado/desligado.
+          if (typeof body.nudge_diario === "boolean") await setNudgeDiario(wa, body.nudge_diario);
+          const perfil = await getPerfil(wa);
+          return json(request, { ok: true, conta: perfil });
+        }
         if (recurso === "obras") {
           const body = await readJson(request);
           const nome = (typeof body.nome === "string" ? body.nome : "").trim();

@@ -331,6 +331,47 @@ export function excluirObra(id: number | null, nome: string) {
   })
 }
 
+// ---------- Minha conta (cadastro + assinatura + preferências) ----------
+
+export interface ContaData {
+  nome: string
+  nome_completo: string | null
+  email: string | null
+  profissao: string | null
+  /** wa_id conectado (somente leitura — trocar depende do fluxo Meta). */
+  user_wa: string
+  dono: boolean
+  plano: string | null
+  assinatura_status: string | null
+  assinatura_em: string | null
+  nudge_diario: boolean
+  resumo_hora: string | null
+  lembrete_antecedencia_min: number | null
+}
+
+/** Dados da aba "Minha conta" do usuário logado. */
+export function getConta() {
+  return call<{ ok: boolean; conta: ContaData }>('/api/app/data?recurso=conta')
+}
+
+export interface ContaUpdate {
+  nome?: string
+  nome_completo?: string | null
+  email?: string | null
+  profissao?: string | null
+  resumo_hora?: string
+  lembrete_antecedencia_min?: number
+  nudge_diario?: boolean
+}
+
+/** Salva os dados de cadastro + preferências da aba "Minha conta". */
+export function salvarConta(dados: ContaUpdate) {
+  return call<{ ok: boolean; conta: ContaData }>('/api/app/data?recurso=conta', {
+    method: 'POST',
+    body: JSON.stringify(dados),
+  })
+}
+
 /** Troca a senha estando logado (exige a senha atual). */
 export function trocarSenha(senhaAtual: string, novaSenha: string) {
   return call<{ ok: boolean }>('/api/app/auth?acao=change-password', {
