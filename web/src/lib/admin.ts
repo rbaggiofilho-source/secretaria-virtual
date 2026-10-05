@@ -73,13 +73,15 @@ export function adminTrocarSenha(senhaAtual: string, novaSenha: string) {
 }
 
 export interface Overview {
+  periodoDias: number
   totais: {
     usuarios: number
     ativos: number
+    inativos: number
     pendentes: number
     cancelados: number
-    novos30d: number
-    saidas30d: number
+    novos: number
+    saidas: number
   }
   porPlano: { plano: string; total: number; ativos: number }[]
   porStatusAssinatura: { status: string; total: number }[]
@@ -92,12 +94,24 @@ export interface Overview {
     mensagens_mes: number
     custo_usd_mes: number
   }[]
+  geo: { uf: string; total: number; ativos: number }[]
+  cidades: { cidade: string; uf: string | null; total: number; ativos: number }[]
+  profissoes: { profissao: string; total: number }[]
+  uso: {
+    usuariosComAtividade: number
+    mediaMensagensMes: number
+    mediaMensagensSemana: number
+    mediaMensagensDia: number
+    mediaDiasAtivosMes: number
+  }
   mensagensTotais: number
   /** Custo REAL de IA+transcrição no mês (medido da API). */
   custoIaMesUsd: number
+  /** Custo médio medido por mensagem (US$) — base da calculadora de planos. */
+  custoMedioMensagemUsd: number
 }
-export function getOverview() {
-  return adminCall<{ ok: boolean; data: Overview }>('/api/app/admin?recurso=overview')
+export function getOverview(periodoDias = 30) {
+  return adminCall<{ ok: boolean; data: Overview }>(`/api/app/admin?recurso=overview&periodo=${periodoDias}`)
 }
 
 export interface UsuarioAdmin {
@@ -107,6 +121,8 @@ export interface UsuarioAdmin {
   plano: string | null
   status: string | null
   assinatura_status: string | null
+  profissao: string | null
+  uf: string | null
   ativo: boolean
   dono: boolean
   criado_em: string | null
@@ -114,6 +130,8 @@ export interface UsuarioAdmin {
   mensagens: number
   mensagens_mes: number
   custo_usd_mes: number
+  dias_ativos_30d: number
+  mensagens_30d: number
 }
 export function getUsuariosAdmin() {
   return adminCall<{ ok: boolean; usuarios: UsuarioAdmin[] }>('/api/app/admin?recurso=usuarios')

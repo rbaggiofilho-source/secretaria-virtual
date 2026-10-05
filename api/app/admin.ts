@@ -55,8 +55,10 @@ export default {
 
       if (request.method === "GET") {
         switch (recurso) {
-          case "overview":
-            return json(request, { ok: true, data: await buildOverview() });
+          case "overview": {
+            const periodo = Number(url.searchParams.get("periodo") ?? "30");
+            return json(request, { ok: true, data: await buildOverview(periodo) });
+          }
           case "usuarios":
             return json(request, { ok: true, usuarios: await listUsuariosAdmin() });
           case "planos":

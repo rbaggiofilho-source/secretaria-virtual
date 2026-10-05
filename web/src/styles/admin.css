@@ -76,8 +76,49 @@
 .adm-plano .full { grid-column: 1 / -1; }
 .adm-plano .row-actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 8px; }
 
+/* ---- Painel de controle: cabeçalhos, filtros e gráficos ---- */
+.adm-h1 { margin: 0 0 4px; font-size: 20px; font-weight: 700; }
+.adm-head-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+
+.adm-seg { display: inline-flex; background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 3px; gap: 2px; }
+.adm-seg button { border: 0; background: transparent; color: var(--muted); font-size: 12px; font-weight: 600; padding: 7px 13px; border-radius: 7px; cursor: pointer; }
+.adm-seg button.on { background: var(--green); color: #06130d; }
+.adm-seg.mini button { padding: 5px 10px; font-size: 11px; }
+
+.adm-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.adm-grid2 > .adm-card { margin-top: 20px; }
+.adm-grid-map { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 16px; }
+.adm-grid-map > .adm-card { margin-top: 20px; }
+
+.adm-vazio { color: var(--muted); font-size: 13px; margin: 0; }
+.adm-nota { margin: 12px 0 0; font-size: 11.5px; color: var(--muted); line-height: 1.5; }
+.adm-nota b { color: var(--ink); font-weight: 600; }
+
+.adm-bar.alt { background: #3a6ea5; }
+.adm-bar.blue { background: #4f9bf0; }
+.adm-bar.teal { background: #2fa0a0; }
+.adm-bar-row.wide { grid-template-columns: 170px 1fr 44px; }
+
+/* Mapa de ladrilhos do Brasil */
+.bmapa { display: flex; flex-direction: column; gap: 12px; }
+.bmapa-svg { width: 100%; max-width: 340px; height: auto; margin: 0 auto; display: block; }
+.bmapa-sigla { font-size: 11px; font-weight: 700; font-family: 'Manrope', sans-serif; }
+.bmapa-num { font-size: 10px; font-weight: 600; font-family: 'Manrope', sans-serif; }
+.bmapa-legenda { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--muted); justify-content: center; flex-wrap: wrap; }
+.bmapa-legenda i { width: 18px; height: 11px; border-radius: 3px; display: inline-block; }
+.bmapa-legenda em { font-style: normal; margin-left: 6px; }
+
+/* Calculadora de planos */
+.adm-calc-inputs { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+.adm-calc-inputs label { font-size: 11px; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
+.adm-calc-inputs input { height: 40px; padding: 0 11px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel2); color: var(--ink); font-size: 13px; }
+
+@media (max-width: 760px) {
+  .adm-grid2, .adm-grid-map { grid-template-columns: 1fr; }
+}
 @media (max-width: 620px) {
   .adm-bar-row { grid-template-columns: 100px 1fr 40px; }
+  .adm-bar-row.wide { grid-template-columns: 120px 1fr 40px; }
   .adm-plano { grid-template-columns: 1fr; }
   .adm-main { padding: 18px 14px 60px; }
 }

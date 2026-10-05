@@ -410,15 +410,37 @@ banco; nada de novo produto. Rodando em **userosana.com.br** (projeto Vercel
   o lead e mostra "em breve" (não cobra). Falta: criar a conta MP + colar o Access
   Token de produção na Vercel; back_url manda pro `/entrar` (o usuário cria a senha
   pelo fluxo de OTP — que ainda depende da janela de 24h da Meta).
-- **Painel de administração (`/admin`) — desde 22/09:** área separada com LOGIN
-  PRÓPRIO (e-mail+senha, `secretaria_admins`), INDEPENDENTE do número de WhatsApp
-  do dono como usuário. SPA em `web/src/pages/Admin.tsx` (rota `/admin/*`, noindex,
-  token próprio `rosana.admin.token`), cliente em `web/src/lib/admin.ts`. Abas:
-  Visão geral (KPIs: usuários/ativos/pendentes/cancelados/novos/saídas, série de
-  novos 30d, índices por plano, consumo por usuário = proxy por mensagens),
-  Usuários (busca + ativar/desativar; dono blindado), Planos (editar nome/valor/
-  descrição/ativo — muda o preço cobrado E o site), Conta (trocar senha). 1º acesso
-  via `ADMIN_BOOTSTRAP_TOKEN`.
+- **Painel de CONTROLE (`/admin`) — desde 22/09, reformulado 05/10:** área
+  separada com LOGIN PRÓPRIO (e-mail+senha, `secretaria_admins`), INDEPENDENTE do
+  número de WhatsApp do dono como usuário. SPA em `web/src/pages/Admin.tsx` (rota
+  `/admin/*`, noindex, token próprio `rosana.admin.token`), cliente em
+  `web/src/lib/admin.ts`. Renomeado de "Admin" para **"Painel de controle"**. Abas:
+  - **Visão geral** — KPIs (usuários/ativos/inativos/pendentes/novos/saídas) com
+    **filtro de janela de período** (7/30/90 dias ou 12 meses; `getOverview(periodo)`
+    → `buildOverview(periodoDias)`), série de novos cadastros na janela (agregada
+    por dia/semana/mês conforme o período), usuários por plano, assinaturas por
+    situação, e custo real de IA no mês (proxy por mensagens).
+  - **Usuários & mercado** — **mapa do Brasil em ladrilhos** (`web/src/components/
+    BrasilMapa.tsx`; tile grid/statebin, cada UF um quadrado rotulado, escala
+    sequencial AZUL clara→forte por nº de usuários, toggle Todos/Ativos) +
+    presença por UF + **cidades/regiões aproximadas** (praça do DDD) + distribuição
+    por **profissão** (texto livre normalizado) + **engajamento** (proxy de "tempo
+    de uso": média de mensagens/mês-semana-dia e dias ativos nos últimos 30d) +
+    gestão (busca, filtro todos/ativos/inativos, ativar/desativar, trocar plano, +
+    pacote; dono blindado). A geografia vem do **DDD do `user_wa`**
+    (`src/admin/geo.ts`: `dddDoWa`/`ufDoWa`/`pracaDoWa` — UF é confiável, cidade é
+    só aproximada pela praça do DDD). Profissões agrupadas por heurística em
+    `metrics.ts` (`normalizarProfissao`).
+  - **Planos & lucro** — editar nome/valor/descrição/ativo/limites (muda o preço
+    cobrado E o site) + **calculadora de custo e lucro** (pior caso = cota de
+    mensagens cheia; usa o custo/msg MEDIDO da API — `custoMedioMensagemUsd` —, ou
+    referência US$ 0,018; inputs de cotação do dólar, taxa do gateway e meta de
+    lucro; mostra lucro/margem por plano, marca +/− lucro, e "quantas vendas p/
+    bater a meta"). Regra do projeto: margem ≥ 48% no pior caso.
+  - **Conta** — trocar senha. 1º acesso via `ADMIN_BOOTSTRAP_TOKEN`.
+  OBS: "tempo de uso" e "consumo" são PROXYS (não há cronômetro de sessão nem API
+  de saldo dos provedores). O backend (`src/admin/metrics.ts`) deduplica variantes
+  de wa, exclui o dono das métricas de negócio, e expõe tudo por `buildOverview`.
 - **Ainda mock/pendente:** edição/registro fino no painel do usuário (RDO/custo/
   material são criados via WhatsApp); "orçamento/progresso" de obra (não existe no
   modelo); "consumo de créditos" real em R$ (hoje é proxy por volume de mensagens —
