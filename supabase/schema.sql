@@ -379,3 +379,9 @@ alter table public.secretaria_obra_membros enable row level security;
 -- Obra pode pertencer a uma empresa (null = obra pessoal, como hoje).
 alter table public.secretaria_obras
   add column if not exists empresa_id bigint references public.secretaria_empresas(id) on delete set null;
+
+-- Billing da empresa (Fase 4): assinatura do plano-empresa por teto de membros.
+alter table public.secretaria_empresas
+  add column if not exists assinatura_status text not null default 'nenhuma', -- nenhuma|aguardando|pendente|authorized|paused|cancelled
+  add column if not exists mp_preapproval_id text,
+  add column if not exists assinatura_em timestamptz;

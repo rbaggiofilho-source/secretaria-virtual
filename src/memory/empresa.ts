@@ -20,6 +20,9 @@ export interface EmpresaRow {
   plano: string;
   teto_membros: number;
   created_at: string;
+  assinatura_status?: string | null;
+  mp_preapproval_id?: string | null;
+  assinatura_em?: string | null;
 }
 
 export interface MembroRow {
@@ -267,6 +270,40 @@ export async function obrasAtribuidas(empresaId: number, wa: string): Promise<st
     .in("id", ids);
   if (e2) throw new Error(`Falha ao resolver obras atribuídas: ${e2.message}`);
   return (obras ?? []).map((r) => (r as { nome: string }).nome);
+}
+
+/**
+ * Aplica um PLANO-EMPRESA à empresa: ajusta o teto de membros e o id do plano.
+ * `status` reflete o billing ('aguardando' sem MP, 'pendente' até o MP autorizar).
+ */
+export async function definirPlanoEmpresa(
+  empresaId: number,
+  plano: { id: string; tetoMembros: number },
+  status: string,
+  preapprovalId?: string | null,
+): Promise<void> {
+  const supabase = getSupabase();
+  const patch: Record<string, unknown> = {
+    plano: plano.id,
+    teto_membros: plano.tetoMembros,
+    assinatura_status: status,
+  };
+  if (preapprovalId !== undefined) patch.mp_preapproval_id = preapprovalId;
+  const { error } = await supabase.from("secretaria_empresas").update(patch).eq("id", empresaId);
+  if (error) throw new Error(`Falha ao definir plano da empresa: ${error.message}`);
+}
+
+/** Atualiza o status da assinatura da empresa (chamado pelo webhook do MP). */
+export async function atualizarAssinaturaEmpresa(
+  empresaId: number,
+  dados: { status: string; preapprovalId?: string | null; ativa?: boolean },
+): Promise<void> {
+  const supabase = getSupabase();
+  const patch: Record<string, unknown> = { assinatura_status: dados.status };
+  if (dados.preapprovalId) patch.mp_preapproval_id = dados.preapprovalId;
+  if (dados.ativa) patch.assinatura_em = new Date().toISOString();
+  const { error } = await supabase.from("secretaria_empresas").update(patch).eq("id", empresaId);
+  if (error) throw new Error(`Falha ao atualizar assinatura da empresa: ${error.message}`);
 }
 
 /** Busca um membro pelo id, confirmando que é da empresa informada. */

@@ -133,3 +133,32 @@ export const PACOTES: Record<PacoteId, Pacote> = {
 export function getPacote(id: string | null | undefined): Pacote | null {
   return PACOTES[(id ?? "") as PacoteId] ?? null;
 }
+
+// ---------------------------------------------------------------------------
+// Planos CORPORATIVOS (versão empresa) — assinatura por TETO de membros.
+// A empresa agrupa vários WhatsApps; o preço escala com o nº de assentos.
+// PREÇOS PLACEHOLDER (ajustar com o dono): ~R$ 165/assento, com desconto por
+// volume. Editáveis aqui (como `precos-referencia`, é dado versionado no git).
+// Regra de margem dos planos pessoais continua valendo por assento.
+// ---------------------------------------------------------------------------
+
+export type PlanoEmpresaId = "equipe_3" | "equipe_5" | "equipe_10";
+
+export interface PlanoEmpresa {
+  id: PlanoEmpresaId;
+  nome: string;
+  tetoMembros: number; // inclui o admin
+  valor: number; // mensal, BRL
+}
+
+export const PLANOS_EMPRESA: Record<PlanoEmpresaId, PlanoEmpresa> = {
+  equipe_3: { id: "equipe_3", nome: "Rosana Equipe (até 3)", tetoMembros: 3, valor: 497 },
+  equipe_5: { id: "equipe_5", nome: "Rosana Equipe (até 5)", tetoMembros: 5, valor: 797 },
+  equipe_10: { id: "equipe_10", nome: "Rosana Equipe (até 10)", tetoMembros: 10, valor: 1490 },
+};
+
+export const PLANOS_EMPRESA_IDS: PlanoEmpresaId[] = ["equipe_3", "equipe_5", "equipe_10"];
+
+export function getPlanoEmpresa(id: string | null | undefined): PlanoEmpresa | null {
+  return PLANOS_EMPRESA[(id ?? "") as PlanoEmpresaId] ?? null;
+}

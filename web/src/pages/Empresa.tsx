@@ -1,16 +1,19 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { Building2, Plus, Trash2, UserPlus, Users } from 'lucide-react'
+import { Building2, CreditCard, Plus, Trash2, UserPlus, Users } from 'lucide-react'
 import { PageHead } from '../components/Page'
 import {
+  assinarEmpresa,
   atribuirObra,
   convidarColaborador,
   criarEmpresa,
   criarObraEmpresa,
+  formatarBRL,
   getEmpresa,
   removerMembro,
   type EmpresaInfo,
   type MembroEmpresa,
   type ObraEmpresa,
+  type PlanoEmpresa,
 } from '../lib/api'
 
 function fmtWa(wa: string): string {
@@ -32,6 +35,7 @@ export function Empresa() {
   const [info, setInfo] = useState<EmpresaInfo | null>(null)
   const [membros, setMembros] = useState<MembroEmpresa[]>([])
   const [obras, setObras] = useState<ObraEmpresa[]>([])
+  const [planos, setPlanos] = useState<PlanoEmpresa[]>([])
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState<string | null>(null)
   const [msg, setMsg] = useState<{ tipo: 'ok' | 'erro'; texto: string } | null>(null)
@@ -52,6 +56,21 @@ export function Empresa() {
     setInfo(r.empresa)
     setMembros(r.membros ?? [])
     setObras(r.obras ?? [])
+    setPlanos(r.planosEmpresa ?? [])
+  }
+
+  async function assinar(planoId: string) {
+    setMsg(null); setBusy(true)
+    try {
+      const r = await assinarEmpresa(planoId)
+      if (r.init_point) { window.location.href = r.init_point; return }
+      await recarregar()
+      setMsg({ tipo: 'ok', texto: 'Plano aplicado. O pagamento recorrente será ativado em breve (integração de cobrança).' })
+    } catch {
+      setMsg({ tipo: 'erro', texto: 'Não consegui aplicar o plano agora.' })
+    } finally {
+      setBusy(false)
+    }
   }
 
   useEffect(() => {
@@ -110,6 +129,29 @@ export function Empresa() {
       {msg && <p className={`config-msg config-msg--${msg.tipo}`} style={{ maxWidth: 560 }}>{msg.texto}</p>}
 
       <div className="config-grid">
+        {/* Plano da empresa */}
+        <article className="config-card config-card--wide">
+          <div className="config-icon"><CreditCard size={20} /></div>
+          <h3>Plano da empresa</h3>
+          <p>Escolha o plano pelo número de membros da equipe. Ao assinar um plano maior, o limite de vagas sobe na hora.</p>
+          <div className="plano-emp-grid">
+            {planos.map((p) => {
+              const atual = info?.teto_membros === p.tetoMembros
+              return (
+                <div key={p.id} className={`plano-emp ${atual ? 'plano-emp--atual' : ''}`}>
+                  <strong>{p.nome}</strong>
+                  <span className="plano-emp-valor">{formatarBRL(p.valor)}<small>/mês</small></span>
+                  <small>Até {p.tetoMembros} membros</small>
+                  <button className="config-btn" disabled={busy || atual} onClick={() => assinar(p.id)}>
+                    {atual ? 'Plano atual' : 'Assinar'}
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+          <p style={{ marginTop: 10, fontSize: 11 }}>Situação da assinatura: <b>{info?.assinatura_status === 'authorized' ? 'Ativa' : info?.assinatura_status === 'pendente' ? 'Pagamento pendente' : info?.assinatura_status === 'aguardando' ? 'Aguardando integração de cobrança' : 'Sem cobrança'}</b></p>
+        </article>
+
         {/* Convidar + membros */}
         <article className="config-card config-card--wide">
           <div className="config-icon"><Users size={20} /></div>

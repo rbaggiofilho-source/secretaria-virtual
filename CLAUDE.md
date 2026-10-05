@@ -688,8 +688,18 @@ Benchmark do APP (não só WhatsApp). Copiar só o útil; manter a aposta VERTIC
       recorders = todos os membros), então o admin vê no painel o que a EQUIPE
       lançou nas obras da empresa + os próprios dados. (Dados pessoais sem obra
       não entram na visão agregada — raro na vertical.)
-  - **Falta:** Fase 4 (planos-empresa por teto no billing: hoje o teto é guardado
-    na empresa e barra convites, mas não há cobrança diferenciada por assento/teto).
+  - **✅ Fase 4 (05/10) — cobrança por teto (planos-empresa):**
+    `PLANOS_EMPRESA` em `src/pay/planos.ts` (equipe_3/5/10 → teto + preço;
+    **PREÇOS PLACEHOLDER — confirmar com o dono**, editáveis no código). Colunas
+    de billing em `secretaria_empresas` (assinatura_status, mp_preapproval_id,
+    assinatura_em). Admin assina/muda de plano no painel (card "Plano da empresa"
+    em `Empresa.tsx`) → `data?recurso=empresa` `acao=assinar`: com
+    `MERCADOPAGO_ACCESS_TOKEN` cria preapproval (externalReference `empresa:<id>`,
+    payer_email = e-mail do admin) e devolve init_point; SEM o token aplica o
+    plano/teto e marca 'aguardando' (inerte, sem cobrar). O webhook do MP
+    (`pay?acao=webhook`) roteia `empresa:<id>` → `atualizarAssinaturaEmpresa`
+    (ativa/pausa). `definirPlanoEmpresa` ajusta teto+plano; o teto já barra
+    convites (Fase 1). Reaproveita MP recorrente (`criarAssinatura`).
 - **Portáveis menores:** link público de agendamento (visita/vistoria, estilo
   Calendly); "análise personalizada" (relatório sob medida); PWA instalável em vez
   de app nativo; tema claro/escuro. **Pular:** finanças/Open Finance, Meet/Contatos,

@@ -23,6 +23,7 @@ import {
   criarEmpresa,
   criarObraEmpresa,
   definirMembrosDaObra,
+  definirPlanoEmpresa,
   empresaComoAdmin,
   getMembro,
   listarMembros,
@@ -32,6 +33,8 @@ import {
   removerMembro,
 } from "../../src/memory/empresa.js";
 import { enviarConvite } from "../../src/corp/convites.js";
+import { getPlanoEmpresa, PLANOS_EMPRESA_IDS, PLANOS_EMPRESA } from "../../src/pay/planos.js";
+import { criarAssinatura, mpConfigured } from "../../src/pay/mercadopago.js";
 import { resolverEscopoPainel } from "../../src/corp/escopo.js";
 import { buildDashboardEmpresa, buildObrasEmpresa } from "../../src/app/empresaView.js";
 import { signedFotoUrl } from "../../src/memory/storage.js";
@@ -189,8 +192,10 @@ export default {
                 nome: empresa.nome,
                 plano: empresa.plano,
                 teto_membros: empresa.teto_membros,
+                assinatura_status: empresa.assinatura_status ?? "nenhuma",
                 usados: membros.filter((m) => m.status === "ativo" || m.status === "convidado").length,
               },
+              planosEmpresa: PLANOS_EMPRESA_IDS.map((id) => PLANOS_EMPRESA[id]),
               membros: membros
                 .filter((m) => m.status !== "removido")
                 .map((m) => ({
@@ -269,6 +274,32 @@ export default {
             }
             await definirMembrosDaObra(obraId, userWas as string[]);
             return json(request, { ok: true });
+          }
+
+          if (acao === "assinar") {
+            // Assina/atualiza o PLANO-EMPRESA (teto de membros). Sem MP: define o
+            // plano/teto e marca "aguardando" (sem cobrar). Com MP: cria a
+            // assinatura recorrente e devolve o init_point do checkout.
+            const plano = getPlanoEmpresa(str(body.planoId));
+            if (!plano) return json(request, { ok: false, error: "plano_invalido" }, 400);
+            if (!mpConfigured()) {
+              await definirPlanoEmpresa(empresa.id, plano, "aguardando");
+              return json(request, { ok: true, aguardandoIntegracao: true, teto: plano.tetoMembros });
+            }
+            const perfil = await getPerfil(wa);
+            const email = perfil?.email;
+            if (!email) return json(request, { ok: false, error: "email_necessario" }, 400);
+            const base = getEnv().PUBLIC_BASE_URL.replace(/\/+$/, "");
+            const assinatura = await criarAssinatura({
+              email,
+              reason: plano.nome,
+              valor: plano.valor,
+              externalReference: `empresa:${empresa.id}`,
+              backUrl: "https://userosana.com.br/painel/empresa?assinatura=ok",
+              notificationUrl: `${base}/api/app/pay?acao=webhook`,
+            });
+            await definirPlanoEmpresa(empresa.id, plano, "pendente", assinatura.id);
+            return json(request, { ok: true, init_point: assinatura.initPoint });
           }
 
           return json(request, { ok: false, error: "acao_desconhecida" }, 400);

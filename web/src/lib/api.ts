@@ -404,7 +404,14 @@ export interface EmpresaInfo {
   nome: string
   plano: string
   teto_membros: number
+  assinatura_status: string
   usados: number
+}
+export interface PlanoEmpresa {
+  id: string
+  nome: string
+  tetoMembros: number
+  valor: number
 }
 export interface MembroEmpresa {
   id: number
@@ -425,6 +432,7 @@ export interface EmpresaPayload {
   empresa: EmpresaInfo | null
   membros?: MembroEmpresa[]
   obras?: ObraEmpresa[]
+  planosEmpresa?: PlanoEmpresa[]
 }
 
 /** Carrega a empresa que o usuário administra (ou empresa:null se não houver). */
@@ -433,11 +441,12 @@ export function getEmpresa() {
 }
 
 function postEmpresa(body: Record<string, unknown>) {
-  return call<{ ok: boolean; error?: string; empresa?: EmpresaInfo; obra?: ObraEmpresa }>(
+  return call<{ ok: boolean; error?: string; empresa?: EmpresaInfo; obra?: ObraEmpresa; init_point?: string; aguardandoIntegracao?: boolean; teto?: number }>(
     '/api/app/data?recurso=empresa',
     { method: 'POST', body: JSON.stringify(body) },
   )
 }
+export const assinarEmpresa = (planoId: string) => postEmpresa({ acao: 'assinar', planoId })
 export const criarEmpresa = (nome: string, teto_membros?: number) => postEmpresa({ acao: 'criar', nome, teto_membros })
 export const convidarColaborador = (nome: string, numero: string) => postEmpresa({ acao: 'convidar', nome, numero })
 export const removerMembro = (membroId: number) => postEmpresa({ acao: 'remover', membroId })

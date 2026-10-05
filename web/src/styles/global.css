@@ -221,6 +221,14 @@ main { padding: 31px 34px 20px; max-width: 1600px; margin: auto; }.welcome { dis
 .obra-atrib-head small { font-size: 11px; color: var(--muted); }
 .obra-atrib-vazio { font-size: 12px; color: var(--muted); margin: 0; }
 .obra-atrib-membros { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-bottom: 10px; }
+.plano-emp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; margin-top: 12px; }
+.plano-emp { border: 1px solid var(--border); border-radius: 10px; padding: 14px; background: #fff; display: flex; flex-direction: column; gap: 5px; text-align: center; }
+.plano-emp--atual { border-color: #6d9086; box-shadow: 0 0 0 3px #dce8e4; }
+.plano-emp strong { font: 700 13px Manrope; color: #24312e; }
+.plano-emp-valor { font: 700 18px Manrope; color: var(--green); }
+.plano-emp-valor small { font: 500 11px 'DM Sans'; color: var(--muted); }
+.plano-emp small { font-size: 11px; color: var(--muted); }
+.plano-emp .config-btn { margin-top: 6px; align-self: center; }
 
 /* ---------- Cadastro de obra: card + modal ---------- */
 .obra-top { position: relative; }

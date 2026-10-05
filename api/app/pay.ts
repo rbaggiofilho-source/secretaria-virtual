@@ -8,6 +8,7 @@ import {
   atualizarAssinatura,
   normalizarWaBR,
 } from "../../src/memory/assinaturas.js";
+import { atualizarAssinaturaEmpresa } from "../../src/memory/empresa.js";
 
 /**
  * Pagamento/assinatura (Mercado Pago). Endpoint PÚBLICO (sem token): serve tanto
@@ -107,6 +108,18 @@ async function webhook(request: Request, url: URL): Promise<Response> {
   if (!info || !info.externalReference) return json(request, { ok: true, semRef: true });
 
   const authorized = info.status === "authorized";
+
+  // Assinatura de EMPRESA (externalReference "empresa:<id>") vs. pessoal (wa).
+  const matchEmpresa = /^empresa:(\d+)$/.exec(info.externalReference);
+  if (matchEmpresa) {
+    await atualizarAssinaturaEmpresa(Number(matchEmpresa[1]), {
+      status: info.status,
+      preapprovalId: id,
+      ativa: authorized,
+    });
+    return json(request, { ok: true, empresa: true });
+  }
+
   await atualizarAssinatura(info.externalReference, {
     status: info.status,
     preapprovalId: id,
