@@ -44,8 +44,9 @@ export async function enviarConvite(
   empresa: EmpresaRow,
   wa: string,
   nome: string | null,
+  cargo: string | null = null,
 ): Promise<ConviteResultado> {
-  const r = await convidarMembro(empresa, wa, nome);
+  const r = await convidarMembro(empresa, wa, nome, cargo);
   if (!r.ok) return r;
 
   const body = mensagemConvite(empresa.nome);

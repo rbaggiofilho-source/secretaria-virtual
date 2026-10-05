@@ -30,10 +30,16 @@ export interface MembroRow {
   empresa_id: number;
   user_wa: string;
   nome: string | null;
+  cargo: string | null;
   papel: PapelMembro;
   status: StatusMembro;
   convidado_em: string;
   respondido_em: string | null;
+}
+
+/** O wa é o MASTER (dono) da empresa? (comparação canônica, tolerante ao 9) */
+export function ehMaster(empresa: EmpresaRow, wa: string): boolean {
+  return waIdVariants(canonWa(wa)).includes(empresa.dono_wa) || canonWa(wa) === empresa.dono_wa;
 }
 
 /**
@@ -169,6 +175,7 @@ export async function convidarMembro(
   empresa: EmpresaRow,
   wa: string,
   nome: string | null,
+  cargo: string | null = null,
 ): Promise<ConviteResultado> {
   const supabase = getSupabase();
   const alvo = canonWa(wa);
@@ -195,6 +202,7 @@ export async function convidarMembro(
         empresa_id: empresa.id,
         user_wa: alvo,
         nome: nome?.trim() || null,
+        cargo: cargo?.trim() || null,
         papel: "engenheiro",
         status: "convidado",
         convidado_em: new Date().toISOString(),
@@ -206,6 +214,34 @@ export async function convidarMembro(
     .single();
   if (error) throw new Error(`Falha ao convidar membro: ${error.message}`);
   return { ok: true, membro: data as MembroRow };
+}
+
+/** Atualiza papel e/ou cargo de um membro (master only — gatekeeper no endpoint). */
+export async function atualizarMembro(
+  empresaId: number,
+  membroId: number,
+  dados: { papel?: PapelMembro; cargo?: string | null },
+): Promise<void> {
+  const patch: Record<string, unknown> = {};
+  if (dados.papel) patch.papel = dados.papel;
+  if (dados.cargo !== undefined) patch.cargo = dados.cargo?.trim() || null;
+  if (Object.keys(patch).length === 0) return;
+  const supabase = getSupabase();
+  const { error } = await supabase
+    .from("secretaria_empresa_membros")
+    .update(patch)
+    .eq("empresa_id", empresaId)
+    .eq("id", membroId);
+  if (error) throw new Error(`Falha ao atualizar membro: ${error.message}`);
+}
+
+/** Renomeia a empresa (dado sensível — só o master). */
+export async function renomearEmpresa(empresaId: number, nome: string): Promise<void> {
+  const n = nome.trim();
+  if (!n) throw new Error("nome_obrigatorio");
+  const supabase = getSupabase();
+  const { error } = await supabase.from("secretaria_empresas").update({ nome: n }).eq("id", empresaId);
+  if (error) throw new Error(`Falha ao renomear empresa: ${error.message}`);
 }
 
 /** Responde um convite: aceitar (status ativo) ou recusar (status recusado). */

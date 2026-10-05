@@ -20,10 +20,12 @@ import { salvarObra, excluirObra, type ObraStatus } from "../../src/memory/obras
 import { listarAcoes } from "../../src/memory/acoes.js";
 import { lembretesProgramados } from "../../src/memory/eventos.js";
 import {
+  atualizarMembro,
   criarEmpresa,
   criarObraEmpresa,
   definirMembrosDaObra,
   definirPlanoEmpresa,
+  ehMaster,
   empresaComoAdmin,
   getMembro,
   listarMembros,
@@ -31,6 +33,7 @@ import {
   membrosDaObra,
   obraDaEmpresa,
   removerMembro,
+  renomearEmpresa,
 } from "../../src/memory/empresa.js";
 import { enviarConvite } from "../../src/corp/convites.js";
 import { getPlanoEmpresa, PLANOS_EMPRESA_IDS, PLANOS_EMPRESA } from "../../src/pay/planos.js";
@@ -185,14 +188,17 @@ export default {
             const obras = await Promise.all(
               obrasRaw.map(async (o) => ({ ...o, membros: await membrosDaObra(o.id) })),
             );
+            const master = ehMaster(empresa, wa);
             return json(request, {
               ok: true,
+              master,
               empresa: {
                 id: empresa.id,
                 nome: empresa.nome,
                 plano: empresa.plano,
                 teto_membros: empresa.teto_membros,
                 assinatura_status: empresa.assinatura_status ?? "nenhuma",
+                dono_wa: empresa.dono_wa,
                 usados: membros.filter((m) => m.status === "ativo" || m.status === "convidado").length,
               },
               planosEmpresa: PLANOS_EMPRESA_IDS.map((id) => PLANOS_EMPRESA[id]),
@@ -202,8 +208,10 @@ export default {
                   id: m.id,
                   user_wa: m.user_wa,
                   nome: m.nome,
+                  cargo: m.cargo,
                   papel: m.papel,
                   status: m.status,
+                  master: ehMaster(empresa, m.user_wa),
                 })),
               obras,
             });
@@ -234,11 +242,15 @@ export default {
           // Demais ações exigem ser admin de uma empresa.
           const empresa = await empresaComoAdmin(wa);
           if (!empresa) return json(request, { ok: false, error: "sem_empresa" }, 403);
+          const master = ehMaster(empresa, wa);
+          // Dados sensíveis (equipe, plano, nome da empresa) são SÓ do master.
+          const soMaster = () => json(request, { ok: false, error: "apenas_master" }, 403);
 
           if (acao === "convidar") {
+            if (!master) return soMaster();
             const numero = str(body.numero);
             if (!numero) return json(request, { ok: false, error: "numero_obrigatorio" }, 400);
-            const r = await enviarConvite(empresa, numero, str(body.nome) || null);
+            const r = await enviarConvite(empresa, numero, str(body.nome) || null, str(body.cargo) || null);
             if (!r.ok) {
               return json(request, { ok: false, error: r.motivo }, r.motivo === "sem_vaga" ? 403 : 409);
             }
@@ -246,11 +258,35 @@ export default {
           }
 
           if (acao === "remover") {
+            if (!master) return soMaster();
             const membroId = typeof body.membroId === "number" ? body.membroId : null;
             if (!membroId) return json(request, { ok: false, error: "membro_invalido" }, 400);
             const m = await getMembro(empresa.id, membroId);
             if (!m) return json(request, { ok: false, error: "membro_nao_encontrado" }, 404);
+            if (ehMaster(empresa, m.user_wa)) return json(request, { ok: false, error: "nao_remove_master" }, 400);
             await removerMembro(empresa.id, membroId);
+            return json(request, { ok: true });
+          }
+
+          if (acao === "promover" || acao === "cargo") {
+            // Promover/rebaixar admin (papel) e/ou definir cargo. Só master.
+            if (!master) return soMaster();
+            const membroId = typeof body.membroId === "number" ? body.membroId : null;
+            if (!membroId) return json(request, { ok: false, error: "membro_invalido" }, 400);
+            const m = await getMembro(empresa.id, membroId);
+            if (!m) return json(request, { ok: false, error: "membro_nao_encontrado" }, 404);
+            if (ehMaster(empresa, m.user_wa)) return json(request, { ok: false, error: "master_imutavel" }, 400);
+            const papel = body.papel === "admin" ? "admin" : body.papel === "engenheiro" ? "engenheiro" : undefined;
+            const cargo = typeof body.cargo === "string" ? body.cargo : undefined;
+            await atualizarMembro(empresa.id, membroId, { papel, cargo });
+            return json(request, { ok: true });
+          }
+
+          if (acao === "renomear") {
+            if (!master) return soMaster();
+            const nome = str(body.nome);
+            if (!nome) return json(request, { ok: false, error: "nome_obrigatorio" }, 400);
+            await renomearEmpresa(empresa.id, nome);
             return json(request, { ok: true });
           }
 
@@ -277,9 +313,10 @@ export default {
           }
 
           if (acao === "assinar") {
-            // Assina/atualiza o PLANO-EMPRESA (teto de membros). Sem MP: define o
-            // plano/teto e marca "aguardando" (sem cobrar). Com MP: cria a
-            // assinatura recorrente e devolve o init_point do checkout.
+            // Assina/atualiza o PLANO-EMPRESA (teto de membros). Só master.
+            // Sem MP: define o plano/teto e marca "aguardando" (sem cobrar). Com
+            // MP: cria a assinatura recorrente e devolve o init_point do checkout.
+            if (!master) return soMaster();
             const plano = getPlanoEmpresa(str(body.planoId));
             if (!plano) return json(request, { ok: false, error: "plano_invalido" }, 400);
             if (!mpConfigured()) {
