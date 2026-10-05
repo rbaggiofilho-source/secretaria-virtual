@@ -94,7 +94,10 @@ export async function runSecretary(params: {
     { type: "text", text: prompt.estatico, cache_control: { type: "ephemeral" } },
     { type: "text", text: prompt.dinamico + audioHint + onboardingHint + empresaHint },
   ];
-  const tools = [...toolsDoPlano(params.direito), ...toolsCorporativas(params.usuario)];
+  // Rede de segurança: a API rejeita o request inteiro se houver nome de tool
+  // repetido ("Tool names must be unique"). Dedup por nome (mantém a 1ª) pra que
+  // um futuro descuido na montagem nunca derrube o atendimento silenciosamente.
+  const tools = dedupTools([...toolsDoPlano(params.direito), ...toolsCorporativas(params.usuario)]);
   const consumo: ConsumoIa = {
     chamadas: 0,
     tokensEntrada: 0,
@@ -269,6 +272,18 @@ function normalizarMediaType(mime: string): "image/jpeg" | "image/png" | "image/
   if (base === "image/gif") return "image/gif";
   if (base === "image/webp") return "image/webp";
   throw new Error(`mime_de_imagem_nao_suportado:${base || "desconhecido"}`);
+}
+
+/** Remove tools com nome repetido (mantém a 1ª ocorrência). */
+function dedupTools(tools: Anthropic.Tool[]): Anthropic.Tool[] {
+  const vistos = new Set<string>();
+  const out: Anthropic.Tool[] = [];
+  for (const t of tools) {
+    if (vistos.has(t.name)) continue;
+    vistos.add(t.name);
+    out.push(t);
+  }
+  return out;
 }
 
 function extractText(response: Anthropic.Message): string {

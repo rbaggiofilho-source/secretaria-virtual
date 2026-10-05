@@ -750,12 +750,18 @@ const TOOLS_COM_OBRA = new Set([
  * prefixo do cache de prompt). A última recebe cache_control: as definições
  * das tools são iguais para todos do mesmo plano, então o cache é compartilhado.
  */
+const NOMES_CORP = new Set(["criar_empresa", "convidar_colaborador"]);
 const toolsCache = new Map<string, Anthropic.Tool[]>();
 export function toolsDoPlano(direito: Direito): Anthropic.Tool[] {
   const chave = direito.ilimitado ? "*" : direito.plano.recursos.join(",");
   const pronto = toolsCache.get(chave);
   if (pronto) return pronto;
-  const lista = TOOLS.filter((t) => temRecurso(direito, TOOL_RECURSO[t.name] ?? "base"));
+  // As tools corporativas saem SÓ de toolsCorporativas (abaixo). Se entrassem
+  // aqui também, o dono receberia a mesma tool duas vezes e a API rejeitaria
+  // o request inteiro ("Tool names must be unique").
+  const lista = TOOLS.filter(
+    (t) => !NOMES_CORP.has(t.name) && temRecurso(direito, TOOL_RECURSO[t.name] ?? "base"),
+  );
   const comCache = lista.map((t, i) =>
     i === lista.length - 1 ? { ...t, cache_control: { type: "ephemeral" as const, ttl: "1h" as const } } : t,
   );
@@ -769,7 +775,7 @@ export function toolsDoPlano(direito: Direito): Anthropic.Tool[] {
  * poucas e condicionais ao usuário. Os handlers conferem de novo (defesa em
  * profundidade).
  */
-const TOOLS_CORP = TOOLS.filter((t) => t.name === "criar_empresa" || t.name === "convidar_colaborador");
+const TOOLS_CORP = TOOLS.filter((t) => NOMES_CORP.has(t.name));
 export function toolsCorporativas(usuario: UsuarioRow): Anthropic.Tool[] {
   return usuario.dono ? TOOLS_CORP : [];
 }
