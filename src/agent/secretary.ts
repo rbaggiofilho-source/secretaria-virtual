@@ -5,7 +5,7 @@ import { custoChamadaUsd } from "../memory/uso.js";
 import type { Direito } from "../pay/cota.js";
 import type { BotaoResposta } from "../whatsapp/client.js";
 import { buildSystemPrompt } from "./system-prompt.js";
-import { runTool, toolsDoPlano } from "./tools.js";
+import { runTool, toolsCorporativas, toolsDoPlano } from "./tools.js";
 
 /** Botões de resposta rápida que o agente pediu para enviar (tool enviar_opcoes). */
 export interface BotoesPendentes {
@@ -81,7 +81,7 @@ export async function runSecretary(params: {
     { type: "text", text: prompt.estatico, cache_control: { type: "ephemeral" } },
     { type: "text", text: prompt.dinamico + audioHint + onboardingHint },
   ];
-  const tools = toolsDoPlano(params.direito);
+  const tools = [...toolsDoPlano(params.direito), ...toolsCorporativas(params.usuario)];
   const consumo: ConsumoIa = {
     chamadas: 0,
     tokensEntrada: 0,

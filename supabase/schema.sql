@@ -340,3 +340,42 @@ create table if not exists public.secretaria_acoes (
 create index if not exists secretaria_acoes_user_idx
   on public.secretaria_acoes (user_wa, created_at desc);
 alter table public.secretaria_acoes enable row level security;
+
+-- Versão CORPORATIVA (Fase 0/1): empresa agrupa vários WhatsApps; acesso por obra.
+create table if not exists public.secretaria_empresas (
+  id           bigint generated always as identity primary key,
+  nome         text not null,
+  dono_wa      text not null,                 -- wa do admin (canônico 13 díg.)
+  plano        text not null default 'equipe',
+  teto_membros integer not null default 3,    -- limite de membros (ativos+convidados)
+  created_at   timestamptz not null default now()
+);
+alter table public.secretaria_empresas enable row level security;
+
+create table if not exists public.secretaria_empresa_membros (
+  id            bigint generated always as identity primary key,
+  empresa_id    bigint not null references public.secretaria_empresas(id) on delete cascade,
+  user_wa       text not null,
+  nome          text,
+  papel         text not null default 'engenheiro',  -- admin | engenheiro
+  status        text not null default 'convidado',   -- convidado | ativo | recusado | removido
+  convidado_em  timestamptz not null default now(),
+  respondido_em timestamptz,
+  unique (empresa_id, user_wa)
+);
+create index if not exists secretaria_empresa_membros_wa_idx on public.secretaria_empresa_membros (user_wa);
+alter table public.secretaria_empresa_membros enable row level security;
+
+create table if not exists public.secretaria_obra_membros (
+  id         bigint generated always as identity primary key,
+  obra_id    bigint not null references public.secretaria_obras(id) on delete cascade,
+  user_wa    text not null,
+  created_at timestamptz not null default now(),
+  unique (obra_id, user_wa)
+);
+create index if not exists secretaria_obra_membros_wa_idx on public.secretaria_obra_membros (user_wa);
+alter table public.secretaria_obra_membros enable row level security;
+
+-- Obra pode pertencer a uma empresa (null = obra pessoal, como hoje).
+alter table public.secretaria_obras
+  add column if not exists empresa_id bigint references public.secretaria_empresas(id) on delete set null;

@@ -117,6 +117,7 @@ ${datasReferencia()}
 - Se o usuário der uma DATA ABSOLUTA fora da tabela ("22 de outubro", "10/12"), use essa data direto no start_iso; para saber/confirmar o dia da semana dela, use dia_da_semana (nunca deduza).
 - Ao confirmar na resposta, cite a data e o dia da semana EXATAMENTE como vieram da tabela, de resolver_data ou de dia_semana — nunca um dia/data que você deduziu.
 
+${usuario.dono ? "\nEMPRESA (administrador): se o usuário pedir para criar a conta da empresa/construtora, use criar_empresa; para adicionar/convidar um engenheiro pelo número, use convidar_colaborador (a Rosana manda o convite e o colaborador aceita no WhatsApp dele). Respeita o limite de membros do plano.\n" : ""}
 --- CONTEXTO DE ${nome.toUpperCase()} (memória) ---${bloco("Fatos", ctx.fatos)}${bloco("Obras", ctx.obras)}${bloco("Apelidos de obra", ctx.apelidos)}${bloco("Preferências", ctx.preferencias)}${pendencias}
 --- FIM DO CONTEXTO ---`;
 

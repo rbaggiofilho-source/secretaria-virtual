@@ -229,6 +229,17 @@ WhatsApp. Eventos de status (sent/delivered/read/failed) são logados.
   (id do evento), created_at. Alimenta a aba "Atividade" (seção "Entregues");
   gravado em `src/memory/acoes.ts` (`registrarAcao`/`listarAcoes`), nunca derruba
   o envio. Os "Programados" vêm de `secretaria_eventos` (lembrete futuro).
+- **Versão corporativa (Fase 0/1 — 05/10):**
+  - `secretaria_empresas` — empresa que agrupa vários WhatsApps (PK id; nome;
+    dono_wa = admin canônico; plano; teto_membros; created_at).
+  - `secretaria_empresa_membros` — membros (empresa_id; user_wa; nome; papel
+    admin|engenheiro; status convidado|ativo|recusado|removido; convidado_em;
+    respondido_em). unique(empresa_id,user_wa). Funções em `src/memory/empresa.ts`
+    (`criarEmpresa`, `empresaComoAdmin`, `empresaDoMembro`, `convitePendente`,
+    `convidarMembro` [checa teto], `responderConvite`, `listarMembros`, `canonWa`).
+  - `secretaria_obra_membros` — quais engenheiros entram em cada obra (obra_id;
+    user_wa). Base do acesso POR OBRA (aplicação do escopo = Fase 3).
+  - `secretaria_obras.empresa_id` — obra pode ser da empresa (null = pessoal).
 - `secretaria_admins` — administradores do painel `/admin` (PK email; nome,
   senha_hash scrypt, ultimo_login). INDEPENDENTE de `secretaria_usuarios`/wa.
 - `secretaria_planos` — planos vendáveis (PK id essencial/profissional; nome,
@@ -293,7 +304,11 @@ usuário, do histórico de `secretaria_materiais` via `buscarPrecosDoUsuario`, c
 prioridade — + `referencia` — base de mercado, 433 insumos; `seus_precos` só no
 plano Construtora),
 `comprar_pacote` (saldo do plano no mês + link de pagamento de pacote extra;
-o link vai em mensagem separada).
+o link vai em mensagem separada),
+`criar_empresa` / `convidar_colaborador` (versão corporativa, SÓ admin/dono —
+`toolsCorporativas(usuario)` só libera p/ `usuario.dono` na Fase 1: cria a
+empresa e convida engenheiros pelo número; o convite + aceite rodam pelo
+WhatsApp via `src/corp/convites.ts`).
 
 ## Onboarding do beta (site + OAuth) — desde 07/09/2026
 - **Site de cadastro:** `GET/POST /cadastro` (`api/cadastro.ts`, rewrite no
@@ -615,6 +630,24 @@ Benchmark do APP (não só WhatsApp). Copiar só o útil; manter a aposta VERTIC
      evento criado) — hoje só os envios proativos.
   4. **Dossiê/relatório da obra pro cliente** — versão vertical da "área do
      contador"; argumento de venda.
+- **Versão corporativa (decidida 05/10):** empresa agrupa vários WhatsApps;
+  acesso **POR OBRA** (engenheiro só vê as obras em que o admin o incluiu; dados
+  da obra compartilhados entre os membros dela); papéis **admin + engenheiro**;
+  entrada = admin cadastra o número (se há vaga no **teto do plano**) → Rosana
+  convida no WhatsApp → engenheiro **aceita/recusa**; o **contexto das obras quem
+  monta é o admin**. Cobrança = plano com teto de membros.
+  - **✅ Fase 0 + 1 (05/10):** tabelas `secretaria_empresas` /
+    `_empresa_membros` / `_obra_membros` + `empresa_id` em obras
+    (`src/memory/empresa.ts`); convite/aceite pelo WhatsApp
+    (`src/corp/convites.ts` + intercepto no `pipeline.ts` ANTES do portão de
+    autorização; botões Aceitar/Agora não; aceite → `ativarMembro`; recusa →
+    agradece + site). Tools `criar_empresa`/`convidar_colaborador` (só dono por
+    ora). O convite é enviado às DUAS variantes do número (nono dígito).
+    **Dev-mode da Meta: o número do engenheiro precisa estar na allow-list p/ o
+    convite chegar.**
+  - **Falta:** Fase 2 (painel do admin: empresa, membros, obras + atribuição de
+    engenheiros), Fase 3 (escopo por obra nas leituras/escritas — painel e
+    Rosana), Fase 4 (planos-empresa por teto no billing).
 - **Portáveis menores:** link público de agendamento (visita/vistoria, estilo
   Calendly); "análise personalizada" (relatório sob medida); PWA instalável em vez
   de app nativo; tema claro/escuro. **Pular:** finanças/Open Finance, Meet/Contatos,

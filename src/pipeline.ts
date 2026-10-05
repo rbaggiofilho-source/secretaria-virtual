@@ -7,6 +7,8 @@ import {
   loadRecentHistory,
   type UsuarioRow,
 } from "./memory/context.js";
+import { convitePendente } from "./memory/empresa.js";
+import { tratarConvite } from "./corp/convites.js";
 import { uploadFoto } from "./memory/storage.js";
 import { custoAudioUsd, incrementarUso } from "./memory/uso.js";
 import {
@@ -56,6 +58,26 @@ export async function handleIncomingMessage(message: WhatsAppMessage): Promise<v
   } catch (err) {
     logError("buscar usuário", err);
   }
+
+  // Convite corporativo PENDENTE intercepta tudo até ser respondido — o
+  // engenheiro convidado ainda não é usuário autorizado, então isto vem ANTES
+  // do portão de autorização. (Fase 1 da versão corporativa.)
+  try {
+    const pend = await convitePendente(from);
+    if (pend) {
+      const texto =
+        message.type === "text"
+          ? ((message as { text: { body: string } }).text.body ?? "")
+          : message.type === "interactive"
+            ? interactiveReplyText(message)
+            : "";
+      await tratarConvite(from, pend.membro, pend.empresa.nome, texto);
+      return;
+    }
+  } catch (err) {
+    logError("convite corporativo", err);
+  }
+
   if (!usuario || !usuario.ativo) {
     const allowed = getEnv().ALLOWED_WHATSAPP_NUMBER;
     if (allowed && from === allowed) {

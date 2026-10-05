@@ -12,6 +12,8 @@ import {
   listarEventos,
 } from "../memory/eventos.js";
 import { oauthConfigured, signState } from "../oauth/google.js";
+import { criarEmpresa, empresaComoAdmin } from "../memory/empresa.js";
+import { enviarConvite } from "../corp/convites.js";
 import { buildRdoPdf } from "../pdf/rdo.js";
 import {
   sendDocumentMessage,
@@ -678,6 +680,37 @@ export const TOOLS: Anthropic.Tool[] = [
       additionalProperties: false,
     },
   },
+  {
+    name: "criar_empresa",
+    description:
+      "Cria a EMPRESA do usuário (versão corporativa) e o registra como administrador. Use quando o administrador pedir para criar/abrir a conta da empresa/construtora dele (ex.: 'cria a empresa ENGETEC', 'quero montar a conta da minha construtora'). Só o administrador (dono) pode. Depois de criada, use convidar_colaborador para adicionar os engenheiros.",
+    input_schema: {
+      type: "object",
+      properties: {
+        nome: { type: "string", description: "Nome da empresa/construtora" },
+        teto_membros: {
+          type: "number",
+          description: "Limite de membros do plano (opcional; padrão 3)",
+        },
+      },
+      required: ["nome"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "convidar_colaborador",
+    description:
+      "Convida um ENGENHEIRO/colaborador para a equipe da empresa pelo número de WhatsApp. A Rosana manda uma mensagem se apresentando e pedindo o aceite; se aceitar, passa a atender esse colaborador. Use quando o administrador pedir para adicionar/convidar alguém à equipe (ex.: 'convida o João, 48 99999-8888'). Respeita o limite de membros do plano. Só o administrador pode.",
+    input_schema: {
+      type: "object",
+      properties: {
+        nome: { type: "string", description: "Nome do colaborador" },
+        numero: { type: "string", description: "WhatsApp do colaborador (qualquer formato: com/sem 55, com/sem o 9)" },
+      },
+      required: ["numero"],
+      additionalProperties: false,
+    },
+  },
 ];
 
 /**
@@ -727,6 +760,17 @@ export function toolsDoPlano(direito: Direito): Anthropic.Tool[] {
   );
   toolsCache.set(chave, comCache);
   return comCache;
+}
+
+/**
+ * Tools da versão CORPORATIVA (criar empresa / convidar colaborador). Só o
+ * admin (Fase 1: o dono) as recebe. Ficam FORA do cache por plano porque são
+ * poucas e condicionais ao usuário. Os handlers conferem de novo (defesa em
+ * profundidade).
+ */
+const TOOLS_CORP = TOOLS.filter((t) => t.name === "criar_empresa" || t.name === "convidar_colaborador");
+export function toolsCorporativas(usuario: UsuarioRow): Anthropic.Tool[] {
+  return usuario.dono ? TOOLS_CORP : [];
 }
 
 /**
@@ -1909,6 +1953,72 @@ export async function runTool(
             uso,
             link_enviado: true,
             instrucao: "O link já foi enviado. Confirme em 1 frase; o crédito entra assim que o pagamento for aprovado.",
+          }),
+        };
+      }
+
+      case "criar_empresa": {
+        if (!usuario.dono) {
+          return { isError: true, text: JSON.stringify({ ok: false, error: "Só o administrador pode criar a empresa." }) };
+        }
+        const nome = String(input.nome ?? "").trim();
+        if (!nome) return { isError: true, text: JSON.stringify({ ok: false, error: "Informe o nome da empresa." }) };
+        const existente = await empresaComoAdmin(userWa);
+        if (existente) {
+          return {
+            isError: false,
+            text: JSON.stringify({
+              ok: true,
+              ja_existia: true,
+              empresa: { id: existente.id, nome: existente.nome, teto_membros: existente.teto_membros },
+              instrucao: `Você já administra a empresa "${existente.nome}". Para adicionar engenheiros, use convidar_colaborador.`,
+            }),
+          };
+        }
+        const teto =
+          typeof input.teto_membros === "number" && input.teto_membros > 0
+            ? Math.floor(input.teto_membros)
+            : 3;
+        const empresa = await criarEmpresa(userWa, nome, teto);
+        return {
+          isError: false,
+          text: JSON.stringify({
+            ok: true,
+            empresa: { id: empresa.id, nome: empresa.nome, teto_membros: empresa.teto_membros },
+            instrucao: `Empresa "${empresa.nome}" criada (até ${empresa.teto_membros} membros). Agora convide os engenheiros com convidar_colaborador.`,
+          }),
+        };
+      }
+
+      case "convidar_colaborador": {
+        if (!usuario.dono) {
+          return { isError: true, text: JSON.stringify({ ok: false, error: "Só o administrador pode convidar colaboradores." }) };
+        }
+        const numero = String(input.numero ?? "").trim();
+        if (!numero) return { isError: true, text: JSON.stringify({ ok: false, error: "Informe o número do colaborador." }) };
+        const nomeCol = typeof input.nome === "string" ? input.nome : null;
+        const empresa = await empresaComoAdmin(userWa);
+        if (!empresa) {
+          return {
+            isError: true,
+            text: JSON.stringify({ ok: false, error: "Você ainda não tem empresa. Crie uma com criar_empresa antes de convidar." }),
+          };
+        }
+        const r = await enviarConvite(empresa, numero, nomeCol);
+        if (!r.ok) {
+          const msg =
+            r.motivo === "sem_vaga"
+              ? `A empresa atingiu o limite de ${empresa.teto_membros} membros do plano. Para adicionar mais, suba o plano.`
+              : "Esse número já é membro (ativo ou convidado) da empresa.";
+          return { isError: true, text: JSON.stringify({ ok: false, error: msg }) };
+        }
+        return {
+          isError: false,
+          text: JSON.stringify({
+            ok: true,
+            convite_enviado: true,
+            instrucao:
+              "Convite enviado no WhatsApp do colaborador. Ele vira membro ativo quando aceitar. Confirme em 1 frase; não copie nada.",
           }),
         };
       }

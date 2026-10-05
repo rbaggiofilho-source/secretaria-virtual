@@ -853,6 +853,27 @@ export async function registrarCadastro(dados: CadastroInput): Promise<string[]>
   return waIds;
 }
 
+/**
+ * Ativa um ENGENHEIRO que aceitou o convite da empresa como usuário autorizado
+ * (uma linha por variante de wa_id). Não é dono; entra como ativo. Upsert — se
+ * já existir linha, só garante nome/ativo (não mexe em outros campos pessoais).
+ */
+export async function ativarMembro(userWa: string, nome: string): Promise<void> {
+  const supabase = getSupabase();
+  const nomeLimpo = nome.trim() || "Colaborador";
+  const rows = waIdVariants(userWa).map((user_wa) => ({
+    user_wa,
+    nome: nomeLimpo,
+    status: "ativo",
+    ativo: true,
+    dono: false,
+  }));
+  const { error } = await supabase
+    .from("secretaria_usuarios")
+    .upsert(rows, { onConflict: "user_wa" });
+  if (error) throw new Error(`Falha ao ativar membro: ${error.message}`);
+}
+
 /* ---------- Exclusão de conta (LGPD / direito ao esquecimento) ---------- */
 
 export interface ResultadoExclusao {
