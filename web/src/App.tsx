@@ -13,6 +13,7 @@ import { Fotos } from './pages/Fotos'
 import { Documentos } from './pages/Documentos'
 import { Materiais } from './pages/Materiais'
 import { Atividade } from './pages/Atividade'
+import { Empresa } from './pages/Empresa'
 import { MinhaConta } from './pages/MinhaConta'
 import { Configuracoes } from './pages/Configuracoes'
 import { AdminApp } from './pages/Admin'
@@ -107,6 +108,7 @@ export function App() {
           <Route path="documentos" element={<Documentos />} />
           <Route path="materiais" element={<Materiais />} />
           <Route path="atividade" element={<Atividade />} />
+          <Route path="empresa" element={<Empresa />} />
           <Route path="conta" element={<MinhaConta />} />
           <Route path="config" element={<Configuracoes />} />
         </Route>

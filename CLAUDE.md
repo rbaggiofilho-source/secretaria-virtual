@@ -131,8 +131,10 @@ WhatsApp. Eventos de status (sent/delivered/read/failed) são logados.
   - **Dois roteadores** (p/ caber no limite de 12 funções do Hobby — ver Armadilhas):
     - `api/app/auth.ts` — `?acao=login|request-code|set-password|change-password` (POST)
       e `?acao=session` (GET).
-    - `api/app/data.ts` — `?recurso=dashboard|obras|custos|rdo|documentos|materiais|fotos|plano|conta|atividade`
-      (GET) e POST `?recurso=obras` (cria/edita obra) / `?recurso=conta` (salva
+    - `api/app/data.ts` — `?recurso=dashboard|obras|custos|rdo|documentos|materiais|fotos|plano|conta|atividade|empresa`
+      (GET) e POST `?recurso=empresa` (painel do admin da empresa: acao=criar|
+      convidar|remover|criar_obra|atribuir, valida `empresaComoAdmin`) /
+      `?recurso=obras` (cria/edita obra) / `?recurso=conta` (salva
       cadastro + preferências da aba "Minha conta": nome/nome_completo/email/
       profissão + resumo_hora/antecedência + nudge_diario; número conectado e
       assinatura são só leitura). `src/app/{dashboard,obras}.ts` agregam;
@@ -165,7 +167,10 @@ WhatsApp. Eventos de status (sent/delivered/read/failed) são logados.
     `web/src/App.tsx` (rotas + portão de sessão), `components/PanelLayout.tsx`
     (moldura + `Outlet`), `components/Sidebar.tsx` (NavLink), `lib/api.ts` (cliente +
     token no localStorage), `pages/{Landing,Cadastro,Login,VisaoGeral,Obras,Custos,
-    Diario,Fotos,Documentos,Materiais,Atividade,MinhaConta,Configuracoes}.tsx`, `styles/{global,landing}.css`.
+    Diario,Fotos,Documentos,Materiais,Atividade,Empresa,MinhaConta,Configuracoes}.tsx`, `styles/{global,landing}.css`.
+    A aba **"Minha empresa"** (`pages/Empresa.tsx`, rota `/painel/empresa`) é o
+    painel do admin da versão corporativa (criar empresa, equipe/convites, obras +
+    atribuição de engenheiros).
     A aba **"Atividade"** (`pages/Atividade.tsx`, rota `/painel/atividade`) mostra
     "Programados" (lembretes futuros) + "Entregues" (lembretes/resumos enviados,
     com status) via GET `data?recurso=atividade`.
@@ -645,9 +650,20 @@ Benchmark do APP (não só WhatsApp). Copiar só o útil; manter a aposta VERTIC
     ora). O convite é enviado às DUAS variantes do número (nono dígito).
     **Dev-mode da Meta: o número do engenheiro precisa estar na allow-list p/ o
     convite chegar.**
-  - **Falta:** Fase 2 (painel do admin: empresa, membros, obras + atribuição de
-    engenheiros), Fase 3 (escopo por obra nas leituras/escritas — painel e
-    Rosana), Fase 4 (planos-empresa por teto no billing).
+  - **✅ Fase 2 (05/10):** painel do admin em `web/src/pages/Empresa.tsx` (rota
+    `/painel/empresa`, link "Minha empresa" no Sidebar). Sem empresa → oferece
+    criar; com empresa → vagas usadas/teto, **equipe** (convidar por nome+número
+    respeitando o teto, status do convite, remover), e **obras da empresa**
+    (criar + atribuir engenheiros ativos por checkbox — cada engenheiro só nas
+    obras em que foi incluído). Backend: `data?recurso=empresa` GET (empresa +
+    membros + obras c/ membros) e POST por `acao` (criar|convidar|remover|
+    criar_obra|atribuir), tudo validando `empresaComoAdmin` no servidor —
+    estende o roteador, SEM novo arquivo em /api. Funções novas em
+    `src/memory/empresa.ts` (removerMembro, listarObrasEmpresa, criarObraEmpresa,
+    membrosDaObra, definirMembrosDaObra, obraDaEmpresa, getMembro).
+  - **Falta:** Fase 3 (aplicar o escopo por obra nas leituras/escritas — o
+    engenheiro vê no painel e via Rosana só as obras atribuídas, com os dados
+    compartilhados da empresa), Fase 4 (planos-empresa por teto no billing).
 - **Portáveis menores:** link público de agendamento (visita/vistoria, estilo
   Calendly); "análise personalizada" (relatório sob medida); PWA instalável em vez
   de app nativo; tema claro/escuro. **Pular:** finanças/Open Finance, Meet/Contatos,

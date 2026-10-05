@@ -19,6 +19,19 @@ import {
 import { salvarObra, excluirObra, type ObraStatus } from "../../src/memory/obras.js";
 import { listarAcoes } from "../../src/memory/acoes.js";
 import { lembretesProgramados } from "../../src/memory/eventos.js";
+import {
+  criarEmpresa,
+  criarObraEmpresa,
+  definirMembrosDaObra,
+  empresaComoAdmin,
+  getMembro,
+  listarMembros,
+  listarObrasEmpresa,
+  membrosDaObra,
+  obraDaEmpresa,
+  removerMembro,
+} from "../../src/memory/empresa.js";
+import { enviarConvite } from "../../src/corp/convites.js";
 import { signedFotoUrl } from "../../src/memory/storage.js";
 import { json, preflight, readJson } from "../../src/auth/http.js";
 import { checarObra, resolverDireito, saldoDoUsuario } from "../../src/pay/cota.js";
@@ -147,12 +160,109 @@ export default {
               })),
             });
           }
+          case "empresa": {
+            // Painel do admin da empresa. Se o usuário não administra nenhuma,
+            // devolve empresa:null (o painel oferece criar).
+            const empresa = await empresaComoAdmin(wa);
+            if (!empresa) return json(request, { ok: true, empresa: null });
+            const [membros, obrasRaw] = await Promise.all([
+              listarMembros(empresa.id),
+              listarObrasEmpresa(empresa.id),
+            ]);
+            const obras = await Promise.all(
+              obrasRaw.map(async (o) => ({ ...o, membros: await membrosDaObra(o.id) })),
+            );
+            return json(request, {
+              ok: true,
+              empresa: {
+                id: empresa.id,
+                nome: empresa.nome,
+                plano: empresa.plano,
+                teto_membros: empresa.teto_membros,
+                usados: membros.filter((m) => m.status === "ativo" || m.status === "convidado").length,
+              },
+              membros: membros
+                .filter((m) => m.status !== "removido")
+                .map((m) => ({
+                  id: m.id,
+                  user_wa: m.user_wa,
+                  nome: m.nome,
+                  papel: m.papel,
+                  status: m.status,
+                })),
+              obras,
+            });
+          }
           default:
             return json(request, { error: "recurso_desconhecido" }, 400);
         }
       }
 
       if (request.method === "POST") {
+        if (recurso === "empresa") {
+          const body = await readJson(request);
+          const acao = typeof body.acao === "string" ? body.acao : "";
+          const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+
+          // 'criar' é a única ação que NÃO exige empresa prévia.
+          if (acao === "criar") {
+            const nome = str(body.nome);
+            if (!nome) return json(request, { ok: false, error: "nome_obrigatorio" }, 400);
+            if (await empresaComoAdmin(wa)) {
+              return json(request, { ok: false, error: "ja_tem_empresa" }, 400);
+            }
+            const teto = typeof body.teto_membros === "number" && body.teto_membros > 0 ? Math.floor(body.teto_membros) : 3;
+            const empresa = await criarEmpresa(wa, nome, teto);
+            return json(request, { ok: true, empresa: { id: empresa.id, nome: empresa.nome, teto_membros: empresa.teto_membros } });
+          }
+
+          // Demais ações exigem ser admin de uma empresa.
+          const empresa = await empresaComoAdmin(wa);
+          if (!empresa) return json(request, { ok: false, error: "sem_empresa" }, 403);
+
+          if (acao === "convidar") {
+            const numero = str(body.numero);
+            if (!numero) return json(request, { ok: false, error: "numero_obrigatorio" }, 400);
+            const r = await enviarConvite(empresa, numero, str(body.nome) || null);
+            if (!r.ok) {
+              return json(request, { ok: false, error: r.motivo }, r.motivo === "sem_vaga" ? 403 : 409);
+            }
+            return json(request, { ok: true });
+          }
+
+          if (acao === "remover") {
+            const membroId = typeof body.membroId === "number" ? body.membroId : null;
+            if (!membroId) return json(request, { ok: false, error: "membro_invalido" }, 400);
+            const m = await getMembro(empresa.id, membroId);
+            if (!m) return json(request, { ok: false, error: "membro_nao_encontrado" }, 404);
+            await removerMembro(empresa.id, membroId);
+            return json(request, { ok: true });
+          }
+
+          if (acao === "criar_obra") {
+            const nome = str(body.nome);
+            if (!nome) return json(request, { ok: false, error: "nome_obrigatorio" }, 400);
+            const obra = await criarObraEmpresa(empresa, {
+              nome,
+              cliente: str(body.cliente) || null,
+              endereco: str(body.endereco) || null,
+            });
+            return json(request, { ok: true, obra });
+          }
+
+          if (acao === "atribuir") {
+            const obraId = typeof body.obraId === "number" ? body.obraId : null;
+            const userWas = Array.isArray(body.userWas) ? body.userWas.filter((x: unknown) => typeof x === "string") : [];
+            if (!obraId) return json(request, { ok: false, error: "obra_invalida" }, 400);
+            if (!(await obraDaEmpresa(empresa.id, obraId))) {
+              return json(request, { ok: false, error: "obra_nao_encontrada" }, 404);
+            }
+            await definirMembrosDaObra(obraId, userWas as string[]);
+            return json(request, { ok: true });
+          }
+
+          return json(request, { ok: false, error: "acao_desconhecida" }, 400);
+        }
         if (recurso === "conta") {
           // Atualiza dados de cadastro + preferências da aba "Minha conta".
           const body = await readJson(request);

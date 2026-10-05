@@ -215,3 +215,112 @@ export async function listarMembros(empresaId: number): Promise<MembroRow[]> {
   if (error) throw new Error(`Falha ao listar membros: ${error.message}`);
   return (data ?? []) as MembroRow[];
 }
+
+/** Busca um membro pelo id, confirmando que é da empresa informada. */
+export async function getMembro(empresaId: number, membroId: number): Promise<MembroRow | null> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from("secretaria_empresa_membros")
+    .select("*")
+    .eq("empresa_id", empresaId)
+    .eq("id", membroId)
+    .maybeSingle();
+  if (error) throw new Error(`Falha ao buscar membro: ${error.message}`);
+  return (data as MembroRow | null) ?? null;
+}
+
+/** Remove um membro da empresa (status 'removido'; não pode ser o admin/dono). */
+export async function removerMembro(empresaId: number, membroId: number): Promise<void> {
+  const supabase = getSupabase();
+  const { error } = await supabase
+    .from("secretaria_empresa_membros")
+    .update({ status: "removido", respondido_em: new Date().toISOString() })
+    .eq("empresa_id", empresaId)
+    .eq("id", membroId)
+    .neq("papel", "admin");
+  if (error) throw new Error(`Falha ao remover membro: ${error.message}`);
+}
+
+export interface ObraEmpresaRow {
+  id: number;
+  nome: string;
+  cliente: string | null;
+  endereco: string | null;
+  status: string;
+}
+
+/** Obras da empresa (secretaria_obras com empresa_id). */
+export async function listarObrasEmpresa(empresaId: number): Promise<ObraEmpresaRow[]> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from("secretaria_obras")
+    .select("id, nome, cliente, endereco, status")
+    .eq("empresa_id", empresaId)
+    .order("updated_at", { ascending: false });
+  if (error) throw new Error(`Falha ao listar obras da empresa: ${error.message}`);
+  return (data ?? []) as ObraEmpresaRow[];
+}
+
+/** Cria uma obra DA EMPRESA (dono_wa = admin; empresa_id setado). */
+export async function criarObraEmpresa(
+  empresa: EmpresaRow,
+  dados: { nome: string; cliente?: string | null; endereco?: string | null },
+): Promise<ObraEmpresaRow> {
+  const supabase = getSupabase();
+  const nome = dados.nome.trim();
+  if (!nome) throw new Error("nome_obrigatorio");
+  const { data, error } = await supabase
+    .from("secretaria_obras")
+    .upsert(
+      {
+        user_wa: empresa.dono_wa,
+        empresa_id: empresa.id,
+        nome,
+        cliente: dados.cliente?.trim() || null,
+        endereco: dados.endereco?.trim() || null,
+        status: "ativa",
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "user_wa,nome" },
+    )
+    .select("id, nome, cliente, endereco, status")
+    .single();
+  if (error) throw new Error(`Falha ao criar obra da empresa: ${error.message}`);
+  return data as ObraEmpresaRow;
+}
+
+/** Confirma que a obra pertence à empresa (segurança das atribuições). */
+export async function obraDaEmpresa(empresaId: number, obraId: number): Promise<boolean> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from("secretaria_obras")
+    .select("id")
+    .eq("id", obraId)
+    .eq("empresa_id", empresaId)
+    .maybeSingle();
+  if (error) throw new Error(`Falha ao verificar obra: ${error.message}`);
+  return !!data;
+}
+
+/** user_wa (canônicos) atribuídos a uma obra. */
+export async function membrosDaObra(obraId: number): Promise<string[]> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from("secretaria_obra_membros")
+    .select("user_wa")
+    .eq("obra_id", obraId);
+  if (error) throw new Error(`Falha ao listar membros da obra: ${error.message}`);
+  return (data ?? []).map((r) => (r as { user_wa: string }).user_wa);
+}
+
+/** Substitui o conjunto de engenheiros atribuídos a uma obra (delete + insert). */
+export async function definirMembrosDaObra(obraId: number, userWas: string[]): Promise<void> {
+  const supabase = getSupabase();
+  const alvos = [...new Set(userWas.map((w) => canonWa(w)))];
+  const { error: delErr } = await supabase.from("secretaria_obra_membros").delete().eq("obra_id", obraId);
+  if (delErr) throw new Error(`Falha ao limpar atribuições: ${delErr.message}`);
+  if (alvos.length === 0) return;
+  const rows = alvos.map((user_wa) => ({ obra_id: obraId, user_wa }));
+  const { error } = await supabase.from("secretaria_obra_membros").insert(rows);
+  if (error) throw new Error(`Falha ao atribuir obra: ${error.message}`);
+}

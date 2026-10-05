@@ -210,6 +210,18 @@ main { padding: 31px 34px 20px; max-width: 1600px; margin: auto; }.welcome { dis
 .obra-crumb-nome { font: 700 15px Manrope; color: #24312e; }
 .obra-crumb-right { margin-left: auto; display: flex; gap: 10px; align-items: center; }
 
+/* ---------- Empresa (painel do admin) ---------- */
+.icon-del { border: 1px solid #ecccc0; background: #fff; color: #b0462c; width: 30px; height: 30px; border-radius: 7px; display: inline-grid; place-items: center; }
+.icon-del:hover:not(:disabled) { background: #f7e3dd; }
+.icon-del:disabled { opacity: .5; }
+.obra-atrib-list { display: grid; gap: 12px; margin-top: 14px; }
+.obra-atrib { border: 1px solid var(--border); border-radius: 10px; padding: 14px 15px; background: #fff; }
+.obra-atrib-head { display: flex; align-items: baseline; gap: 9px; margin-bottom: 9px; }
+.obra-atrib-head strong { font-size: 13.5px; color: #24312e; }
+.obra-atrib-head small { font-size: 11px; color: var(--muted); }
+.obra-atrib-vazio { font-size: 12px; color: var(--muted); margin: 0; }
+.obra-atrib-membros { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-bottom: 10px; }
+
 /* ---------- Cadastro de obra: card + modal ---------- */
 .obra-top { position: relative; }
 .obra-title { display: flex; flex-direction: column; gap: 5px; }

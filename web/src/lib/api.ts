@@ -397,6 +397,54 @@ export function getAtividade() {
   )
 }
 
+// ---------- Empresa (versão corporativa — painel do admin) ----------
+
+export interface EmpresaInfo {
+  id: number
+  nome: string
+  plano: string
+  teto_membros: number
+  usados: number
+}
+export interface MembroEmpresa {
+  id: number
+  user_wa: string
+  nome: string | null
+  papel: 'admin' | 'engenheiro'
+  status: 'convidado' | 'ativo' | 'recusado' | 'removido'
+}
+export interface ObraEmpresa {
+  id: number
+  nome: string
+  cliente: string | null
+  endereco: string | null
+  status: string
+  membros: string[]
+}
+export interface EmpresaPayload {
+  empresa: EmpresaInfo | null
+  membros?: MembroEmpresa[]
+  obras?: ObraEmpresa[]
+}
+
+/** Carrega a empresa que o usuário administra (ou empresa:null se não houver). */
+export function getEmpresa() {
+  return call<{ ok: boolean } & EmpresaPayload>('/api/app/data?recurso=empresa')
+}
+
+function postEmpresa(body: Record<string, unknown>) {
+  return call<{ ok: boolean; error?: string; empresa?: EmpresaInfo; obra?: ObraEmpresa }>(
+    '/api/app/data?recurso=empresa',
+    { method: 'POST', body: JSON.stringify(body) },
+  )
+}
+export const criarEmpresa = (nome: string, teto_membros?: number) => postEmpresa({ acao: 'criar', nome, teto_membros })
+export const convidarColaborador = (nome: string, numero: string) => postEmpresa({ acao: 'convidar', nome, numero })
+export const removerMembro = (membroId: number) => postEmpresa({ acao: 'remover', membroId })
+export const criarObraEmpresa = (nome: string, cliente?: string, endereco?: string) =>
+  postEmpresa({ acao: 'criar_obra', nome, cliente, endereco })
+export const atribuirObra = (obraId: number, userWas: string[]) => postEmpresa({ acao: 'atribuir', obraId, userWas })
+
 /** Troca a senha estando logado (exige a senha atual). */
 export function trocarSenha(senhaAtual: string, novaSenha: string) {
   return call<{ ok: boolean }>('/api/app/auth?acao=change-password', {
