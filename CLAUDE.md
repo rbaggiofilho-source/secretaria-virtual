@@ -390,8 +390,11 @@ banco; nada de novo produto. Rodando em **userosana.com.br** (projeto Vercel
   cadastro é a MATRIZ do sistema (as sub-abas espelham as obras de Obras), então
   excluir uma obra apaga TUDO dela — custos/RDO/materiais/documentos/fotos (+
   arquivos no Storage) e os eventos/lembretes da agenda da obra — em todas as
-  abas de uma vez (`excluirObra` cascateia por NOME dentro do `user_wa`; obs:
-  dados de OUTRO membro na mesma obra não entram nessa cascata — é por wa);
+  abas de uma vez (`excluirObra` cascateia por NOME; quando o ADMIN exclui uma
+  obra da empresa, a cascata dos LANÇAMENTOS alcança também o que a EQUIPE lançou
+  — `recorders` = wa de todos os membros, resolvido no endpoint via
+  `resolverEscopoPainel` quando `papel==='admin'`; pessoal/engenheiro = só o
+  próprio wa. O CADASTRO em si é sempre o do admin/dono da obra);
   `web/src/components/ObraForm.tsx` avisa que apaga tudo. **Excluir FOTO
   individual (05/10):** botão de lixeira no cartão + no lightbox de Fotos →
   DELETE `data?recurso=fotos` {id} → `excluirFoto` (apaga linha + arquivo no

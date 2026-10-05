@@ -421,7 +421,11 @@ export default {
           const id = typeof body.id === "number" ? body.id : null;
           const nome = typeof body.nome === "string" ? body.nome : null;
           if (!id && !nome) return json(request, { error: "faltam_dados" }, 400);
-          const r = await excluirObra(wa, { id, nome });
+          // Admin da empresa: a cascata alcança o que a EQUIPE lançou na obra
+          // (recorders = wa de todos os membros). Pessoal/engenheiro: só o próprio.
+          const esc = await resolverEscopoPainel(wa).catch(() => null);
+          const recorders = esc?.papel === "admin" ? esc.leitura.recorders : undefined;
+          const r = await excluirObra(wa, { id, nome }, recorders);
           return json(request, { ok: true, ...r });
         }
         if (recurso === "fotos") {

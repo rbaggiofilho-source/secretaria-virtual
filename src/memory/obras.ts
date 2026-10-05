@@ -1,5 +1,6 @@
 import { getSupabase } from "./supabase.js";
 import { removeFotos } from "./storage.js";
+import { waIdVariants } from "./context.js";
 
 /**
  * Cadastro estruturado de obras (tabela secretaria_obras). Os lançamentos
@@ -99,13 +100,30 @@ export async function renameObraLinks(
  * (inclusive os arquivos no Storage) e os eventos/lembretes da agenda vinculados
  * à obra — além do cadastro e da memória kind='obra'. Assim a obra some de TODAS
  * as abas de uma vez (é o espelho do cadastro). Operação destrutiva e sem volta.
+ *
+ * `recorders` (versão corporativa): quando o ADMIN exclui uma obra da empresa,
+ * a cascata dos LANÇAMENTOS alcança também o que a EQUIPE lançou na obra (os
+ * wa de todos os membros), não só o do admin. O CADASTRO em si continua sendo o
+ * do admin (dono da obra da empresa). Sem `recorders` = só o próprio `userWa`.
  * Retorna um resumo do que foi removido.
  */
 export async function excluirObra(
   userWa: string,
   opts: { id?: number | null; nome?: string | null },
+  recorders?: string[],
 ): Promise<{ nome: string | null; fotosArquivos: number }> {
   const supabase = getSupabase();
+
+  // Escopo de wa dos LANÇAMENTOS: equipe (recorders ∪ o próprio) ou só o próprio.
+  const was =
+    recorders && recorders.length > 0
+      ? [...new Set([...recorders, ...waIdVariants(userWa)])]
+      : null;
+  // Aplica o escopo de wa a uma query (in recorders, ou eq o próprio). Tipagem
+  // frouxa de propósito: os builders do Supabase são recursivos e estouram o
+  // type-checker (TS2589) se tentamos preservar o tipo genérico aqui.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const porWa = (q: any): any => (was ? q.in("user_wa", was) : q.eq("user_wa", userWa));
 
   // Resolve o NOME da obra (os lançamentos referenciam por nome). Se só veio o
   // id, busca o nome antes de apagar o cadastro.
@@ -123,11 +141,9 @@ export async function excluirObra(
   let fotosArquivos = 0;
   if (nome) {
     // 1) Arquivos das fotos: coleta os caminhos ANTES de apagar as linhas.
-    const { data: fotos } = await supabase
-      .from("secretaria_fotos")
-      .select("caminho")
-      .eq("user_wa", userWa)
-      .eq("obra", nome);
+    const { data: fotos } = await porWa(
+      supabase.from("secretaria_fotos").select("caminho"),
+    ).eq("obra", nome);
     const caminhos = ((fotos ?? []) as { caminho: string | null }[])
       .map((f) => f.caminho)
       .filter((c): c is string => !!c);
@@ -144,7 +160,7 @@ export async function excluirObra(
       "secretaria_eventos",
     ];
     for (const t of tabelas) {
-      const { error } = await supabase.from(t).delete().eq("user_wa", userWa).eq("obra", nome);
+      const { error } = await porWa(supabase.from(t).delete()).eq("obra", nome);
       if (error) console.error(`[obras] excluir cascata em ${t}: ${error.message}`);
     }
 
@@ -157,16 +173,11 @@ export async function excluirObra(
       }
     }
 
-    // 4) Memória kind='obra' com esse nome.
-    await supabase
-      .from("secretaria_memories")
-      .delete()
-      .eq("user_wa", userWa)
-      .eq("kind", "obra")
-      .eq("content", nome);
+    // 4) Memória kind='obra' com esse nome (também da equipe, quando corporativo).
+    await porWa(supabase.from("secretaria_memories").delete().eq("kind", "obra")).eq("content", nome);
   }
 
-  // 5) Cadastro estruturado.
+  // 5) Cadastro estruturado — é do admin/dono da obra (um registro).
   if (opts.id) {
     const { error } = await supabase.from("secretaria_obras").delete().eq("user_wa", userWa).eq("id", opts.id);
     if (error) throw new Error(`Falha ao excluir obra: ${error.message}`);
