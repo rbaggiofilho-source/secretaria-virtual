@@ -361,6 +361,15 @@ banco; nada de novo produto. Rodando em **userosana.com.br** (projeto Vercel
   **baixar PDF do RDO** por obra (`/api/app/rdo-pdf`, fetch com token → download),
   **trocar senha logado** (`auth?acao=change-password`, exige senha atual).
   A ENTRADA principal de dados segue no WhatsApp.
+- **Navegação "obra primeiro" (05/10):** as sub-abas Documentos, Fotos, Custos,
+  Diário e Materiais abrem PRIMEIRO os cartões das obras (do cadastro
+  `secretaria_obras`, via `getObras`), e só ao clicar numa obra mostram o
+  conteúdo DAQUELA obra (com "voltar pra todas as obras"). O cadastro de obras é,
+  assim, a estrutura de organização de todas as seções. Componente reutilizável
+  `web/src/components/Obras.tsx` (`cardsDeObras` monta os cartões = obras do
+  cadastro, mesmo com 0 itens, + obras só-nos-itens + balde "Sem obra";
+  `ObrasDrill` a grade; `ObraCrumb` o cabeçalho). Tudo client-side sobre os dados
+  já carregados por seção + `getObras`.
 - **Pagamento (Mercado Pago) — feito, inerte até a chave (22/09):** o `/cadastro`
   (SPA) agora GRAVA o lead no backend e inicia a ASSINATURA recorrente via
   `api/app/pay?acao=assinar` → cria preapproval no MP → redireciona pro `init_point`

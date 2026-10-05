@@ -191,6 +191,25 @@ main { padding: 31px 34px 20px; max-width: 1600px; margin: auto; }.welcome { dis
 .ativ-quando { font-size: 10.5px; font-weight: 600; color: #6e7975; white-space: nowrap; }
 @media (max-width: 760px) { .ativ-cols { grid-template-columns: 1fr; } }
 
+/* ---------- Navegação "obra primeiro" das sub-abas ---------- */
+.obra-pick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+.obra-pick { display: flex; align-items: center; gap: 13px; text-align: left; padding: 16px 17px; border: 1px solid var(--border); border-radius: 11px; background: #fafaf7; box-shadow: 0 1px 2px #1f352a08; transition: border-color .12s, box-shadow .12s; }
+.obra-pick:hover { border-color: #b7cfc7; box-shadow: 0 2px 10px #1f352a12; }
+.obra-pick-ico { width: 40px; height: 40px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 9px; background: #e8f0ed; color: #397164; }
+.obra-pick-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.obra-pick-body strong { font-size: 13.5px; color: #24312e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.obra-pick-body small { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.obra-pick-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; flex: 0 0 auto; }
+.obra-pick-count { font-size: 11px; font-weight: 600; color: #52605c; white-space: nowrap; }
+.obra-badge { padding: 2px 8px; border-radius: 20px; font-size: 9px; font-weight: 700; background: #e7f0eb; color: #477462; }
+.obra-badge--pausada { background: #f5eddc; color: #8c713a; }
+.obra-badge--concluida { background: #e8eef1; color: #4b6b7a; }
+.obra-crumb { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+.obra-crumb-back { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--border); background: #fafaf7; border-radius: 8px; height: 34px; padding: 0 12px; font-size: 12px; font-weight: 600; color: #58635f; }
+.obra-crumb-back:hover { border-color: #b7cfc7; color: #24312e; }
+.obra-crumb-nome { font: 700 15px Manrope; color: #24312e; }
+.obra-crumb-right { margin-left: auto; display: flex; gap: 10px; align-items: center; }
+
 /* ---------- Cadastro de obra: card + modal ---------- */
 .obra-top { position: relative; }
 .obra-title { display: flex; flex-direction: column; gap: 5px; }
