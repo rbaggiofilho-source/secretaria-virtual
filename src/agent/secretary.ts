@@ -50,6 +50,9 @@ export async function runSecretary(params: {
   consumo: ConsumoIa;
   botoes: BotoesPendentes | null;
   sugestaoBotoes: BotoesPendentes | null;
+  /** Caminhos de imagem que o modelo NÃO registrou (não chamou registrar_foto).
+   *  O pipeline registra automaticamente p/ a foto nunca se perder. */
+  imagensNaoRegistradas: string[];
 }> {
   const env = getEnv();
   const client = getClient();
@@ -204,6 +207,7 @@ export async function runSecretary(params: {
       consumo,
       botoes: toolCtx.botoes,
       sugestaoBotoes: toolCtx.sugestaoBotoes,
+      imagensNaoRegistradas: toolCtx.imagePaths,
     };
   }
 
@@ -215,6 +219,7 @@ export async function runSecretary(params: {
     consumo,
     botoes: toolCtx.botoes,
     sugestaoBotoes: toolCtx.sugestaoBotoes,
+    imagensNaoRegistradas: toolCtx.imagePaths,
   };
 }
 

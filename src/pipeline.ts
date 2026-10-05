@@ -5,6 +5,7 @@ import {
   getUsuario,
   loadOwnerContext,
   loadRecentHistory,
+  registrarFoto,
   type UsuarioRow,
 } from "./memory/context.js";
 import { convitePendente } from "./memory/empresa.js";
@@ -206,7 +207,7 @@ export async function handleIncomingMessage(message: WhatsAppMessage): Promise<v
       resolverEscopoEngenheiro(from).catch(() => null),
     ]);
 
-    const { text: resposta, consumo, botoes, sugestaoBotoes } = await runSecretary({
+    const { text: resposta, consumo, botoes, sugestaoBotoes, imagensNaoRegistradas } = await runSecretary({
       usuario,
       userText,
       images,
@@ -219,6 +220,28 @@ export async function handleIncomingMessage(message: WhatsAppMessage): Promise<v
       direito,
       escopoEmpresa,
     });
+
+    // Rede de segurança da VISÃO: se o modelo descreveu a foto mas NÃO chamou
+    // registrar_foto (o Haiku às vezes confirma "salvei" sem gravar — mesma
+    // classe do bug de save_memory), a foto já está no Storage mas não apareceria
+    // no painel. Registramos automaticamente p/ a foto NUNCA se perder — com a
+    // obra inferida da legenda ("salva na pasta do catamarã" → catamarã) e a
+    // descrição = o que a Rosana respondeu. Não crítico: falha aqui não derruba.
+    if (imagensNaoRegistradas.length > 0) {
+      const obraInferida = inferirObraDaLegenda(userText);
+      for (const caminho of imagensNaoRegistradas) {
+        try {
+          await registrarFoto(from, {
+            obra: obraInferida,
+            tipo: "foto_obra",
+            descricao: resposta.trim().slice(0, 500) || "(foto recebida)",
+            caminho,
+          });
+        } catch (err) {
+          logError("registrar foto (fallback)", err);
+        }
+      }
+    }
 
     // Uso do mês: conta a mensagem + custo REAL (tokens da API + STT). Não
     // crítico: falha aqui não impede a resposta.
@@ -415,6 +438,21 @@ function botoesIniciais(direito: Direito): BotaoResposta[] {
   if (b.length < 3 && temRecurso(direito, "rdo")) b.push({ id: "ini_rdo", title: "Gravar o RDO" });
   if (b.length < 3 && temRecurso(direito, "fotos")) b.push({ id: "ini_foto", title: "Mandar nota fiscal" });
   return b.slice(0, 3);
+}
+
+/**
+ * Infere o nome da obra a partir da legenda da foto, p/ o fallback de registro.
+ * Ex.: "Salve na pasta do catamarã" → "catamarã"; "foto da obra do centro" →
+ * "centro". Sem pista clara → null (vai pro balde "Sem obra" no painel).
+ */
+function inferirObraDaLegenda(legenda: string): string | null {
+  const t = (legenda || "").trim();
+  if (!t) return null;
+  const m = t.match(/\b(?:pasta|obra|projeto)\s+d[aeo]s?\s+(.+)$/i);
+  if (m && m[1]) {
+    return m[1].replace(/[.!?]+$/u, "").trim().slice(0, 80) || null;
+  }
+  return null;
 }
 
 function logError(step: string, err: unknown): void {

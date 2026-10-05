@@ -19,20 +19,24 @@ const RECENT_HISTORY_LIMIT = 30;
  */
 export interface LeituraEscopo {
   recorders: string[];
-  obras: string[];
+  /** Restringe às obras (por nome). undefined = SEM filtro de obra (ex.: admin
+   *  vê tudo o que a equipe lançou, inclusive obras ad-hoc/sem obra). */
+  obras?: string[];
 }
 
-/** Aplica o escopo a uma query: pessoal (eq user_wa) ou empresa (in recorders + in obra). */
+/** Aplica o escopo a uma query: pessoal (eq user_wa) ou empresa (in recorders [+ in obra]). */
 function aplicarEscopo<T>(query: T, userWa: string, escopo?: LeituraEscopo): T {
   const q = query as unknown as {
     in: (col: string, vals: string[]) => T;
     eq: (col: string, val: string) => T;
   };
   if (escopo) {
-    return (q.in("user_wa", escopo.recorders) as unknown as { in: (c: string, v: string[]) => T }).in(
-      "obra",
-      escopo.obras,
-    );
+    const comRecorders = q.in("user_wa", escopo.recorders) as unknown as {
+      in: (c: string, v: string[]) => T;
+    };
+    // Engenheiro: restrito às obras atribuídas. Admin (obras undefined): sem
+    // filtro de obra — vê tudo o que a equipe registrou, incl. sem obra/ad-hoc.
+    return escopo.obras ? comRecorders.in("obra", escopo.obras) : (comRecorders as unknown as T);
   }
   return q.eq("user_wa", userWa);
 }

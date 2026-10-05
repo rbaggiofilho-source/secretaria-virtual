@@ -46,7 +46,10 @@ export async function resolverEscopoAdmin(wa: string): Promise<EscopoPainel | nu
     wasDosMembros(empresa.id),
   ]);
   const obras = [...new Set([...obrasEmpresa.map((o) => o.nome), ...pessoais.map((o) => o.nome)])];
-  return { empresaId: empresa.id, empresaNome: empresa.nome, papel: "admin", obras, leitura: { recorders, obras } };
+  // Admin vê TUDO o que a equipe registrou (recorders), sem restringir por obra
+  // — assim fotos/lançamentos em obra ad-hoc ou sem obra também aparecem. A
+  // restrição por obra é só do ENGENHEIRO. (obras top-level alimenta os cartões.)
+  return { empresaId: empresa.id, empresaNome: empresa.nome, papel: "admin", obras, leitura: { recorders } };
 }
 
 /** Escopo do PAINEL: engenheiro ou admin (o que se aplicar); null = pessoal. */

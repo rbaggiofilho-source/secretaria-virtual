@@ -516,6 +516,22 @@ banco; nada de novo produto. Rodando em **userosana.com.br** (projeto Vercel
   por usuário NÃO pode cair no filtro de plano; o fallback genérico do pipeline
   esconde o erro real — por isso existe o gravador `ultimo_erro_visao` (setConfig)
   p/ ver a causa raiz de falhas no WhatsApp.
+- **Foto "salva" mas não aparecia no painel (05/10):** DUAS causas. (1) O Haiku
+  respondia "salvei na pasta do catamarã" SEM chamar `registrar_foto` (mesma
+  classe do bug de save_memory) → `secretaria_fotos` ficava vazia. Correção:
+  REGRA DURA no prompt (nunca dizer "salvei a foto" sem gravar; "pasta"=obra) +
+  **fallback determinístico** no `pipeline.ts`: a imagem já sobe pro Storage no
+  ingest; `runSecretary` devolve `imagensNaoRegistradas` (caminhos que o modelo
+  NÃO registrou) e o pipeline chama `registrarFoto` automaticamente (obra
+  inferida da legenda via `inferirObraDaLegenda`, descrição = resposta da Rosana)
+  — a foto NUNCA se perde. (2) Escopo do ADMIN no painel filtrava `obra IN
+  obras_da_empresa`, então foto em obra ad-hoc ("catamarã", não cadastrada) ou
+  sem obra sumia. Correção: `LeituraEscopo.obras` virou OPCIONAL; `aplicarEscopo`
+  só filtra por obra quando definido; `resolverEscopoAdmin` passa `leitura:
+  { recorders }` (SEM filtro de obra) → o admin vê TUDO que a equipe registrou,
+  inclusive ad-hoc/sem obra. O ENGENHEIRO segue restrito às obras atribuídas
+  (`leitura: { recorders, obras }`). Fotos antigas que falharam ficaram órfãs no
+  Storage (sem linha no banco) — reenviar.
 - **ESM na Vercel:** `"type":"module"`, imports relativos terminam em `.js`,
   tsconfig `NodeNext`, **sem** script `build`. Não mexer.
 - **Limite de 12 funções serverless (Vercel Hobby) (22/09):** cada arquivo em
