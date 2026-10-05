@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { BarChart3, BookOpenText, CalendarRange, FileClock, Images, MapPin, PackageSearch, Pencil, Plus, Search, User, X } from 'lucide-react'
 import { PageHead, PageState } from '../components/Page'
 import { ObraForm } from '../components/ObraForm'
-import { getObras, type ObraResumo } from '../lib/api'
+import { getEmpresa, getObras, type ObraResumo } from '../lib/api'
 import { formatCurrency, formatDate } from '../lib/format'
 
 const CORES = ['#c4763b', '#497a6d', '#888f68', '#b96730', '#527c8b', '#8a6d9c']
@@ -15,6 +15,12 @@ export function Obras() {
   const [erro, setErro] = useState<string | null>(null)
   const [busca, setBusca] = useState(params.get('q') ?? '')
   const [form, setForm] = useState<{ obra: ObraResumo | null } | null>(null)
+  // Admin de empresa? Então excluir obra cascateia também o que a EQUIPE lançou.
+  const [temEquipe, setTemEquipe] = useState(false)
+
+  useEffect(() => {
+    getEmpresa().then((r) => setTemEquipe(!!r.empresa)).catch(() => setTemEquipe(false))
+  }, [])
 
   async function carregar() {
     setErro(null)
@@ -94,7 +100,7 @@ export function Obras() {
         </div>
       </PageState>
 
-      {form && <ObraForm inicial={form.obra} onClose={() => setForm(null)} onSaved={() => { setForm(null); void carregar() }} />}
+      {form && <ObraForm inicial={form.obra} equipe={temEquipe} onClose={() => setForm(null)} onSaved={() => { setForm(null); void carregar() }} />}
     </section>
   )
 }

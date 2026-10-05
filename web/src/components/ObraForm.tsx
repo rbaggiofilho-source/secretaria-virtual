@@ -8,7 +8,7 @@ const STATUS: { v: ObraStatus; label: string }[] = [
   { v: 'concluida', label: 'Concluída' },
 ]
 
-export function ObraForm({ inicial, onClose, onSaved }: { inicial?: ObraResumo | null; onClose: () => void; onSaved: () => void }) {
+export function ObraForm({ inicial, equipe, onClose, onSaved }: { inicial?: ObraResumo | null; equipe?: boolean; onClose: () => void; onSaved: () => void }) {
   const [nome, setNome] = useState(inicial?.nome ?? '')
   const [cliente, setCliente] = useState(inicial?.cliente ?? '')
   const [endereco, setEndereco] = useState(inicial?.endereco ?? '')
@@ -85,7 +85,7 @@ export function ObraForm({ inicial, onClose, onSaved }: { inicial?: ObraResumo |
 
           {confirmarEx && (
             <div className="modal-confirm">
-              <p>Excluir a obra <strong>{inicial?.nome}</strong>? Isso apaga a obra de <strong>TODAS as abas</strong>: {temLancamentos ? 'os custos, RDOs, materiais, documentos e fotos dela' : 'tudo que for lançado nela'}, os arquivos das fotos e os lembretes da agenda da obra. Não dá pra desfazer.</p>
+              <p>Excluir a obra <strong>{inicial?.nome}</strong>? Isso apaga a obra de <strong>TODAS as abas</strong>: {temLancamentos ? 'os custos, RDOs, materiais, documentos e fotos dela' : 'tudo que for lançado nela'}, os arquivos das fotos e os lembretes da agenda da obra{equipe ? <>, <strong>inclusive o que a sua equipe lançou nesta obra</strong></> : ''}. Não dá pra desfazer.</p>
               <div className="modal-confirm-actions">
                 <button type="button" className="btn-ghost" onClick={() => setConfirmarEx(false)} disabled={excluindo}>Voltar</button>
                 <button type="button" className="btn-danger" onClick={excluir} disabled={excluindo}>{excluindo ? 'Excluindo…' : 'Sim, excluir'}</button>
