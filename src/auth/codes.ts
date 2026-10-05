@@ -50,12 +50,31 @@ function hashCode(waId: string, code: string): string {
  */
 function candidatosWa(input: string): string[] {
   const d = input.replace(/\D/g, "");
-  const bases = new Set<string>();
-  if (d) bases.add(d);
-  // Número BR sem código do país (10 = fixo/sem 9; 11 = com 9): tenta com 55.
-  if ((d.length === 10 || d.length === 11) && !d.startsWith("55")) bases.add("55" + d);
   const out = new Set<string>();
-  for (const b of bases) for (const v of waIdVariants(b)) out.add(v);
+  if (!d) return [];
+  out.add(d);
+
+  // Descobre a parte NACIONAL (DDD + local), removendo o 55 se veio junto.
+  let nac = d;
+  if (d.startsWith("55") && (d.length === 12 || d.length === 13)) nac = d.slice(2);
+
+  // nac válido = DDD(2) + local (8 sem o nono dígito, ou 9 com ele). A partir dele
+  // geramos TODAS as formas: nacional/internacional × com/sem o nono dígito. Assim
+  // "5548988088057", "48988088057" e "4888088057" caem todos no mesmo usuário.
+  if (nac.length === 10 || nac.length === 11) {
+    const ddd = nac.slice(0, 2);
+    const local = nac.slice(2);
+    const locais = new Set<string>([local]);
+    if (local.length === 9 && local[0] === "9") locais.add(local.slice(1)); // tira o 9
+    if (local.length === 8) locais.add("9" + local); // põe o 9
+    for (const l of locais) {
+      out.add(ddd + l); // nacional (sem 55)
+      out.add("55" + ddd + l); // internacional (com 55)
+    }
+  }
+
+  // Rede de segurança: passa o que foi digitado pelas variantes oficiais também.
+  for (const v of waIdVariants(d)) out.add(v);
   return [...out];
 }
 
