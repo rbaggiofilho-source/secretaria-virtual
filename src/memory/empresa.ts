@@ -235,6 +235,21 @@ export async function atualizarMembro(
   if (error) throw new Error(`Falha ao atualizar membro: ${error.message}`);
 }
 
+/** Volta um membro para 'convidado' (re-envio do convite). Retorna o wa. */
+export async function reconvidarMembro(empresaId: number, membroId: number): Promise<string | null> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from("secretaria_empresa_membros")
+    .update({ status: "convidado", respondido_em: null, convidado_em: new Date().toISOString() })
+    .eq("empresa_id", empresaId)
+    .eq("id", membroId)
+    .neq("papel", "admin")
+    .select("user_wa")
+    .maybeSingle();
+  if (error) throw new Error(`Falha ao reconvidar: ${error.message}`);
+  return (data as { user_wa: string } | null)?.user_wa ?? null;
+}
+
 /** Renomeia a empresa (dado sensível — só o master). */
 export async function renomearEmpresa(empresaId: number, nome: string): Promise<void> {
   const n = nome.trim();

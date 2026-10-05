@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { Building2, Check, Pencil, ShieldCheck, Trash2, UserCog, UserPlus, Users, X } from 'lucide-react'
+import { Building2, Check, Pencil, Send, ShieldCheck, Trash2, UserCog, UserPlus, Users, X } from 'lucide-react'
 import { PageHead } from '../components/Page'
 import {
   atribuirObra,
@@ -8,6 +8,7 @@ import {
   criarObraEmpresa,
   getEmpresa,
   promoverMembro,
+  reenviarConvite,
   removerMembro,
   renomearEmpresa,
   type EmpresaInfo,
@@ -194,6 +195,12 @@ export function Empresa() {
                     <td><span className={`mat-status mat-status--${m.status === 'ativo' ? 'entregue' : m.status === 'convidado' ? 'cotando' : 'cancelado'}`}>{STATUS_LABEL[m.status] ?? m.status}</span></td>
                     {master && (
                       <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                        {!m.master && (m.status === 'recusado' || m.status === 'convidado') && (
+                          <button className="icon-mini" title="Reenviar convite" disabled={busy}
+                            onClick={() => acao(() => reenviarConvite(m.id), 'Convite reenviado no WhatsApp!')}>
+                            <Send size={15} />
+                          </button>
+                        )}
                         {!m.master && m.status === 'ativo' && (
                           <button className="icon-mini" title={m.papel === 'admin' ? 'Rebaixar a colaborador' : 'Tornar admin'} disabled={busy}
                             onClick={() => acao(() => promoverMembro(m.id, m.papel === 'admin' ? 'engenheiro' : 'admin'), m.papel === 'admin' ? 'Agora é colaborador.' : 'Agora é admin.')}>

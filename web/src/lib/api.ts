@@ -455,6 +455,7 @@ export const criarEmpresa = (nome: string, teto_membros?: number) => postEmpresa
 export const convidarColaborador = (nome: string, numero: string, cargo?: string) =>
   postEmpresa({ acao: 'convidar', nome, numero, cargo })
 export const removerMembro = (membroId: number) => postEmpresa({ acao: 'remover', membroId })
+export const reenviarConvite = (membroId: number) => postEmpresa({ acao: 'reenviar', membroId })
 export const promoverMembro = (membroId: number, papel: 'admin' | 'engenheiro') =>
   postEmpresa({ acao: 'promover', membroId, papel })
 export const definirCargoMembro = (membroId: number, cargo: string) => postEmpresa({ acao: 'cargo', membroId, cargo })

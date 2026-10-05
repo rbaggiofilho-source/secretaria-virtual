@@ -32,10 +32,11 @@ import {
   listarObrasEmpresa,
   membrosDaObra,
   obraDaEmpresa,
+  reconvidarMembro,
   removerMembro,
   renomearEmpresa,
 } from "../../src/memory/empresa.js";
-import { enviarConvite } from "../../src/corp/convites.js";
+import { enviarConvite, mandarMensagemConvite } from "../../src/corp/convites.js";
 import { getPlanoEmpresa, PLANOS_EMPRESA_IDS, PLANOS_EMPRESA } from "../../src/pay/planos.js";
 import { criarAssinatura, mpConfigured } from "../../src/pay/mercadopago.js";
 import { resolverEscopoPainel } from "../../src/corp/escopo.js";
@@ -287,6 +288,18 @@ export default {
             const nome = str(body.nome);
             if (!nome) return json(request, { ok: false, error: "nome_obrigatorio" }, 400);
             await renomearEmpresa(empresa.id, nome);
+            return json(request, { ok: true });
+          }
+
+          if (acao === "reenviar") {
+            if (!master) return soMaster();
+            const membroId = typeof body.membroId === "number" ? body.membroId : null;
+            if (!membroId) return json(request, { ok: false, error: "membro_invalido" }, 400);
+            const m = await getMembro(empresa.id, membroId);
+            if (!m) return json(request, { ok: false, error: "membro_nao_encontrado" }, 404);
+            if (ehMaster(empresa, m.user_wa)) return json(request, { ok: false, error: "master_imutavel" }, 400);
+            const wa = await reconvidarMembro(empresa.id, membroId);
+            if (wa) await mandarMensagemConvite(empresa.nome, wa);
             return json(request, { ok: true });
           }
 

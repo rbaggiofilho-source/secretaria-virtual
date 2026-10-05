@@ -48,8 +48,16 @@ export async function enviarConvite(
 ): Promise<ConviteResultado> {
   const r = await convidarMembro(empresa, wa, nome, cargo);
   if (!r.ok) return r;
+  await mandarMensagemConvite(empresa.nome, wa);
+  return r;
+}
 
-  const body = mensagemConvite(empresa.nome);
+/**
+ * Só ENVIA a mensagem de convite (botões) para as duas variantes do número.
+ * Usado no RE-ENVIO (o membro já existe na tabela; só precisa receber de novo).
+ */
+export async function mandarMensagemConvite(empresaNome: string, wa: string): Promise<void> {
+  const body = mensagemConvite(empresaNome);
   const destinos = [...new Set(waIdVariants(canonWa(wa)))];
   for (const dest of destinos) {
     try {
@@ -58,7 +66,6 @@ export async function enviarConvite(
       console.error(`[convite] falha ao enviar para ${dest}: ${err instanceof Error ? err.message : err}`);
     }
   }
-  return r;
 }
 
 /** Interpreta a resposta ao convite: aceitar / recusar / indefinido. */
