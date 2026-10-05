@@ -12,8 +12,9 @@ import {
   listarEventos,
 } from "../memory/eventos.js";
 import { oauthConfigured, signState } from "../oauth/google.js";
-import { criarEmpresa, empresaComoAdmin } from "../memory/empresa.js";
+import { criarEmpresa, empresaComoAdmin, listarObrasEmpresa } from "../memory/empresa.js";
 import { enviarConvite } from "../corp/convites.js";
+import type { EscopoPainel } from "../corp/escopo.js";
 import { buildRdoPdf } from "../pdf/rdo.js";
 import {
   sendDocumentMessage,
@@ -786,6 +787,7 @@ export async function runTool(
     direito?: Direito;
     botoes?: { body: string; opcoes: BotaoResposta[] } | null;
     sugestaoBotoes?: { body: string; opcoes: BotaoResposta[] } | null;
+    escopoEmpresa?: EscopoPainel | null;
   },
 ): Promise<{ text: string; isError: boolean }> {
   // Sugere botões de continuação após uma ação concluída (ex.: criou evento →
@@ -801,6 +803,10 @@ export async function runTool(
   };
   const userWa = usuario.user_wa;
   const direito = ctx?.direito;
+  // Escopo de empresa (engenheiro): as LEITURAS passam a ler os dados
+  // compartilhados das obras atribuídas (de qualquer membro). null = pessoal.
+  const esc = ctx?.escopoEmpresa ?? null;
+  const le = esc?.leitura;
 
   // Plano: a tool está liberada? A obra cabe no limite do plano?
   if (direito) {
@@ -1472,7 +1478,7 @@ export async function runTool(
           obra: input.obra ? String(input.obra) : null,
           desde: input.desde ? String(input.desde) : null,
           ate: input.ate ? String(input.ate) : null,
-        });
+        }, le);
         return { isError: false, text: JSON.stringify({ ok: true, ...rel }) };
       }
 
@@ -1511,7 +1517,7 @@ export async function runTool(
           obra: input.obra ? String(input.obra) : null,
           desde: input.desde ? String(input.desde) : null,
           ate: input.ate ? String(input.ate) : null,
-        });
+        }, le);
         return {
           isError: false,
           text: JSON.stringify({
@@ -1560,7 +1566,7 @@ export async function runTool(
           tipo: input.tipo ? (String(input.tipo) as TipoFoto) : null,
           desde: input.desde ? String(input.desde) : null,
           ate: input.ate ? String(input.ate) : null,
-        });
+        }, le);
         return {
           isError: false,
           text: JSON.stringify({
@@ -1613,7 +1619,7 @@ export async function runTool(
         const obra = String(input.obra);
         const desde = input.desde ? String(input.desde) : null;
         const ate = input.ate ? String(input.ate) : null;
-        const rdos = await consultarRDO(userWa, { obra, desde, ate });
+        const rdos = await consultarRDO(userWa, { obra, desde, ate }, le);
         if (rdos.length === 0) {
           return {
             isError: false,
@@ -1723,7 +1729,7 @@ export async function runTool(
         const docs = await consultarDocumentos(userWa, {
           obra: input.obra ? String(input.obra) : null,
           tipo: input.tipo ? (String(input.tipo) as TipoDocumento) : null,
-        });
+        }, le);
         const hoje = todayIsoDate();
         const situacao = (d: DocumentoRow): string => {
           if (!d.vencimento) return "sem vencimento";
@@ -1785,6 +1791,27 @@ export async function runTool(
       }
 
       case "consultar_obras": {
+        // Engenheiro de empresa: vê as obras da empresa atribuídas a ele.
+        if (esc) {
+          const acess = new Set(esc.obras.map((n) => n.trim().toLowerCase()));
+          const todas = await listarObrasEmpresa(esc.empresaId);
+          const obras = todas.filter((o) => acess.has(o.nome.trim().toLowerCase()));
+          return {
+            isError: false,
+            text: JSON.stringify({
+              ok: true,
+              empresa: esc.empresaNome,
+              total: obras.length,
+              obras: obras.map((o) => ({
+                nome: o.nome,
+                cliente: o.cliente,
+                endereco: o.endereco,
+                tem_endereco: !!(o.endereco && o.endereco.trim()),
+                status: o.status,
+              })),
+            }),
+          };
+        }
         const obras = await listObrasStruct(userWa);
         return {
           isError: false,
@@ -1880,7 +1907,7 @@ export async function runTool(
         const rows = await consultarMateriais(userWa, {
           obra: input.obra ? String(input.obra) : null,
           status: input.status ? (String(input.status) as MaterialStatus) : null,
-        });
+        }, le);
         const melhorCotacao = (m: MaterialRow) => {
           const validas = m.cotacoes.filter((c) => typeof c.valor_unitario === "number");
           if (validas.length === 0) return null;

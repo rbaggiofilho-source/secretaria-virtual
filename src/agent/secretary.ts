@@ -3,6 +3,7 @@ import { getEnv } from "../config/env.js";
 import type { OwnerContext, UsuarioRow } from "../memory/context.js";
 import { custoChamadaUsd } from "../memory/uso.js";
 import type { Direito } from "../pay/cota.js";
+import type { EscopoPainel } from "../corp/escopo.js";
 import type { BotaoResposta } from "../whatsapp/client.js";
 import { buildSystemPrompt } from "./system-prompt.js";
 import { runTool, toolsCorporativas, toolsDoPlano } from "./tools.js";
@@ -42,6 +43,8 @@ export async function runSecretary(params: {
   primeiroContato?: boolean;
   /** Plano/direitos do usuário: filtra as tools e orienta o prompt. */
   direito: Direito;
+  /** Escopo de empresa (engenheiro): lê/mostra as obras da empresa. null = pessoal. */
+  escopoEmpresa?: EscopoPainel | null;
 }): Promise<{
   text: string;
   consumo: ConsumoIa;
@@ -77,9 +80,19 @@ export async function runSecretary(params: {
   // Cache de prompt: tools (1h, compartilhado por plano) → parte estática do
   // system (por usuário) → mensagens (ponto móvel no fim, reaproveitado a cada
   // volta do loop de tools). Ver custo em src/memory/uso.ts.
+  // Engenheiro de uma empresa: a Rosana trabalha no contexto da EMPRESA e só nas
+  // obras atribuídas a ele. Lançamentos devem usar EXATAMENTE esses nomes de obra.
+  const esc = params.escopoEmpresa;
+  const empresaHint =
+    esc && esc.obras.length > 0
+      ? `\n\nEMPRESA: este usuário é da equipe da *${esc.empresaNome}*. As obras dele são: ${esc.obras.join(", ")}. ` +
+        "Trabalhe SÓ nessas obras e use EXATAMENTE esses nomes ao lançar custo/RDO/foto/material/documento (é o que mantém tudo junto no painel da empresa). Não crie obras novas; se ele citar uma obra que não está na lista, confirme com ele."
+      : esc
+        ? `\n\nEMPRESA: este usuário é da equipe da *${esc.empresaNome}*, mas ainda não há obras atribuídas a ele. Peça para o administrador atribuí-lo a uma obra no painel.`
+        : "";
   const system: Anthropic.TextBlockParam[] = [
     { type: "text", text: prompt.estatico, cache_control: { type: "ephemeral" } },
-    { type: "text", text: prompt.dinamico + audioHint + onboardingHint },
+    { type: "text", text: prompt.dinamico + audioHint + onboardingHint + empresaHint },
   ];
   const tools = [...toolsDoPlano(params.direito), ...toolsCorporativas(params.usuario)];
   const consumo: ConsumoIa = {
@@ -125,11 +138,13 @@ export async function runSecretary(params: {
     direito: Direito;
     botoes: BotoesPendentes | null;
     sugestaoBotoes: BotoesPendentes | null;
+    escopoEmpresa?: EscopoPainel | null;
   } = {
     imagePaths: [...(params.imagePaths ?? [])],
     direito: params.direito,
     botoes: null,
     sugestaoBotoes: null,
+    escopoEmpresa: params.escopoEmpresa ?? null,
   };
 
   // Acumula o texto do assistente ao longo do loop. Importante quando o modelo

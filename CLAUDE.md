@@ -674,9 +674,22 @@ Benchmark do APP (não só WhatsApp). Copiar só o útil; manter a aposta VERTIC
     `api/app/data.ts` (GET) usa o escopo nos recursos dashboard/obras/custos/rdo/
     documentos/materiais/fotos; admin e usuário pessoal seguem no fluxo pessoal.
     OBS: o engenheiro loga no painel criando senha por OTP ("primeiro acesso").
-  - **Falta:** Fase 3b (lado Rosana/WhatsApp: a IA conhecer as obras da empresa do
-    engenheiro + escopo de ESCRITA/leitura no agente; e agregação do ADMIN vendo o
-    que a equipe lançou), Fase 4 (planos-empresa por teto no billing).
+  - **✅ Fase 3b (05/10) — Rosana do engenheiro + agregação do admin:**
+    - **WhatsApp (engenheiro):** o pipeline resolve `resolverEscopoEngenheiro(from)`
+      e passa p/ `runSecretary`→`runTool`; as LEITURAS do agente (relatorio_custos,
+      consultar_rdo, consultar_documentos, consultar_materiais, consultar_fotos,
+      gerar_rdo_pdf) usam o escopo, e `consultar_obras` devolve as obras da EMPRESA
+      atribuídas a ele. O system-prompt ganha um aviso (`empresaHint`) com o nome
+      da empresa + as obras dele, mandando usar EXATAMENTE esses nomes nos
+      lançamentos (é o que casa com o painel). Escrita continua sob o `user_wa`
+      dele (agrega por nome). Admin/pessoal no WhatsApp seguem pessoais.
+    - **Painel (admin):** `resolverEscopoPainel` agora cobre o ADMIN também
+      (`resolverEscopoAdmin`: obras = todas da empresa + as pessoais dele;
+      recorders = todos os membros), então o admin vê no painel o que a EQUIPE
+      lançou nas obras da empresa + os próprios dados. (Dados pessoais sem obra
+      não entram na visão agregada — raro na vertical.)
+  - **Falta:** Fase 4 (planos-empresa por teto no billing: hoje o teto é guardado
+    na empresa e barra convites, mas não há cobrança diferenciada por assento/teto).
 - **Portáveis menores:** link público de agendamento (visita/vistoria, estilo
   Calendly); "análise personalizada" (relatório sob medida); PWA instalável em vez
   de app nativo; tema claro/escuro. **Pular:** finanças/Open Finance, Meet/Contatos,

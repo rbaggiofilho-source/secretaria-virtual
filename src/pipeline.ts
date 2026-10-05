@@ -9,6 +9,7 @@ import {
 } from "./memory/context.js";
 import { convitePendente } from "./memory/empresa.js";
 import { tratarConvite } from "./corp/convites.js";
+import { resolverEscopoEngenheiro } from "./corp/escopo.js";
 import { uploadFoto } from "./memory/storage.js";
 import { custoAudioUsd, incrementarUso } from "./memory/uso.js";
 import {
@@ -198,9 +199,10 @@ export async function handleIncomingMessage(message: WhatsAppMessage): Promise<v
   }
 
   try {
-    const [context, history] = await Promise.all([
+    const [context, history, escopoEmpresa] = await Promise.all([
       loadOwnerContext(from),
       loadRecentHistory(from),
+      resolverEscopoEngenheiro(from).catch(() => null),
     ]);
 
     const { text: resposta, consumo, botoes, sugestaoBotoes } = await runSecretary({
@@ -214,6 +216,7 @@ export async function handleIncomingMessage(message: WhatsAppMessage): Promise<v
       // Sem histórico = primeiro contato: dispara as boas-vindas guiadas.
       primeiroContato: history.length === 0,
       direito,
+      escopoEmpresa,
     });
 
     // Uso do mês: conta a mensagem + custo REAL (tokens da API + STT). Não
