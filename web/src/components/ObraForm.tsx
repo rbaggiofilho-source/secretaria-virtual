@@ -85,7 +85,7 @@ export function ObraForm({ inicial, onClose, onSaved }: { inicial?: ObraResumo |
 
           {confirmarEx && (
             <div className="modal-confirm">
-              <p>Excluir a obra <strong>{inicial?.nome}</strong>? Isso remove só o cadastro.{temLancamentos ? ' Os lançamentos (custos, RDOs, etc.) NÃO são apagados e continuarão no sistema.' : ''} Não dá pra desfazer.</p>
+              <p>Excluir a obra <strong>{inicial?.nome}</strong>? Isso apaga a obra de <strong>TODAS as abas</strong>: {temLancamentos ? 'os custos, RDOs, materiais, documentos e fotos dela' : 'tudo que for lançado nela'}, os arquivos das fotos e os lembretes da agenda da obra. Não dá pra desfazer.</p>
               <div className="modal-confirm-actions">
                 <button type="button" className="btn-ghost" onClick={() => setConfirmarEx(false)} disabled={excluindo}>Voltar</button>
                 <button type="button" className="btn-danger" onClick={excluir} disabled={excluindo}>{excluindo ? 'Excluindo…' : 'Sim, excluir'}</button>

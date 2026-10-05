@@ -8,6 +8,7 @@ import {
   consultarDocumentos,
   consultarMateriais,
   consultarFotos,
+  excluirFoto,
   getUsuario,
   getPerfil,
   atualizarPerfil,
@@ -420,7 +421,16 @@ export default {
           const id = typeof body.id === "number" ? body.id : null;
           const nome = typeof body.nome === "string" ? body.nome : null;
           if (!id && !nome) return json(request, { error: "faltam_dados" }, 400);
-          await excluirObra(wa, { id, nome });
+          const r = await excluirObra(wa, { id, nome });
+          return json(request, { ok: true, ...r });
+        }
+        if (recurso === "fotos") {
+          const body = await readJson(request);
+          const id = typeof body.id === "number" ? body.id : null;
+          if (!id) return json(request, { error: "faltam_dados" }, 400);
+          const esc = await resolverEscopoPainel(wa).catch(() => null);
+          const r = await excluirFoto(wa, id, esc?.leitura);
+          if (!r.removida) return json(request, { ok: false, error: "nao_encontrada" }, 404);
           return json(request, { ok: true });
         }
         return json(request, { error: "recurso_desconhecido" }, 400);

@@ -1,4 +1,5 @@
 import { getSupabase } from "./supabase.js";
+import { removeFotos } from "./storage.js";
 
 /**
  * Cadastro estruturado de obras (tabela secretaria_obras). Os lançamentos
@@ -93,21 +94,70 @@ export async function renameObraLinks(
 }
 
 /**
- * Exclui o CADASTRO de uma obra (registro estruturado e a memória kind='obra'
- * com esse nome). NÃO apaga os lançamentos vinculados (custos/RDO/materiais/
- * documentos/fotos) — dados financeiros/operacionais não somem em silêncio.
+ * Exclui uma obra EM CASCATA: o cadastro é a MATRIZ do sistema, então apagar a
+ * obra apaga TUDO que é dela — custos, RDO, materiais, documentos, fotos
+ * (inclusive os arquivos no Storage) e os eventos/lembretes da agenda vinculados
+ * à obra — além do cadastro e da memória kind='obra'. Assim a obra some de TODAS
+ * as abas de uma vez (é o espelho do cadastro). Operação destrutiva e sem volta.
+ * Retorna um resumo do que foi removido.
  */
 export async function excluirObra(
   userWa: string,
   opts: { id?: number | null; nome?: string | null },
-): Promise<void> {
+): Promise<{ nome: string | null; fotosArquivos: number }> {
   const supabase = getSupabase();
-  if (opts.id) {
-    const { error } = await supabase.from("secretaria_obras").delete().eq("user_wa", userWa).eq("id", opts.id);
-    if (error) throw new Error(`Falha ao excluir obra: ${error.message}`);
+
+  // Resolve o NOME da obra (os lançamentos referenciam por nome). Se só veio o
+  // id, busca o nome antes de apagar o cadastro.
+  let nome = opts.nome?.trim() || null;
+  if (!nome && opts.id) {
+    const { data } = await supabase
+      .from("secretaria_obras")
+      .select("nome")
+      .eq("user_wa", userWa)
+      .eq("id", opts.id)
+      .maybeSingle();
+    nome = (data as { nome?: string } | null)?.nome ?? null;
   }
-  const nome = opts.nome?.trim();
+
+  let fotosArquivos = 0;
   if (nome) {
+    // 1) Arquivos das fotos: coleta os caminhos ANTES de apagar as linhas.
+    const { data: fotos } = await supabase
+      .from("secretaria_fotos")
+      .select("caminho")
+      .eq("user_wa", userWa)
+      .eq("obra", nome);
+    const caminhos = ((fotos ?? []) as { caminho: string | null }[])
+      .map((f) => f.caminho)
+      .filter((c): c is string => !!c);
+
+    // 2) Apaga os lançamentos vinculados em todas as tabelas-espelho + os
+    //    eventos/lembretes da agenda daquela obra (senão lembretes órfãos
+    //    disparariam por uma obra que não existe mais).
+    const tabelas = [
+      "secretaria_custos",
+      "secretaria_rdo",
+      "secretaria_materiais",
+      "secretaria_documentos",
+      "secretaria_fotos",
+      "secretaria_eventos",
+    ];
+    for (const t of tabelas) {
+      const { error } = await supabase.from(t).delete().eq("user_wa", userWa).eq("obra", nome);
+      if (error) console.error(`[obras] excluir cascata em ${t}: ${error.message}`);
+    }
+
+    // 3) Remove os arquivos das fotos do Storage (não crítico).
+    if (caminhos.length > 0) {
+      try {
+        fotosArquivos = await removeFotos(caminhos);
+      } catch (err) {
+        console.error(`[obras] remover fotos do Storage: ${err instanceof Error ? err.message : err}`);
+      }
+    }
+
+    // 4) Memória kind='obra' com esse nome.
     await supabase
       .from("secretaria_memories")
       .delete()
@@ -115,6 +165,17 @@ export async function excluirObra(
       .eq("kind", "obra")
       .eq("content", nome);
   }
+
+  // 5) Cadastro estruturado.
+  if (opts.id) {
+    const { error } = await supabase.from("secretaria_obras").delete().eq("user_wa", userWa).eq("id", opts.id);
+    if (error) throw new Error(`Falha ao excluir obra: ${error.message}`);
+  } else if (nome) {
+    const { error } = await supabase.from("secretaria_obras").delete().eq("user_wa", userWa).eq("nome", nome);
+    if (error) throw new Error(`Falha ao excluir obra: ${error.message}`);
+  }
+
+  return { nome, fotosArquivos };
 }
 
 /**

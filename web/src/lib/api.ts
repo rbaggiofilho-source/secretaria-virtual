@@ -314,6 +314,13 @@ export interface FotoItem {
 export function getFotos() {
   return call<{ ok: boolean; fotos: FotoItem[] }>('/api/app/data?recurso=fotos')
 }
+/** Exclui uma foto (linha + arquivo no Storage). */
+export function excluirFoto(id: number) {
+  return call<{ ok: boolean }>('/api/app/data?recurso=fotos', {
+    method: 'DELETE',
+    body: JSON.stringify({ id }),
+  })
+}
 
 /** Cria ou edita o cadastro estruturado de uma obra. */
 export function salvarObra(input: ObraInput) {
@@ -323,9 +330,10 @@ export function salvarObra(input: ObraInput) {
   })
 }
 
-/** Exclui o cadastro de uma obra (não apaga os lançamentos vinculados). */
+/** Exclui uma obra EM CASCATA: cadastro + todos os lançamentos (custos, RDO,
+ *  materiais, documentos, fotos) + eventos/lembretes da agenda da obra. */
 export function excluirObra(id: number | null, nome: string) {
-  return call<{ ok: boolean }>('/api/app/data?recurso=obras', {
+  return call<{ ok: boolean; nome: string | null; fotosArquivos: number }>('/api/app/data?recurso=obras', {
     method: 'DELETE',
     body: JSON.stringify({ id, nome }),
   })

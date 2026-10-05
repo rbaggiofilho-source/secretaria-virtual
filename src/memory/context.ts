@@ -575,6 +575,41 @@ export async function getFoto(userWa: string, id: number): Promise<FotoRow | nul
   return (data as FotoRow | null) ?? null;
 }
 
+/**
+ * Exclui UMA foto pelo id (linha + arquivo no Storage). Escopo: quem PODE VER a
+ * foto pode excluí-la — admin/engenheiro pelos `recorders` do escopo, usuário
+ * pessoal pelas variantes do próprio wa. Retorna se achou/removeu.
+ */
+export async function excluirFoto(
+  userWa: string,
+  id: number,
+  escopo?: LeituraEscopo,
+): Promise<{ removida: boolean; arquivo: boolean }> {
+  const supabase = getSupabase();
+  const wasPermitidos = escopo ? escopo.recorders : waIdVariants(userWa);
+  const { data } = await supabase
+    .from("secretaria_fotos")
+    .select("id, caminho, user_wa")
+    .eq("id", id)
+    .in("user_wa", wasPermitidos)
+    .maybeSingle();
+  const row = data as { id: number; caminho: string | null } | null;
+  if (!row) return { removida: false, arquivo: false };
+
+  const { error } = await supabase.from("secretaria_fotos").delete().eq("id", row.id);
+  if (error) throw new Error(`Falha ao excluir foto: ${error.message}`);
+
+  let arquivo = false;
+  if (row.caminho) {
+    try {
+      arquivo = (await removeFotos([row.caminho])) > 0;
+    } catch (err) {
+      console.error(`[fotos] remover arquivo do Storage: ${err instanceof Error ? err.message : err}`);
+    }
+  }
+  return { removida: true, arquivo };
+}
+
 /** Consulta o registro fotográfico por obra, tipo e/ou intervalo (YYYY-MM-DD). */
 export async function consultarFotos(
   userWa: string,

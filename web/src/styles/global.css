@@ -121,7 +121,12 @@ main { padding: 31px 34px 20px; max-width: 1600px; margin: auto; }.welcome { dis
 .mat-status--cancelado { background: #f0e3e0; color: #9a5a48; }
 
 .foto-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 15px; }
-.foto-card { margin: 0; border: 1px solid var(--border); border-radius: 11px; overflow: hidden; background: #fafaf7; }
+.foto-card { position: relative; margin: 0; border: 1px solid var(--border); border-radius: 11px; overflow: hidden; background: #fafaf7; }
+.foto-del { position: absolute; top: 8px; right: 8px; z-index: 2; width: 30px; height: 30px; display: grid; place-items: center; border: 0; border-radius: 8px; background: rgba(12,21,18,.62); color: #fff; cursor: pointer; opacity: 0; transition: opacity .15s, background .15s; }
+.foto-card:hover .foto-del, .foto-del:focus-visible { opacity: 1; }
+.foto-del:hover { background: #c0392b; }
+.foto-del:disabled { opacity: .5; cursor: wait; }
+@media (hover: none) { .foto-del { opacity: 1; } }
 .foto-thumb { position: relative; aspect-ratio: 4/3; background: #ecebe5; display: grid; place-items: center; overflow: hidden; width: 100%; padding: 0; border: 0; cursor: pointer; }
 .foto-thumb:disabled { cursor: default; }
 .foto-thumb img { width: 100%; height: 100%; object-fit: cover; transition: transform .2s; }
@@ -136,6 +141,8 @@ main { padding: 31px 34px 20px; max-width: 1600px; margin: auto; }.welcome { dis
 .lightbox-actions { display: flex; gap: 8px; flex-shrink: 0; }
 .lightbox-actions a, .lightbox-actions button { padding: 7px 14px; border-radius: 8px; border: 1px solid #2a3b34; background: #16261f; color: #e9f1ec; font-size: 12px; font-weight: 600; cursor: pointer; text-decoration: none; }
 .lightbox-actions a:hover, .lightbox-actions button:hover { background: #1d3129; }
+.lightbox-actions button.danger { border-color: #5a2a24; background: #2a1512; color: #f0b6ab; }
+.lightbox-actions button.danger:hover { background: #c0392b; color: #fff; }
 .foto-off { color: #9aa19e; font-size: 11px; }
 .foto-tag { position: absolute; top: 8px; left: 8px; padding: 3px 8px; border-radius: 5px; font-size: 9px; font-weight: 700; background: #fafaf7cc; color: #55635e; }
 .foto-tag--nota_fiscal { background: #f7efdccc; color: #9a7327; }

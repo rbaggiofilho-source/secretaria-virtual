@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Trash2 } from 'lucide-react'
 import { PageHead, PageState } from '../components/Page'
 import { cardsDeObras, ObraCrumb, ObrasDrill, SEM_OBRA } from '../components/Obras'
-import { getFotos, getObras, type FotoItem, type ObraResumo } from '../lib/api'
+import { excluirFoto, getFotos, getObras, type FotoItem, type ObraResumo } from '../lib/api'
 import { formatDate } from '../lib/format'
 
 const TIPO_LABEL: Record<string, string> = {
@@ -16,6 +17,21 @@ export function Fotos() {
   const [erro, setErro] = useState<string | null>(null)
   const [sel, setSel] = useState<string | null>(null)
   const [aberta, setAberta] = useState<FotoItem | null>(null)
+  const [excluindo, setExcluindo] = useState<number | null>(null)
+
+  async function apagar(f: FotoItem) {
+    if (!window.confirm('Excluir esta foto? O arquivo é removido e não dá pra desfazer.')) return
+    setExcluindo(f.id)
+    try {
+      await excluirFoto(f.id)
+      setFotos((atual) => (atual ? atual.filter((x) => x.id !== f.id) : atual))
+      setAberta((a) => (a && a.id === f.id ? null : a))
+    } catch {
+      setErro('Não consegui excluir a foto agora. Tente de novo.')
+    } finally {
+      setExcluindo(null)
+    }
+  }
 
   useEffect(() => {
     let vivo = true
@@ -58,6 +74,16 @@ export function Fotos() {
                       {f.url ? <img src={f.url} alt={f.descricao ?? 'Foto'} loading="lazy" /> : <span className="foto-off">imagem indisponível</span>}
                       <span className={`foto-tag foto-tag--${f.tipo}`}>{TIPO_LABEL[f.tipo] ?? f.tipo}</span>
                     </button>
+                    <button
+                      type="button"
+                      className="foto-del"
+                      title="Excluir foto"
+                      aria-label="Excluir foto"
+                      disabled={excluindo === f.id}
+                      onClick={() => apagar(f)}
+                    >
+                      <Trash2 size={14} />
+                    </button>
                     <figcaption>
                       <p>{f.descricao ?? 'Sem descrição'}</p>
                       <small>{formatDate(f.data)}</small>
@@ -78,6 +104,7 @@ export function Fotos() {
               <span>{aberta.descricao ?? 'Sem descrição'}</span>
               <span className="lightbox-actions">
                 <a href={aberta.url} target="_blank" rel="noopener noreferrer" download>Baixar</a>
+                <button type="button" className="danger" disabled={excluindo === aberta.id} onClick={() => apagar(aberta)}>Excluir</button>
                 <button type="button" onClick={() => setAberta(null)}>Fechar</button>
               </span>
             </div>

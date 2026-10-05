@@ -386,8 +386,17 @@ banco; nada de novo produto. Rodando em **userosana.com.br** (projeto Vercel
   escopado pelo token. AÇÕES já no painel: busca + filtros por obra/status
   (client-side), **cadastro estruturado de obra** criar/editar/**excluir**
   (nome/cliente/endereço/contexto/datas/status — POST/DELETE `data?recurso=obras`
-  → `secretaria_obras`, renomear faz cascata, excluir remove só o cadastro;
-  `web/src/components/ObraForm.tsx`), **rota/GPS** pelo endereço (link do card e
+  → `secretaria_obras`, renomear faz cascata; **excluir faz CASCATA (05/10)**: o
+  cadastro é a MATRIZ do sistema (as sub-abas espelham as obras de Obras), então
+  excluir uma obra apaga TUDO dela — custos/RDO/materiais/documentos/fotos (+
+  arquivos no Storage) e os eventos/lembretes da agenda da obra — em todas as
+  abas de uma vez (`excluirObra` cascateia por NOME dentro do `user_wa`; obs:
+  dados de OUTRO membro na mesma obra não entram nessa cascata — é por wa);
+  `web/src/components/ObraForm.tsx` avisa que apaga tudo. **Excluir FOTO
+  individual (05/10):** botão de lixeira no cartão + no lightbox de Fotos →
+  DELETE `data?recurso=fotos` {id} → `excluirFoto` (apaga linha + arquivo no
+  Storage, escopado por recorders/variantes do wa; `web/src/pages/Fotos.tsx` com
+  lightbox). **rota/GPS** pelo endereço (link do card e
   tool `abrir_gps` abrem `web/src/pages/Mapa.tsx` = `/mapa?dest=` → chooser Google
   Maps/Waze/Apple Maps),
   **baixar PDF do RDO** por obra (`/api/app/rdo-pdf`, fetch com token → download),
