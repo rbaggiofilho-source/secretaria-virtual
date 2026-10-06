@@ -374,6 +374,7 @@ export async function registrarCusto(
   params: {
     valor: number;
     obra?: string | null;
+    etapa?: string | null;
     categoria?: CategoriaCusto;
     descricao?: string | null;
     data?: string | null;
@@ -384,6 +385,7 @@ export async function registrarCusto(
     user_wa: userWa,
     valor: params.valor,
     obra: params.obra ?? null,
+    etapa: params.etapa ?? null,
     categoria: params.categoria ?? "outro",
     descricao: params.descricao ?? null,
   };
@@ -465,6 +467,7 @@ export async function registrarRDO(
   userWa: string,
   params: {
     obra: string;
+    etapa?: string | null;
     data?: string | null;
     clima?: string | null;
     efetivo?: EfetivoItem[] | null;
@@ -477,6 +480,7 @@ export async function registrarRDO(
   const row: Record<string, unknown> = {
     user_wa: userWa,
     obra: params.obra,
+    etapa: params.etapa ?? null,
     clima: params.clima ?? null,
     efetivo: params.efetivo ?? [],
     atividades: params.atividades ?? null,
@@ -536,6 +540,7 @@ export async function registrarFoto(
   userWa: string,
   params: {
     obra?: string | null;
+    etapa?: string | null;
     tipo?: TipoFoto;
     descricao?: string | null;
     data?: string | null;
@@ -546,6 +551,7 @@ export async function registrarFoto(
   const row: Record<string, unknown> = {
     user_wa: userWa,
     obra: params.obra ?? null,
+    etapa: params.etapa ?? null,
     tipo: params.tipo ?? "foto_obra",
     descricao: params.descricao ?? null,
     caminho: params.caminho ?? null,
@@ -1046,6 +1052,7 @@ export async function registrarDocumento(
     tipo?: TipoDocumento;
     descricao: string;
     obra?: string | null;
+    etapa?: string | null;
     numero?: string | null;
     emissao?: string | null;
     vencimento?: string | null;
@@ -1058,6 +1065,7 @@ export async function registrarDocumento(
     tipo: params.tipo ?? "outro",
     descricao: params.descricao,
     obra: params.obra ?? null,
+    etapa: params.etapa ?? null,
     numero: params.numero ?? null,
     emissao: params.emissao ?? null,
     vencimento: params.vencimento ?? null,
@@ -1161,6 +1169,7 @@ export async function registrarMaterial(
   params: {
     item: string;
     obra?: string | null;
+    etapa?: string | null;
     quantidade?: number | null;
     unidade?: string | null;
     status?: MaterialStatus | null;
@@ -1200,6 +1209,7 @@ export async function registrarMaterial(
   const merged: Record<string, unknown> = {
     user_wa: userWa,
     obra: params.obra ?? atual?.obra ?? null,
+    etapa: params.etapa ?? (atual as { etapa?: string | null } | null)?.etapa ?? null,
     item: params.item,
     quantidade: qtd,
     unidade: params.unidade ?? atual?.unidade ?? null,

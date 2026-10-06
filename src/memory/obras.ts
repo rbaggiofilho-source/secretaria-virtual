@@ -79,7 +79,7 @@ export async function renameObraLinks(
 ): Promise<void> {
   if (!oldNome || oldNome === newNome) return;
   const supabase = getSupabase();
-  const tabelas = ["secretaria_custos", "secretaria_rdo", "secretaria_materiais", "secretaria_documentos", "secretaria_fotos"];
+  const tabelas = ["secretaria_custos", "secretaria_rdo", "secretaria_materiais", "secretaria_documentos", "secretaria_fotos", "secretaria_eventos", "secretaria_etapas"];
   for (const t of tabelas) {
     const { error } = await supabase.from(t).update({ obra: newNome }).eq("user_wa", userWa).eq("obra", oldNome);
     if (error) console.error(`[obras] rename em ${t}: ${error.message}`);
@@ -158,6 +158,7 @@ export async function excluirObra(
       "secretaria_documentos",
       "secretaria_fotos",
       "secretaria_eventos",
+      "secretaria_etapas",
     ];
     for (const t of tabelas) {
       const { error } = await porWa(supabase.from(t).delete()).eq("obra", nome);

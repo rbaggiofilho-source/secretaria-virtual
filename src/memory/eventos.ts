@@ -31,6 +31,7 @@ export interface CriarEventoInput {
   local?: string | null;
   descricao?: string | null;
   obra?: string | null;
+  etapa?: string | null;
   lembreteEmIso?: string | null;
   googleEventId?: string | null;
 }
@@ -48,6 +49,7 @@ export async function criarEvento(userWa: string, input: CriarEventoInput): Prom
       local: input.local ?? null,
       descricao: input.descricao ?? null,
       obra: input.obra ?? null,
+      etapa: input.etapa ?? null,
       lembrete_em: input.lembreteEmIso ?? null,
       google_event_id: input.googleEventId ?? null,
     })

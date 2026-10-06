@@ -60,6 +60,7 @@ import {
 } from "../memory/context.js";
 import { downloadFoto } from "../memory/storage.js";
 import { buscarObraPorNome, listObrasStruct } from "../memory/obras.js";
+import { criarEtapa, listarEtapas, resolverOuCriarEtapa } from "../memory/etapas.js";
 import { buscarPrecos } from "../precos/index.js";
 import { getEnv } from "../config/env.js";
 import { addDays, addMonths, daysBetween, formatDateBr, horaBr, todayIsoDate, weekdayBr } from "../util/datetime.js";
@@ -89,6 +90,8 @@ export const TOOLS: Anthropic.Tool[] = [
         end_iso: { type: "string", description: "Fim em ISO 8601 com offset" },
         location: { type: "string", description: "Endereço/local (opcional)" },
         description: { type: "string", description: "Detalhes (opcional)" },
+        obra: { type: "string", description: "Obra associada ao compromisso (opcional; use o apelido se houver)" },
+        etapa: { type: "string", description: "Etapa/fase da obra (opcional; ex.: 'restauração'). Cria a etapa se não existir. Só faz sentido com obra." },
         reminder_minutes: {
           type: "integer",
           description: "Minutos antes para lembrete (opcional)",
@@ -392,6 +395,7 @@ export const TOOLS: Anthropic.Tool[] = [
       properties: {
         valor: { type: "number", description: "Valor em reais (ex.: 3000.50)" },
         obra: { type: "string", description: "Obra/centro de custo (use o apelido se houver)" },
+        etapa: { type: "string", description: "Etapa/fase da obra (opcional; ex.: 'restauração', 'fundação'). Cria a etapa se não existir." },
         categoria: {
           type: "string",
           enum: ["material", "mao_de_obra", "equipamento", "servico", "outro"],
@@ -427,6 +431,7 @@ export const TOOLS: Anthropic.Tool[] = [
       type: "object",
       properties: {
         obra: { type: "string", description: "Obra do relatório (use o apelido se houver)" },
+        etapa: { type: "string", description: "Etapa/fase da obra (opcional; ex.: 'restauração', 'fundação'). Cria a etapa se não existir." },
         data: { type: "string", description: "Data do RDO em YYYY-MM-DD (opcional, padrão hoje)" },
         clima: { type: "string", description: "Condições do tempo (opcional)" },
         efetivo: {
@@ -473,6 +478,7 @@ export const TOOLS: Anthropic.Tool[] = [
       type: "object",
       properties: {
         obra: { type: "string", description: "Obra associada (use o apelido se houver)" },
+        etapa: { type: "string", description: "Etapa/fase da obra (opcional; ex.: 'restauração', 'fundação'). Cria a etapa se não existir." },
         tipo: {
           type: "string",
           enum: ["foto_obra", "nota_fiscal", "outro"],
@@ -547,6 +553,7 @@ export const TOOLS: Anthropic.Tool[] = [
         },
         descricao: { type: "string", description: "Descrição curta do documento (ex.: 'Alvará de construção')" },
         obra: { type: "string", description: "Obra associada (use o apelido se houver)" },
+        etapa: { type: "string", description: "Etapa/fase da obra (opcional; ex.: 'restauração', 'fundação'). Cria a etapa se não existir." },
         numero: { type: "string", description: "Número/protocolo do documento (opcional)" },
         emissao: { type: "string", description: "Data de emissão YYYY-MM-DD (opcional)" },
         vencimento: { type: "string", description: "Data de vencimento YYYY-MM-DD (opcional, mas recomendado)" },
@@ -602,6 +609,34 @@ export const TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: "criar_etapa",
+    description:
+      "Cria uma ETAPA/FASE dentro de uma obra (ex.: 'fundação', 'restauração', 'acabamento'). As etapas organizam os lançamentos (fotos, custos, RDO, documentos, materiais) DENTRO da obra. Use quando o usuário pedir pra criar/organizar etapas de uma obra, ou antes de registrar algo numa etapa nova. Não duplica: se a etapa já existir, só confirma.",
+    input_schema: {
+      type: "object",
+      properties: {
+        obra: { type: "string", description: "Obra à qual a etapa pertence" },
+        nome: { type: "string", description: "Nome da etapa (ex.: 'fundação', 'restauração')" },
+        ordem: { type: "integer", description: "Posição da etapa na sequência (opcional; padrão = fim)" },
+      },
+      required: ["obra", "nome"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "listar_etapas",
+    description:
+      "Lista as etapas/fases cadastradas de uma obra, na ordem. Use quando o usuário perguntar quais etapas uma obra tem, ou pra conferir o nome certo antes de registrar algo numa etapa.",
+    input_schema: {
+      type: "object",
+      properties: {
+        obra: { type: "string", description: "Obra cujas etapas listar" },
+      },
+      required: ["obra"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "registrar_material",
     description:
       "Registra ou atualiza um MATERIAL/compra de uma obra e suas cotações. É a mesma tool para todo o ciclo — chame de novo para o MESMO item+obra que ela atualiza (não duplica): 1) necessidade ('preciso de 100 sacos de cimento na obra do centro' → item, quantidade, unidade, obra); 2) cotações ('cotei o cimento: Votorantim 32 o saco, Cauê 30' → cotacoes=[{fornecedor,valor_unitario}]); 3) compra ('comprei o cimento da Cauê, 100 sacos a 30' → fornecedor, valor_unitario, status='comprado'; se ele quiser já lançar no custo da obra, passe lancar_custo=true); 4) entrega ('chegou o cimento' → status='entregue'). Use o MESMO nome de item nas chamadas seguintes. Datas em YYYY-MM-DD.",
@@ -610,6 +645,7 @@ export const TOOLS: Anthropic.Tool[] = [
       properties: {
         item: { type: "string", description: "Nome do material (ex.: 'cimento CP-II', 'vergalhão 10mm')" },
         obra: { type: "string", description: "Obra associada (use o apelido se houver)" },
+        etapa: { type: "string", description: "Etapa/fase da obra (opcional; ex.: 'restauração', 'fundação'). Cria a etapa se não existir." },
         quantidade: { type: "number", description: "Quantidade (opcional)" },
         unidade: { type: "string", description: "Unidade: saco, m³, kg, un, etc. (opcional)" },
         status: {
@@ -1050,6 +1086,8 @@ export async function runTool(
         const fimIso = input.end_iso ? String(input.end_iso) : null;
         const local = input.location ? String(input.location) : null;
         const descricao = input.description ? String(input.description) : null;
+        const obraEvt = input.obra ? String(input.obra) : null;
+        const etapaEvt = await resolverOuCriarEtapa(userWa, obraEvt, input.etapa ? String(input.etapa) : null);
         // Sem reminder explícito, usa a antecedência padrão do usuário (lembrete
         // automático de compromisso via WhatsApp). 0 = sem lembrete.
         const antecPadrao =
@@ -1095,6 +1133,8 @@ export async function runTool(
           fimIso,
           local,
           descricao,
+          obra: obraEvt,
+          etapa: etapaEvt,
           lembreteEmIso,
           googleEventId,
         });
@@ -1456,9 +1496,11 @@ export async function runTool(
       }
 
       case "registrar_custo": {
+        const obraC = input.obra ? String(input.obra) : null;
         const row = await registrarCusto(userWa, {
           valor: Number(input.valor),
-          obra: input.obra ? String(input.obra) : null,
+          obra: obraC,
+          etapa: await resolverOuCriarEtapa(userWa, obraC, input.etapa ? String(input.etapa) : null),
           categoria: input.categoria
             ? (String(input.categoria) as CategoriaCusto)
             : undefined,
@@ -1495,8 +1537,10 @@ export async function runTool(
               return { funcao: String(o.funcao ?? ""), qtd: Number(o.qtd ?? 0) } as EfetivoItem;
             })
           : undefined;
+        const obraR = String(input.obra);
         const row = await registrarRDO(userWa, {
-          obra: String(input.obra),
+          obra: obraR,
+          etapa: await resolverOuCriarEtapa(userWa, obraR, input.etapa ? String(input.etapa) : null),
           data: input.data ? String(input.data) : null,
           clima: input.clima ? String(input.clima) : null,
           efetivo,
@@ -1546,8 +1590,10 @@ export async function runTool(
         // turno). Se não houver, salva só a descrição, como antes.
         const caminho =
           ctx?.imagePaths && ctx.imagePaths.length > 0 ? ctx.imagePaths.shift()! : null;
+        const obraF = input.obra ? String(input.obra) : null;
         const row = await registrarFoto(userWa, {
-          obra: input.obra ? String(input.obra) : null,
+          obra: obraF,
+          etapa: await resolverOuCriarEtapa(userWa, obraF, input.etapa ? String(input.etapa) : null),
           tipo: input.tipo ? (String(input.tipo) as TipoFoto) : undefined,
           descricao: input.descricao ? String(input.descricao) : null,
           data: input.data ? String(input.data) : null,
@@ -1660,10 +1706,12 @@ export async function runTool(
 
       case "registrar_documento": {
         const vencimento = input.vencimento ? String(input.vencimento) : null;
+        const obraD = input.obra ? String(input.obra) : null;
         const doc = await registrarDocumento(userWa, {
           tipo: input.tipo ? (String(input.tipo) as TipoDocumento) : undefined,
           descricao: String(input.descricao),
-          obra: input.obra ? String(input.obra) : null,
+          obra: obraD,
+          etapa: await resolverOuCriarEtapa(userWa, obraD, input.etapa ? String(input.etapa) : null),
           numero: input.numero ? String(input.numero) : null,
           emissao: input.emissao ? String(input.emissao) : null,
           vencimento,
@@ -1835,6 +1883,33 @@ export async function runTool(
         };
       }
 
+      case "criar_etapa": {
+        const obra = String(input.obra ?? "").trim();
+        const nome = String(input.nome ?? "").trim();
+        if (!obra || !nome) return { isError: true, text: "Informe a obra e o nome da etapa." };
+        const row = await criarEtapa(userWa, obra, nome, {
+          ordem: typeof input.ordem === "number" ? input.ordem : undefined,
+        });
+        return {
+          isError: false,
+          text: JSON.stringify({ ok: true, id: row.id, obra: row.obra, etapa: row.nome, ordem: row.ordem }),
+        };
+      }
+
+      case "listar_etapas": {
+        const obra = String(input.obra ?? "").trim();
+        if (!obra) return { isError: true, text: "Informe a obra." };
+        const rows = await listarEtapas(userWa, obra);
+        return {
+          isError: false,
+          text: JSON.stringify({
+            ok: true,
+            obra,
+            etapas: rows.map((r) => ({ nome: r.nome, ordem: r.ordem, status: r.status })),
+          }),
+        };
+      }
+
       case "registrar_material": {
         const novasCotacoes: Cotacao[] = Array.isArray(input.cotacoes)
           ? (input.cotacoes as unknown[]).map((c) => {
@@ -1864,9 +1939,11 @@ export async function runTool(
           }
         }
 
+        const obraM = input.obra ? String(input.obra) : null;
         const row = await registrarMaterial(userWa, {
           item: String(input.item),
-          obra: input.obra ? String(input.obra) : null,
+          obra: obraM,
+          etapa: await resolverOuCriarEtapa(userWa, obraM, input.etapa ? String(input.etapa) : null),
           quantidade: typeof input.quantidade === "number" ? input.quantidade : null,
           unidade: input.unidade ? String(input.unidade) : null,
           status,

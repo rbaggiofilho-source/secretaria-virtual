@@ -228,7 +228,17 @@ WhatsApp. Eventos de status (sent/delivered/read/failed) são logados.
   unique(user_wa,nome). Os lançamentos referenciam a obra pelo NOME, então
   renomear faz cascata (`renameObraLinks` em `src/memory/obras.ts`). Editado pelo
   painel; obras vindas só do WhatsApp aparecem como "não organizadas" até editar.
-- `secretaria_custos` — custos por obra (categoria: material/mao_de_obra/equipamento/servico/outro; valor; descrição; data).
+- `secretaria_etapas` — ETAPAS/fases de uma obra (a "sub-matriz" dentro da obra),
+  desde 05/10 (Fase 1). id; user_wa; obra (por NOME); nome; ordem; status
+  (planejada/em_andamento/concluida); unique(user_wa,obra,nome). `src/memory/etapas.ts`
+  (`listarEtapas`, `criarEtapa` [find-or-create por nome, case-insensitive],
+  `resolverOuCriarEtapa` [devolve o nome canônico pra gravar no lançamento]). Os
+  lançamentos carregam a COLUNA `etapa` (texto, nome da etapa dentro da obra) em
+  custos/rdo/fotos/documentos/materiais/eventos. Rename/exclusão de obra cascateia
+  etapas junto. OBS (Fase 1): o registro das etapas é por `user_wa` de quem cria
+  (compartilhar etapa entre a equipe da empresa e o DRILL obra→etapa→itens no
+  painel = Fase 2).
+- `secretaria_custos` — custos por obra (categoria: material/mao_de_obra/equipamento/servico/outro; valor; descrição; data). + coluna `etapa`.
 - `secretaria_rdo` — Diário de Obra (unique por user_wa+obra+data; clima, efetivo jsonb, atividades, ocorrências, materiais).
 - `secretaria_fotos` — registro fotográfico (tipo: foto_obra/nota_fiscal/outro; descrição da IA; obra; data; caminho).
 - `secretaria_usuarios` — usuários autorizados (PK user_wa; nome, calendar_id,
@@ -315,6 +325,11 @@ chooser Google Maps/Waze/Apple Maps),
 endereço/status/`tem_endereco` de todas as obras; FONTE DA VERDADE p/ "quais obras
 tenho", endereços de TODAS as obras, clientes — a memória não tem endereços e pode
 ter nomes duplicados/errados),
+`criar_etapa`/`listar_etapas` (ETAPAS/fases de uma obra — Fase 1, 05/10; as tools
+de registro — registrar_foto/custo/rdo/documento/material + create_calendar_event —
+ganharam um campo `etapa` opcional que faz find-or-create da etapa na obra e grava
+o nome na coluna `etapa` do lançamento; "registra essa foto na etapa de restauração
+da obra X" → obra=X, etapa=restauração),
 `registrar_material`, `consultar_materiais`,
 `consultar_preco` (orçamentos: devolve `seus_precos` — preços REAIS do próprio
 usuário, do histórico de `secretaria_materiais` via `buscarPrecosDoUsuario`, com

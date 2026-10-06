@@ -385,3 +385,28 @@ alter table public.secretaria_empresas
   add column if not exists assinatura_status text not null default 'nenhuma', -- nenhuma|aguardando|pendente|authorized|paused|cancelled
   add column if not exists mp_preapproval_id text,
   add column if not exists assinatura_em timestamptz;
+
+-- Etapas/fases de uma obra (a "sub-matriz" dentro da obra). Os lançamentos
+-- referenciam a etapa pelo NOME dentro da obra (coluna `etapa` abaixo). Permite
+-- etapa vazia, ordem e renomear. (05/10 — etapas de obra, Fase 1.)
+create table if not exists public.secretaria_etapas (
+  id          bigint generated always as identity primary key,
+  user_wa     text        not null,
+  obra        text        not null,
+  nome        text        not null,
+  ordem       int         not null default 0,
+  status      text        not null default 'planejada' check (status in ('planejada','em_andamento','concluida')),
+  created_at  timestamptz not null default now(),
+  unique (user_wa, obra, nome)
+);
+create index if not exists secretaria_etapas_user_obra_idx
+  on public.secretaria_etapas (user_wa, obra, ordem);
+alter table public.secretaria_etapas enable row level security;
+
+-- Coluna `etapa` (nome da etapa dentro da obra) nos lançamentos.
+alter table public.secretaria_custos     add column if not exists etapa text;
+alter table public.secretaria_rdo         add column if not exists etapa text;
+alter table public.secretaria_fotos       add column if not exists etapa text;
+alter table public.secretaria_documentos  add column if not exists etapa text;
+alter table public.secretaria_materiais   add column if not exists etapa text;
+alter table public.secretaria_eventos     add column if not exists etapa text;
