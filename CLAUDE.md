@@ -640,7 +640,7 @@ banco; nada de novo produto. Rodando em **userosana.com.br** (projeto Vercel
   visão em nota fiscal real, STT em contexto de obra e, principalmente, o envio
   do PDF (`uploadMedia`/`sendDocumentMessage`) — risco de limite no número de teste.
 
-## Formalização / CNPJ (em andamento — 04/10/2026)
+## Formalização / CNPJ (CNPJ ABERTO — 07/10/2026)
 Abrir CNPJ pra lançar oficialmente e poder cobrar/emitir NF. Estrutura definida
 (confirmar com contador), via Contabilizei:
 - **Tipo:** SLU (sem sócio, patrimônio protegido). **Regime:** Simples Nacional,
@@ -650,8 +650,20 @@ Abrir CNPJ pra lançar oficialmente e poder cobrar/emitir NF. Estrutura definida
   `6209-1/00` (suporte). NÃO deixar Consultoria (`6204-0/00`) como principal.
 - **Imposto mínimo:** manter **Fator R ≥ 28%** (via pró-labore) → **Anexo III
   (começa 6%)** em vez do Anexo V (15,5%). Contador calibra o pró-labore.
-- **PARAMOS AQUI (04/10):** abertura em TRÂMITE; Ricardo buscando o nº do PIS pra
-  finalizar o cadastro na Contabilizei. Retomar quando o CNPJ sair.
+- ✅ **CNPJ aberto (07/10)** — PIS resolvido, abertura concluída na Contabilizei.
+  Próximos passos (nesta ordem; os 3 primeiros podem andar em paralelo):
+  1. Inscrição municipal + certificado digital **e-CNPJ A1** (pré-req da NFS-e).
+  2. **Verificação da empresa na Meta** (Business Manager → Central de segurança;
+     razão social/endereço iguais ao cartão CNPJ; site userosana.com.br com
+     razão social + CNPJ no rodapé ajuda a aprovar).
+  3. **Conta Mercado Pago PJ no CNPJ** → Access Token de produção na Vercel
+     (`MERCADOPAGO_ACCESS_TOKEN`). O código já manda `notification_url` em cada
+     cobrança; webhook no painel do MP é opcional.
+  4. Após a verificação: **número BR próprio** (chip novo, sem WhatsApp) na WABA →
+     app em Production → templates (código de login, boas-vindas, lembretes >24h).
+  5. Decidir o emissor de NFS-e (abaixo) e ligar no webhook de pagamento.
+  - Site: incluir razão social + CNPJ no rodapé e nos /termos e /privacidade
+    (exigência do Decreto 7.962/2013 p/ venda online).
 - ⚠️ **NF automática × gateway (DECISÃO ABERTA):** requisito do Ricardo = a cada
   compra/renovação, mandar a NFS-e pro email do usuário. O billing JÁ construído é
   **Mercado Pago**, que NÃO emite NFS-e (é só gateway). Então: (A) manter MP +
@@ -662,7 +674,6 @@ Abrir CNPJ pra lançar oficialmente e poder cobrar/emitir NF. Estrutura definida
 - **Reforma tributária:** 2026 = alíquotas-teste (0,1% IBS + 0,9% CBS); vale pra
   valer em 2027 (escolha de recolher IBS/CBS no regime regular, fora do DAS —
   relevante pro B2B querer crédito). Decisão de 2027.
-- **Depois do CNPJ:** verificação da empresa na Meta + número BR próprio.
 
 ## Roadmap de onboarding (inspirado no Meu Assessor) — 04/10/2026
 Benchmark do concorrente **Meu Assessor** (produto validado, Felipe Titto, ~170k
