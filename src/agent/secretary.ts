@@ -53,6 +53,8 @@ export async function runSecretary(params: {
   /** Caminhos de imagem que o modelo NÃO registrou (não chamou registrar_foto).
    *  O pipeline registra automaticamente p/ a foto nunca se perder. */
   imagensNaoRegistradas: string[];
+  /** O turno criou um compromisso/lembrete (imagem tratada como agenda, não foto). */
+  agendouAlgo: boolean;
 }> {
   const env = getEnv();
   const client = getClient();
@@ -157,6 +159,8 @@ export async function runSecretary(params: {
   // escreve a resposta E chama enviar_opcoes no MESMO turno: sem isso, o texto
   // daquele turno (ex.: a explicação) se perderia ao extrair só o último.
   const textoPartes: string[] = [];
+  // Alguma tool de AGENDA/lembrete foi chamada? (imagem = compromisso, não foto)
+  let agendouAlgo = false;
 
   for (let turn = 0; turn < MAX_TURNS; turn++) {
     const response = await client.messages.create({
@@ -180,6 +184,9 @@ export async function runSecretary(params: {
 
       const toolResults: Anthropic.ToolResultBlockParam[] = [];
       for (const tu of toolUses) {
+        // Sinaliza que a imagem foi tratada como COMPROMISSO (agenda/lembrete),
+        // não como foto — o pipeline então NÃO força o arquivamento como foto.
+        if (tu.name === "create_calendar_event" || tu.name === "criar_lembrete") agendouAlgo = true;
         const result = await runTool(
           params.usuario,
           tu.name,
@@ -208,6 +215,7 @@ export async function runSecretary(params: {
       botoes: toolCtx.botoes,
       sugestaoBotoes: toolCtx.sugestaoBotoes,
       imagensNaoRegistradas: toolCtx.imagePaths,
+      agendouAlgo,
     };
   }
 
@@ -220,6 +228,7 @@ export async function runSecretary(params: {
     botoes: toolCtx.botoes,
     sugestaoBotoes: toolCtx.sugestaoBotoes,
     imagensNaoRegistradas: toolCtx.imagePaths,
+    agendouAlgo,
   };
 }
 

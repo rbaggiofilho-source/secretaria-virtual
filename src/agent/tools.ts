@@ -59,7 +59,7 @@ import {
   type UsuarioRow,
 } from "../memory/context.js";
 import { downloadFoto } from "../memory/storage.js";
-import { buscarObraPorNome, listObrasStruct } from "../memory/obras.js";
+import { buscarObraPorNome, canonizarObra, listObrasStruct } from "../memory/obras.js";
 import { criarEtapa, listarEtapas, resolverOuCriarEtapa } from "../memory/etapas.js";
 import { buscarPrecos } from "../precos/index.js";
 import { getEnv } from "../config/env.js";
@@ -1086,7 +1086,7 @@ export async function runTool(
         const fimIso = input.end_iso ? String(input.end_iso) : null;
         const local = input.location ? String(input.location) : null;
         const descricao = input.description ? String(input.description) : null;
-        const obraEvt = input.obra ? String(input.obra) : null;
+        const obraEvt = await canonizarObra(userWa, input.obra ? String(input.obra) : null);
         const etapaEvt = await resolverOuCriarEtapa(userWa, obraEvt, input.etapa ? String(input.etapa) : null);
         // Sem reminder explícito, usa a antecedência padrão do usuário (lembrete
         // automático de compromisso via WhatsApp). 0 = sem lembrete.
@@ -1496,7 +1496,7 @@ export async function runTool(
       }
 
       case "registrar_custo": {
-        const obraC = input.obra ? String(input.obra) : null;
+        const obraC = await canonizarObra(userWa, input.obra ? String(input.obra) : null);
         const row = await registrarCusto(userWa, {
           valor: Number(input.valor),
           obra: obraC,
@@ -1537,7 +1537,7 @@ export async function runTool(
               return { funcao: String(o.funcao ?? ""), qtd: Number(o.qtd ?? 0) } as EfetivoItem;
             })
           : undefined;
-        const obraR = String(input.obra);
+        const obraR = (await canonizarObra(userWa, String(input.obra))) ?? String(input.obra);
         const row = await registrarRDO(userWa, {
           obra: obraR,
           etapa: await resolverOuCriarEtapa(userWa, obraR, input.etapa ? String(input.etapa) : null),
@@ -1590,7 +1590,7 @@ export async function runTool(
         // turno). Se não houver, salva só a descrição, como antes.
         const caminho =
           ctx?.imagePaths && ctx.imagePaths.length > 0 ? ctx.imagePaths.shift()! : null;
-        const obraF = input.obra ? String(input.obra) : null;
+        const obraF = await canonizarObra(userWa, input.obra ? String(input.obra) : null);
         const row = await registrarFoto(userWa, {
           obra: obraF,
           etapa: await resolverOuCriarEtapa(userWa, obraF, input.etapa ? String(input.etapa) : null),
@@ -1706,7 +1706,7 @@ export async function runTool(
 
       case "registrar_documento": {
         const vencimento = input.vencimento ? String(input.vencimento) : null;
-        const obraD = input.obra ? String(input.obra) : null;
+        const obraD = await canonizarObra(userWa, input.obra ? String(input.obra) : null);
         const doc = await registrarDocumento(userWa, {
           tipo: input.tipo ? (String(input.tipo) as TipoDocumento) : undefined,
           descricao: String(input.descricao),
@@ -1939,7 +1939,7 @@ export async function runTool(
           }
         }
 
-        const obraM = input.obra ? String(input.obra) : null;
+        const obraM = await canonizarObra(userWa, input.obra ? String(input.obra) : null);
         const row = await registrarMaterial(userWa, {
           item: String(input.item),
           obra: obraM,

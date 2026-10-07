@@ -95,6 +95,28 @@ export async function renameObraLinks(
 }
 
 /**
+ * Casa um nome de obra dito/escrito com uma obra JÁ CADASTRADA (ignorando acento
+ * e maiúsculas) e devolve o NOME CANÔNICO — assim "catamarã" cai na obra
+ * cadastrada "Catamara" em vez de criar uma obra ad-hoc divergente. Sem match
+ * (ou sem nome), devolve o próprio nome. Usado ao gravar lançamentos.
+ */
+export async function canonizarObra(userWa: string, nome: string | null): Promise<string | null> {
+  if (!nome) return null;
+  const n = nome.trim();
+  if (!n) return null;
+  const norm = (s: string) =>
+    s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+  const alvo = norm(n);
+  const supabase = getSupabase();
+  const { data } = await supabase.from("secretaria_obras").select("nome").in("user_wa", waIdVariants(userWa));
+  const obras = ((data ?? []) as { nome: string }[]).filter((o) => o.nome);
+  const hit =
+    obras.find((o) => norm(o.nome) === alvo) ??
+    obras.find((o) => norm(o.nome).includes(alvo) || alvo.includes(norm(o.nome)));
+  return hit ? hit.nome : n;
+}
+
+/**
  * Exclui uma obra EM CASCATA: o cadastro é a MATRIZ do sistema, então apagar a
  * obra apaga TUDO que é dela — custos, RDO, materiais, documentos, fotos
  * (inclusive os arquivos no Storage) e os eventos/lembretes da agenda vinculados

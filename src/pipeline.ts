@@ -209,7 +209,7 @@ export async function handleIncomingMessage(message: WhatsAppMessage): Promise<v
       resolverEscopoEngenheiro(from).catch(() => null),
     ]);
 
-    const { text: resposta, consumo, botoes, sugestaoBotoes, imagensNaoRegistradas } = await runSecretary({
+    const { text: resposta, consumo, botoes, sugestaoBotoes, imagensNaoRegistradas, agendouAlgo } = await runSecretary({
       usuario,
       userText,
       images,
@@ -223,24 +223,33 @@ export async function handleIncomingMessage(message: WhatsAppMessage): Promise<v
       escopoEmpresa,
     });
 
-    // Rede de segurança da VISÃO: se o modelo descreveu a foto mas NÃO chamou
-    // registrar_foto (o Haiku às vezes confirma "salvei" sem gravar — mesma
-    // classe do bug de save_memory), a foto já está no Storage mas não apareceria
-    // no painel. Registramos automaticamente p/ a foto NUNCA se perder — com a
-    // obra inferida da legenda ("salva na pasta do catamarã" → catamarã) e a
-    // descrição = o que a Rosana respondeu. Não crítico: falha aqui não derruba.
+    // Rede de segurança da VISÃO (CONSERVADORA): se o modelo descreveu a foto
+    // mas NÃO chamou registrar_foto, a imagem já está no Storage mas não
+    // apareceria no painel. Só arquivamos automaticamente quando é CLARAMENTE
+    // uma foto pra guardar — senão enchíamos a aba Fotos de lixo (print de
+    // agendamento, imagem aleatória, ou foto que o modelo ainda ia perguntar a
+    // obra). Pula o arquivamento quando:
+    //  - o turno virou COMPROMISSO/lembrete (print de agenda → não é foto);
+    //  - o modelo PERGUNTOU a obra (está esperando ${nome} responder);
+    //  - não há sinal de "salvar foto" na legenda nem obra inferível.
     if (imagensNaoRegistradas.length > 0) {
       const obraInferida = await resolverObraDaFoto(from, userText);
-      for (const caminho of imagensNaoRegistradas) {
-        try {
-          await registrarFoto(from, {
-            obra: obraInferida,
-            tipo: "foto_obra",
-            descricao: resposta.trim().slice(0, 500) || "(foto recebida)",
-            caminho,
-          });
-        } catch (err) {
-          logError("registrar foto (fallback)", err);
+      const perguntouObra = /\?\s*$/.test(resposta.trim()) || /qual\s+(é\s+a\s+|a\s+)?obra|em qual obra/i.test(resposta);
+      const intencaoSalvarFoto =
+        /\b(salv\w*|guard\w*|arquiv\w*|registr\w*|pasta|[áa]lbum|coloc\w*|bot\w*|p[õo]e\w*|foto)\b/i.test(userText);
+      const deveArquivar = !agendouAlgo && !perguntouObra && (intencaoSalvarFoto || obraInferida != null);
+      if (deveArquivar) {
+        for (const caminho of imagensNaoRegistradas) {
+          try {
+            await registrarFoto(from, {
+              obra: obraInferida,
+              tipo: "foto_obra",
+              descricao: resposta.trim().slice(0, 500) || "(foto recebida)",
+              caminho,
+            });
+          } catch (err) {
+            logError("registrar foto (fallback)", err);
+          }
         }
       }
     }
