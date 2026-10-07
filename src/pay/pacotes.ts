@@ -6,6 +6,7 @@ import { temRecurso, type Direito } from "./cota.js";
 import { consultarPagamento, criarCheckout, mpConfigured } from "./mercadopago.js";
 import { getPacote, type Pacote } from "./planos.js";
 import { sendTextMessage } from "../whatsapp/client.js";
+import { registrarNotaDePagamento } from "../nf/notas.js";
 
 /**
  * PACOTES EXTRAS de uso (mensagens/fotos/áudio) para quem bateu o limite do
@@ -116,6 +117,13 @@ export async function processarPagamentoPacote(paymentId: string): Promise<"cred
     valor: pg.valor,
   });
   if (novo) {
+    await registrarNotaDePagamento({
+      mpPaymentId: pg.id,
+      userWa,
+      origem: "pacote",
+      descricao: `Rosana — pacote extra de uso: ${pacote.nome}`,
+      valor: pg.valor,
+    });
     // Avisa no WhatsApp (quem compra acabou de falar com a Rosana, então a
     // janela de 24h está aberta). Não crítico.
     try {

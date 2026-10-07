@@ -144,6 +144,42 @@ export async function consultarPagamento(id: string): Promise<PagamentoStatus | 
   };
 }
 
+export interface CobrancaAssinatura {
+  id: string;
+  preapprovalId: string | null;
+  externalReference: string | null;
+  valor: number;
+  reason: string | null;
+  /** Pagamento gerado pela cobrança (só existe depois de cobrar). */
+  pagamentoId: string | null;
+  pagamentoStatus: string | null; // approved | rejected | pending ...
+}
+
+/**
+ * Consulta uma cobrança RECORRENTE da assinatura (GET /authorized_payments/{id}),
+ * avisada pelo MP no tópico `subscription_authorized_payment`. Campos conforme o
+ * SDK oficial (mercadopago v3, InvoiceResponse).
+ */
+export async function consultarCobrancaAssinatura(id: string): Promise<CobrancaAssinatura | null> {
+  const token = mpToken();
+  if (!token) return null;
+  const res = await fetch(`${MP_API}/authorized_payments/${encodeURIComponent(id)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) return null;
+  const d = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  const pg = (d.payment ?? null) as { id?: unknown; status?: unknown } | null;
+  return {
+    id: String(d.id ?? id),
+    preapprovalId: (d.preapproval_id as string | null) ?? null,
+    externalReference: (d.external_reference as string | null) ?? null,
+    valor: Number(d.transaction_amount ?? 0),
+    reason: (d.reason as string | null) ?? null,
+    pagamentoId: pg?.id != null ? String(pg.id) : null,
+    pagamentoStatus: pg?.status != null ? String(pg.status) : null,
+  };
+}
+
 export interface AssinaturaStatus {
   id: string;
   status: string; // pending | authorized | paused | cancelled

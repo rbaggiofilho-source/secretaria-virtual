@@ -184,3 +184,30 @@ export function salvarPlano(p: Partial<PlanoAdmin> & { id: string }) {
     body: JSON.stringify(p),
   })
 }
+
+// ---------- Notas fiscais (NFS-e automática) ----------
+
+export interface NotaFiscalAdmin {
+  id: number
+  mp_payment_id: string
+  user_wa: string | null
+  empresa_id: number | null
+  origem: 'assinatura' | 'pacote'
+  descricao: string
+  valor: number
+  status: 'pendente' | 'aguardando_emissor' | 'dados_faltando' | 'processando' | 'emitida' | 'erro'
+  numero: string | null
+  email_enviado: boolean | null
+  erro: string | null
+  created_at: string
+  emitida_em: string | null
+}
+export function getNotasAdmin() {
+  return adminCall<{ ok: boolean; emissorConfigurado: boolean; notas: NotaFiscalAdmin[] }>('/api/app/admin?recurso=notas')
+}
+export function reprocessarNota(id: number) {
+  return adminCall<{ ok: boolean }>('/api/app/admin?acao=reprocessar-nota', {
+    method: 'POST',
+    body: JSON.stringify({ id }),
+  })
+}

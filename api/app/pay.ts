@@ -1,7 +1,13 @@
 import { getEnv } from "../../src/config/env.js";
 import { json, preflight, readJson } from "../../src/auth/http.js";
 import { getPlanoDb } from "../../src/pay/planos-db.js";
-import { mpConfigured, criarAssinatura, consultarAssinatura } from "../../src/pay/mercadopago.js";
+import {
+  mpConfigured,
+  criarAssinatura,
+  consultarAssinatura,
+  consultarCobrancaAssinatura,
+} from "../../src/pay/mercadopago.js";
+import { registrarNotaDePagamento } from "../../src/nf/notas.js";
 import { processarPagamentoPacote } from "../../src/pay/pacotes.js";
 import {
   registrarLeadPagamento,
@@ -99,6 +105,24 @@ async function webhook(request: Request, url: URL): Promise<Response> {
   if (/^payment$/i.test(topic)) {
     const r = await processarPagamentoPacote(id);
     return json(request, { ok: true, pacote: r });
+  }
+
+  // Cobrança mensal da assinatura (recorrência): aprovada → nota fiscal.
+  if (/subscription_authorized_payment/i.test(topic)) {
+    const c = await consultarCobrancaAssinatura(id);
+    if (!c || c.pagamentoStatus !== "approved" || !c.pagamentoId || !c.externalReference) {
+      return json(request, { ok: true, cobranca: "ignorada" });
+    }
+    const empresa = /^empresa:(\d+)$/.exec(c.externalReference);
+    await registrarNotaDePagamento({
+      mpPaymentId: c.pagamentoId,
+      userWa: empresa ? null : c.externalReference,
+      empresaId: empresa ? Number(empresa[1]) : null,
+      origem: "assinatura",
+      descricao: `Assinatura mensal ${c.reason ?? "Rosana"} — secretária virtual de obras (software como serviço)`,
+      valor: c.valor,
+    });
+    return json(request, { ok: true, cobranca: "nota_enfileirada" });
   }
 
   // Demais: só interessam eventos de assinatura (preapproval).

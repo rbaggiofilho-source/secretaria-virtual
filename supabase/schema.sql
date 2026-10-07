@@ -410,3 +410,31 @@ alter table public.secretaria_fotos       add column if not exists etapa text;
 alter table public.secretaria_documentos  add column if not exists etapa text;
 alter table public.secretaria_materiais   add column if not exists etapa text;
 alter table public.secretaria_eventos     add column if not exists etapa text;
+
+-- ---------------------------------------------------------------------------
+-- Notas fiscais automáticas (NFS-e via NFE.io) — 07/10/2026
+-- ---------------------------------------------------------------------------
+-- Uma linha por pagamento aprovado no Mercado Pago (assinatura ou pacote).
+-- mp_payment_id ÚNICO = nunca emite duas notas do mesmo pagamento.
+create table if not exists public.secretaria_notas_fiscais (
+  id             bigint generated always as identity primary key,
+  mp_payment_id  text        not null unique,
+  user_wa        text,
+  empresa_id     bigint,
+  origem         text        not null check (origem in ('assinatura','pacote')),
+  descricao      text        not null,
+  valor          numeric(10,2) not null,
+  status         text        not null default 'pendente'
+                 check (status in ('pendente','aguardando_emissor','dados_faltando','processando','emitida','erro')),
+  nfse_id        text,
+  numero         text,
+  email_enviado  boolean,
+  erro           text,
+  tentativas     integer     not null default 0,
+  emitida_em     timestamptz,
+  created_at     timestamptz not null default now(),
+  updated_at     timestamptz not null default now()
+);
+
+create index if not exists secretaria_notas_status_idx on public.secretaria_notas_fiscais (status, created_at);
+alter table public.secretaria_notas_fiscais enable row level security;
