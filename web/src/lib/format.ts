@@ -67,3 +67,52 @@ const MATERIAL_STATUS: Record<string, string> = {
   cancelado: 'Cancelado',
 }
 export const materialStatusLabel = (s: string) => MATERIAL_STATUS[s] ?? s
+
+/** Ordem de exibição no mapa de cotações: EM ANDAMENTO (cotando) no topo, depois
+ *  a iniciar (a comprar), e os concluídos/cancelados por último. */
+const MATERIAL_STATUS_ORDEM: Record<string, number> = {
+  cotando: 0,
+  a_comprar: 1,
+  comprado: 2,
+  entregue: 3,
+  cancelado: 4,
+}
+export const materialStatusOrdem = (s: string) => MATERIAL_STATUS_ORDEM[s] ?? 9
+
+/** Categorias de insumo (derivadas do NOME do item, por palavras-chave). Serve
+ *  pra agrupar/filtrar compras (ex.: fechar todo o EPI com um fornecedor). */
+export const CATEGORIAS_MATERIAL: { id: string; label: string }[] = [
+  { id: 'epi', label: 'EPI e segurança' },
+  { id: 'eletrica', label: 'Elétrica' },
+  { id: 'hidraulica', label: 'Hidráulica' },
+  { id: 'estrutura', label: 'Estrutura / concreto' },
+  { id: 'acabamento', label: 'Acabamento' },
+  { id: 'pintura', label: 'Pintura' },
+  { id: 'madeira', label: 'Madeira / esquadrias' },
+  { id: 'ferramentas', label: 'Ferramentas / equipamentos' },
+  { id: 'outros', label: 'Outros' },
+]
+const CAT_LABEL = new Map(CATEGORIAS_MATERIAL.map((c) => [c.id, c.label]))
+export const categoriaMaterialLabel = (id: string) => CAT_LABEL.get(id) ?? 'Outros'
+
+// Palavras-chave por categoria (ordem importa: a 1ª que casar vence).
+const CAT_KEYWORDS: [string, string[]][] = [
+  ['epi', ['epi', 'capacete', 'luva', 'bota', 'botina', 'oculos', 'protetor', 'protecao', 'cinto', 'talabarte', 'colete', 'mascara', 'abafador', 'respirador', 'seguranca', 'extintor', 'sinalizac', 'cone', 'zebrada', 'cadeado', 'crachá', 'cracha']],
+  ['eletrica', ['fio', 'cabo', 'disjuntor', 'tomada', 'interruptor', 'eletroduto', 'lampada', 'quadro', 'reator', 'luminaria', 'condulete', 'eletric', 'dps', 'haste', 'spot', 'led', 'soquete']],
+  ['hidraulica', ['tubo', 'cano', 'pvc', 'cpvc', 'conexao', 'joelho', 'registro', 'torneira', 'caixa d', 'sifao', 'valvula', 'hidraul', 'esgoto', 'ralo', 'veda rosca', 'flange', 'curva', 'adaptador', 'bucha']],
+  ['estrutura', ['cimento', 'areia', 'brita', 'pedra', 'vergalhao', 'aco ', 'aço', 'concreto', 'bloco', 'tijolo', 'ferro', 'arame', 'estribo', 'viga', 'pilar', 'laje', 'graute', 'cal ', 'argamassa estrut']],
+  ['pintura', ['tinta', 'verniz', 'selador', 'acrilic', 'solvente', 'rolo', 'pincel', 'lixa', 'preparador', 'esmalte', 'textura']],
+  ['acabamento', ['revestimento', 'piso', 'porcelanato', 'ceramic', 'rejunte', 'gesso', 'argamassa', 'massa corrida', 'drywall', 'placa', 'rodape', 'soleira', 'granito', 'marmore', 'forro', 'louça', 'louca', 'metais', 'cuba', 'bancada']],
+  ['madeira', ['madeira', 'compensado', 'caibro', 'ripa', 'tabua', 'mdf', 'sarrafo', 'portal', 'batente', 'porta', 'janela', 'esquadria']],
+  ['ferramentas', ['furadeira', 'serra', 'martelo', 'parafusadeira', 'broca', 'trena', 'nivel', 'esmerilhadeira', 'betoneira', 'andaime', 'escada', 'carrinho', 'balde', 'colher de pedreiro', 'desempenadeira']],
+]
+
+/** Deriva a categoria (id) de um material pelo nome. Sem match -> 'outros'. */
+export function categoriaMaterial(item: string | null): string {
+  const t = (item ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+  if (!t.trim()) return 'outros'
+  for (const [id, kws] of CAT_KEYWORDS) {
+    if (kws.some((k) => t.includes(k))) return id
+  }
+  return 'outros'
+}

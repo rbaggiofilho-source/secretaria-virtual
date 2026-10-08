@@ -120,6 +120,23 @@ main { padding: 31px 34px 20px; max-width: 1600px; margin: auto; }.welcome { dis
 .mat-status--entregue { background: #e4efe7; color: #3a7a54; }
 .mat-status--cancelado { background: #f0e3e0; color: #9a5a48; }
 
+/* Categorias de material (tag) + filtros do mapa de cotações */
+.mat-cat { display: inline-block; padding: 3px 9px; border-radius: 20px; font-size: 10px; font-weight: 600; background: #eeede7; color: #6a736f; white-space: nowrap; }
+.mat-cat--epi { background: #fdeceb; color: #b4463a; }
+.mat-cat--eletrica { background: #fbf2db; color: #997316; }
+.mat-cat--hidraulica { background: #e6f0f3; color: #3f6f80; }
+.mat-cat--estrutura { background: #efe9e2; color: #7a6350; }
+.mat-cat--acabamento { background: #efe7f0; color: #7a5a86; }
+.mat-cat--pintura { background: #e9eef6; color: #4a5f8a; }
+.mat-cat--madeira { background: #f0e8dd; color: #8a6433; }
+.mat-cat--ferramentas { background: #e7f0eb; color: #477462; }
+.mat-cat--outros { background: #edece7; color: #7a807c; }
+
+.mat-filtros { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 4px 0 16px; }
+.mat-periodo { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #7a827e; }
+.mat-periodo input { height: 38px; border: 1px solid #dcdcd3; border-radius: 8px; background: #fafaf7; padding: 0 10px; font-size: 12px; color: #24312e; }
+.mat-limpar { height: 38px; padding: 0 14px; font-size: 12px; }
+
 .foto-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 15px; }
 .foto-card { position: relative; margin: 0; border: 1px solid var(--border); border-radius: 11px; overflow: hidden; background: #fafaf7; }
 .foto-del { position: absolute; top: 8px; right: 8px; z-index: 2; width: 30px; height: 30px; display: grid; place-items: center; border: 0; border-radius: 8px; background: rgba(12,21,18,.62); color: #fff; cursor: pointer; opacity: 0; transition: opacity .15s, background .15s; }
