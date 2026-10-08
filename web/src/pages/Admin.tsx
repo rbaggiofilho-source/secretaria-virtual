@@ -17,6 +17,9 @@ import {
   type Overview,
   type UsuarioAdmin,
   type PlanoAdmin,
+  getNotasAdmin,
+  reprocessarNota,
+  type NotaFiscalAdmin,
 } from '../lib/admin'
 import { formatarBRL } from '../lib/api'
 import { BrasilMapa } from '../components/BrasilMapa'
@@ -104,7 +107,7 @@ function AdminLogin({ onLogin }: { onLogin: (a: Admin) => void }) {
   )
 }
 
-type Aba = 'visao' | 'usuarios' | 'planos' | 'conta'
+type Aba = 'visao' | 'usuarios' | 'planos' | 'notas' | 'conta'
 
 function AdminDashboard({ admin, onLogout }: { admin: Admin; onLogout: () => void }) {
   const [aba, setAba] = useState<Aba>('visao')
@@ -115,7 +118,7 @@ function AdminDashboard({ admin, onLogout }: { admin: Admin; onLogout: () => voi
         <span className="who">{admin.nome} · <button className="adm-link" style={{ display: 'inline' }} onClick={onLogout}><span style={{ color: '#57c99b', cursor: 'pointer' }}>sair</span></button></span>
       </div>
       <div className="adm-tabs">
-        {([['visao', 'Visão geral'], ['usuarios', 'Usuários & mercado'], ['planos', 'Planos & lucro'], ['conta', 'Conta']] as [Aba, string][]).map(([id, label]) => (
+        {([['visao', 'Visão geral'], ['usuarios', 'Usuários & mercado'], ['planos', 'Planos & lucro'], ['notas', 'Notas fiscais'], ['conta', 'Conta']] as [Aba, string][]).map(([id, label]) => (
           <button key={id} className={`adm-tab ${aba === id ? 'is-on' : ''}`} onClick={() => setAba(id)}>{label}</button>
         ))}
       </div>
@@ -123,6 +126,7 @@ function AdminDashboard({ admin, onLogout }: { admin: Admin; onLogout: () => voi
         {aba === 'visao' && <AbaVisao />}
         {aba === 'usuarios' && <AbaUsuarios />}
         {aba === 'planos' && <AbaPlanos />}
+        {aba === 'notas' && <AbaNotas />}
         {aba === 'conta' && <AbaConta />}
       </div>
     </>
@@ -613,6 +617,69 @@ function PlanoEditor({ plano }: { plano: PlanoAdmin }) {
 }
 
 /* ---------- Conta ---------- */
+
+const STATUS_NOTA: Record<NotaFiscalAdmin['status'], { rotulo: string; classe: string }> = {
+  pendente: { rotulo: 'na fila', classe: 'pend' },
+  aguardando_emissor: { rotulo: 'aguardando emissor', classe: 'pend' },
+  processando: { rotulo: 'na prefeitura', classe: 'pend' },
+  emitida: { rotulo: 'emitida', classe: 'on' },
+  dados_faltando: { rotulo: 'falta CPF/e-mail', classe: 'off' },
+  erro: { rotulo: 'recusada', classe: 'off' },
+}
+
+function AbaNotas() {
+  const [dados, setDados] = useState<{ emissorConfigurado: boolean; notas: NotaFiscalAdmin[] } | null>(null)
+  const [erro, setErro] = useState(false)
+  const [salvando, setSalvando] = useState<number | null>(null)
+  const carregar = () => { getNotasAdmin().then((r) => setDados(r)).catch(() => setErro(true)) }
+  useEffect(carregar, [])
+
+  async function reprocessar(id: number) {
+    setSalvando(id)
+    try { await reprocessarNota(id); carregar() } finally { setSalvando(null) }
+  }
+
+  if (erro) return <p className="adm-erro">Não consegui carregar as notas fiscais.</p>
+  if (!dados) return <p style={{ color: '#90a69b' }}>Carregando notas…</p>
+  return (
+    <div className="adm-card">
+      <h2>Notas fiscais <small>· emitidas automaticamente a cada pagamento aprovado (assinatura ou pacote)</small></h2>
+      {!dados.emissorConfigurado && (
+        <p className="adm-erro">Emissor ainda não configurado: as notas ficam na fila e saem sozinhas quando NFSE_API_KEY, NFSE_COMPANY_ID e NFSE_CITY_SERVICE_CODE estiverem na Vercel.</p>
+      )}
+      {dados.notas.length === 0 ? (
+        <p style={{ color: '#90a69b', fontSize: 13 }}>Nenhum pagamento gerou nota ainda.</p>
+      ) : (
+        <div style={{ overflowX: 'auto' }}>
+          <table className="adm-table">
+            <thead><tr><th>Data</th><th>Cliente</th><th>Origem</th><th>Valor</th><th>Status</th><th>Nº</th><th></th></tr></thead>
+            <tbody>
+              {dados.notas.map((n) => (
+                <tr key={n.id}>
+                  <td style={{ color: '#90a69b' }}>{n.created_at.slice(0, 10)}</td>
+                  <td>{n.user_wa ?? `empresa ${n.empresa_id}`}</td>
+                  <td>{n.origem}</td>
+                  <td style={{ fontVariantNumeric: 'tabular-nums' }}>{formatarBRL(Number(n.valor))}</td>
+                  <td>
+                    <span className={`adm-pill ${STATUS_NOTA[n.status].classe}`}>{STATUS_NOTA[n.status].rotulo}</span>
+                    {n.status === 'emitida' && n.email_enviado && <span style={{ color: '#90a69b', fontSize: 12 }}> · e-mail enviado</span>}
+                    {n.erro && n.status !== 'emitida' && <div style={{ color: '#90a69b', fontSize: 12, maxWidth: 320 }}>{n.erro}</div>}
+                  </td>
+                  <td style={{ fontVariantNumeric: 'tabular-nums' }}>{n.numero ?? '—'}</td>
+                  <td>
+                    {(n.status === 'erro' || n.status === 'dados_faltando') && (
+                      <button className="adm-mini" disabled={salvando === n.id} onClick={() => reprocessar(n.id)}>Tentar de novo</button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
 
 function AbaConta() {
   const [atual, setAtual] = useState('')

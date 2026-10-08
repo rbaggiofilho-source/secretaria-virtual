@@ -13,6 +13,7 @@ import {
 } from "../../src/memory/eventos.js";
 import { horaAgoraHHMM, horaBr, todayIsoDate, weekdayBr } from "../../src/util/datetime.js";
 import { sendTextMessage } from "../../src/whatsapp/client.js";
+import { processarNotasPendentes } from "../../src/nf/notas.js";
 
 /**
  * "Bom dia" diário (gatilho de hábito). Roda pela Vercel Cron (seg–sex, 8h BRT).
@@ -43,7 +44,12 @@ export default {
       // horário escolhido por cada usuário.
       const lemb = await dispararLembretes();
       const res = await dispararResumos();
-      return new Response(JSON.stringify({ ok: true, lembretes: lemb, resumos: res }), {
+      // Notas fiscais: emite as da fila e acompanha as que estão na prefeitura.
+      const notas = await processarNotasPendentes().catch((err) => {
+        console.error("[cron] notas fiscais:", err instanceof Error ? err.message : err);
+        return { processadas: 0 };
+      });
+      return new Response(JSON.stringify({ ok: true, lembretes: lemb, resumos: res, notas }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
       });

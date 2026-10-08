@@ -71,7 +71,10 @@ beta; opcionais — sem eles só o caminho da conta de serviço funciona),
 sem ele o cadastro/checkout fica inerte: grava o lead e mostra "em breve", sem cobrar),
 `ADMIN_BOOTSTRAP_TOKEN` (opcional; segredo p/ criar o 1º acesso do admin em
 `/admin` → "Criar meu login". Sem ele o bootstrap fica desativado; depois de criar
-o admin pode remover).
+o admin pode remover),
+`NFSE_API_KEY`, `NFSE_COMPANY_ID`, `NFSE_CITY_SERVICE_CODE` (+ opcionais
+`NFSE_FEDERAL_SERVICE_CODE`, `NFSE_CNAE_CODE`, `NFSE_ENVIAR_EMAIL`) — emissor de
+NFS-e NFE.io; sem eles as notas ficam na fila (ver "Nota fiscal automática").
 Validadas via `zod` em `src/config/env.ts` (faz `trim`; STT_PROVIDER tolerante a maiúsculas).
 - **Projeto `rosana-web` (site):** `VITE_API_BASE` = `https://secretaria-virtual-seven.vercel.app`
   (URL do backend; lida em build pelo `web/src/lib/api.ts`, com fallback pra essa mesma URL).
@@ -640,7 +643,7 @@ banco; nada de novo produto. Rodando em **userosana.com.br** (projeto Vercel
   visão em nota fiscal real, STT em contexto de obra e, principalmente, o envio
   do PDF (`uploadMedia`/`sendDocumentMessage`) — risco de limite no número de teste.
 
-## Formalização / CNPJ (em andamento — 04/10/2026)
+## Formalização / CNPJ (CNPJ ABERTO — 07/10/2026)
 Abrir CNPJ pra lançar oficialmente e poder cobrar/emitir NF. Estrutura definida
 (confirmar com contador), via Contabilizei:
 - **Tipo:** SLU (sem sócio, patrimônio protegido). **Regime:** Simples Nacional,
@@ -650,19 +653,52 @@ Abrir CNPJ pra lançar oficialmente e poder cobrar/emitir NF. Estrutura definida
   `6209-1/00` (suporte). NÃO deixar Consultoria (`6204-0/00`) como principal.
 - **Imposto mínimo:** manter **Fator R ≥ 28%** (via pró-labore) → **Anexo III
   (começa 6%)** em vez do Anexo V (15,5%). Contador calibra o pró-labore.
-- **PARAMOS AQUI (04/10):** abertura em TRÂMITE; Ricardo buscando o nº do PIS pra
-  finalizar o cadastro na Contabilizei. Retomar quando o CNPJ sair.
-- ⚠️ **NF automática × gateway (DECISÃO ABERTA):** requisito do Ricardo = a cada
-  compra/renovação, mandar a NFS-e pro email do usuário. O billing JÁ construído é
-  **Mercado Pago**, que NÃO emite NFS-e (é só gateway). Então: (A) manter MP +
-  plugar um emissor de NFS-e por API (eNotas / NFE.io / PlugNotas) disparado pelo
-  webhook do MP; ou (B) migrar billing pro **Asaas**, que faz cobrança + NFS-e +
-  email nativo (mas retrabalha a integração MP já pronta). Em qualquer caso é
-  pré-req: inscrição municipal + certificado digital e-CNPJ A1. Decidir com o dono.
+- ✅ **CNPJ aberto (07/10)** — PIS resolvido, abertura concluída na Contabilizei.
+  Próximos passos (nesta ordem; os 3 primeiros podem andar em paralelo):
+  1. Inscrição municipal + certificado digital **e-CNPJ A1** (pré-req da NFS-e).
+  2. **Verificação da empresa na Meta** (Business Manager → Central de segurança;
+     razão social/endereço iguais ao cartão CNPJ; site userosana.com.br com
+     razão social + CNPJ no rodapé ajuda a aprovar).
+  3. **Conta Mercado Pago PJ no CNPJ** → Access Token de produção na Vercel
+     (`MERCADOPAGO_ACCESS_TOKEN`). O código já manda `notification_url` em cada
+     cobrança; webhook no painel do MP é opcional.
+  4. Após a verificação: **número BR próprio** (chip novo, sem WhatsApp) na WABA →
+     app em Production → templates (código de login, boas-vindas, lembretes >24h).
+  5. ✅ Emissor decidido (07/10): **(A) Mercado Pago + NFE.io** — código pronto,
+     inerte até as variáveis NFSE_* (ver "Nota fiscal automática" abaixo).
+  - Site: incluir razão social + CNPJ no rodapé e nos /termos e /privacidade
+    (exigência do Decreto 7.962/2013 p/ venda online).
+- ✅ **Nota fiscal automática (DECIDIDO 07/10: Mercado Pago + NFE.io):** a cada
+  pagamento APROVADO (assinatura mensal ou pacote extra) sai uma NFS-e pro e-mail
+  do cliente. Pré-req: inscrição municipal + certificado e-CNPJ A1 (cadastrados
+  no painel da NFE.io, que fala com a prefeitura).
+  - **Gatilhos:** pacote → `processarPagamentoPacote` (tópico `payment`);
+    mensalidade → tópico `subscription_authorized_payment` no `pay?acao=webhook`
+    → `consultarCobrancaAssinatura` (GET /authorized_payments/{id}; campos do SDK
+    oficial) → só se `payment.status=approved`. Ambos chamam
+    `registrarNotaDePagamento` (`src/nf/notas.ts`).
+  - **Fila:** `secretaria_notas_fiscais` (mp_payment_id ÚNICO = nunca 2 notas do
+    mesmo pagamento). Status: pendente → processando → emitida | erro;
+    `aguardando_emissor` (sem variáveis NFSE_*); `dados_faltando` (tomador sem
+    CPF/CNPJ ou e-mail — o dono é avisado no WhatsApp). O tique de minuto
+    (`bomdia?acao=lembretes`, pg_cron) chama `processarNotasPendentes`: emite,
+    consulta o `flowStatus` e, quando `Issued`, manda o e-mail (PUT sendemail).
+    Recusa da prefeitura (`IssueFailed`) → status erro + aviso ao dono.
+  - **Cliente NFE.io:** `src/nf/nfeio.ts` (REST v1, header `X-NFE-APIKEY`,
+    emissão assíncrona 202+Location; campos conferidos no SDK oficial `nfe-io`).
+    Tomador = o usuário que pagou (nome_completo, cpf, email de
+    secretaria_usuarios); assinatura de EMPRESA usa os dados do dono da empresa
+    (não há CNPJ da empresa-cliente no cadastro ainda).
+  - **Admin:** aba "Notas fiscais" (lista + "Tentar de novo" em erro/sem dados).
+  - **Env (Vercel, opcionais):** `NFSE_API_KEY`, `NFSE_COMPANY_ID` (id da empresa
+    na NFE.io), `NFSE_CITY_SERVICE_CODE` (código do serviço na prefeitura — pedir
+    ao contador; SaaS costuma ser item 1.05 ou 1.03 da LC 116),
+    `NFSE_FEDERAL_SERVICE_CODE` e `NFSE_CNAE_CODE` (só se a cidade exigir),
+    `NFSE_ENVIAR_EMAIL` (default true; pôr false se o painel da NFE.io já envia,
+    pra não mandar 2 e-mails).
 - **Reforma tributária:** 2026 = alíquotas-teste (0,1% IBS + 0,9% CBS); vale pra
   valer em 2027 (escolha de recolher IBS/CBS no regime regular, fora do DAS —
   relevante pro B2B querer crédito). Decisão de 2027.
-- **Depois do CNPJ:** verificação da empresa na Meta + número BR próprio.
 
 ## Roadmap de onboarding (inspirado no Meu Assessor) — 04/10/2026
 Benchmark do concorrente **Meu Assessor** (produto validado, Felipe Titto, ~170k

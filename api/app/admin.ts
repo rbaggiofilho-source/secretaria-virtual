@@ -17,6 +17,8 @@ import {
 import { listPlanos, upsertPlano } from "../../src/pay/planos-db.js";
 import { getPacote, normalizarPlanoId, PACOTES } from "../../src/pay/planos.js";
 import { creditarPacote } from "../../src/pay/pacotes.js";
+import { listarNotas, reprocessarNota } from "../../src/nf/notas.js";
+import { nfseConfigured } from "../../src/nf/nfeio.js";
 
 /**
  * Painel de ADMINISTRAÇÃO da Rosana. Endpoint único (teto de 12 funções da
@@ -63,6 +65,8 @@ export default {
             return json(request, { ok: true, usuarios: await listUsuariosAdmin() });
           case "planos":
             return json(request, { ok: true, planos: await listPlanos(true), pacotes: Object.values(PACOTES) });
+          case "notas":
+            return json(request, { ok: true, emissorConfigurado: nfseConfigured(), notas: await listarNotas(50) });
           default:
             return json(request, { error: "recurso_desconhecido" }, 400);
         }
@@ -83,6 +87,13 @@ export default {
           if (!userWa || !plano) return json(request, { error: "faltam_dados" }, 400);
           await setUsuarioPlano(userWa, plano);
           return json(request, { ok: true });
+        }
+        if (acao === "reprocessar-nota") {
+          const body = await readJson(request);
+          const id = Number(body.id);
+          if (!Number.isInteger(id) || id <= 0) return json(request, { error: "faltam_dados" }, 400);
+          const ok = await reprocessarNota(id);
+          return json(request, { ok });
         }
         if (acao === "conceder-pacote") {
           // Cortesia/venda manual (ex.: enquanto o Mercado Pago não está ligado).
