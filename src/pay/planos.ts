@@ -126,7 +126,7 @@ export interface Pacote {
 export const PACOTES: Record<PacoteId, Pacote> = {
   mensagens_100: { id: "mensagens_100", nome: "+100 mensagens", valor: 27.9, mensagens: 100 },
   mensagens_300: { id: "mensagens_300", nome: "+300 mensagens", valor: 82.9, mensagens: 300 },
-  fotos_50: { id: "fotos_50", nome: "+50 fotos/notas fiscais", valor: 9.9, fotos: 50, exige: "fotos" },
+  fotos_50: { id: "fotos_50", nome: "+50 fotos e notas fiscais", valor: 9.9, fotos: 50, exige: "fotos" },
   audio_120: { id: "audio_120", nome: "+2 horas de áudio", valor: 9.9, audioMin: 120 },
 };
 
