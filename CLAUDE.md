@@ -666,7 +666,14 @@ Abrir CNPJ pra lançar oficialmente e poder cobrar/emitir NF. Estrutura definida
   1. Inscrição municipal + certificado digital **e-CNPJ A1** (pré-req da NFS-e).
      ✅ Certificado A1 obtido (09/10). Inscrição municipal: confirmar com a
      Contabilizei. O .pfx + senha vão no painel da NFE.io (não no código).
-  2. **Verificação da empresa na Meta** (Business Manager → Central de segurança;
+  2. ⏳ **Verificação da empresa na Meta — ENVIADA 09/10, em análise (~2 dias úteis).**
+     Feita no portfólio "RICARDO BAGGIO" (business_id 2186177738064055 — é onde
+     estão o app e as WABAs: "Test WhatsApp Business Account" = número de teste
+     atual; "Rosana Secretaria Virtual" = WABA 2115181825765169, destino do número
+     BR). Tipo "Empresa privada", dados da WORLDCOM, cartão CNPJ. Domínio
+     userosana.com.br VERIFICADO na Meta pela metatag `facebook-domain-verification`
+     em `web/index.html` (NÃO remover). Caminho original:
+     **Verificação da empresa na Meta** (Business Manager → Central de segurança;
      razão social/endereço iguais ao cartão CNPJ; site userosana.com.br com
      razão social + CNPJ no rodapé ajuda a aprovar).
   3. ✅ (09/10) Conta MP criada (WORLDCOM SERVICOS E PRODUTOS; app "Rosana.worldcom",
