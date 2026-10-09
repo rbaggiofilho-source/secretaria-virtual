@@ -425,7 +425,7 @@ create table if not exists public.secretaria_notas_fiscais (
   descricao      text        not null,
   valor          numeric(10,2) not null,
   status         text        not null default 'pendente'
-                 check (status in ('pendente','aguardando_emissor','dados_faltando','processando','emitida','erro')),
+                 check (status in ('pendente','aguardando_emissor','dados_faltando','processando','emitida','erro','cancelada')),
   nfse_id        text,
   numero         text,
   email_enviado  boolean,

@@ -1,6 +1,7 @@
 import { getSupabase } from "../memory/supabase.js";
 import { waIdVariants } from "../memory/context.js";
 import { sendTextMessage } from "../whatsapp/client.js";
+import { consultarPagamento } from "../pay/mercadopago.js";
 import {
   consultarNfse,
   emitirNfse,
@@ -29,7 +30,8 @@ export type StatusNota =
   | "dados_faltando"
   | "processando"
   | "emitida"
-  | "erro";
+  | "erro"
+  | "cancelada"; // pagamento estornado/cancelado antes da emissão
 
 interface NotaRow {
   id: number;
@@ -106,6 +108,19 @@ async function avancar(nota: NotaRow): Promise<void> {
     }
     if (!nfseConfigured()) {
       if (nota.status !== "aguardando_emissor") await atualizar(nota.id, { status: "aguardando_emissor" });
+      return;
+    }
+    // Só emite se o pagamento CONTINUA aprovado no Mercado Pago: um estorno,
+    // chargeback ou cancelamento entre o pagamento e a emissão (ex.: fila
+    // esperando o emissor) não pode virar nota. Sem resposta do MP, tenta de
+    // novo no próximo tique em vez de emitir às cegas.
+    const pg = await consultarPagamento(nota.mp_payment_id);
+    if (!pg) {
+      await atualizar(nota.id, { tentativas: nota.tentativas + 1, erro: "Não consegui confirmar o pagamento no Mercado Pago" });
+      return;
+    }
+    if (pg.status !== "approved") {
+      await atualizar(nota.id, { status: "cancelada", erro: `Pagamento ${pg.status} no Mercado Pago — nota não emitida` });
       return;
     }
     const tomador = await carregarTomador(nota);
