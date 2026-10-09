@@ -654,6 +654,14 @@ Abrir CNPJ pra lançar oficialmente e poder cobrar/emitir NF. Estrutura definida
 - **Imposto mínimo:** manter **Fator R ≥ 28%** (via pró-labore) → **Anexo III
   (começa 6%)** em vez do Anexo V (15,5%). Contador calibra o pró-labore.
 - ✅ **CNPJ aberto (07/10)** — PIS resolvido, abertura concluída na Contabilizei.
+  **Dados (cartão CNPJ, públicos):** WORLDCOM SERVICOS E PRODUTOS DIGITAIS LTDA
+  (fantasia WORLDCOM DIGITAIS), CNPJ **69.503.277/0001-33**, aberta 06/10/2026,
+  natureza **Sociedade Empresária Limitada** (não SLU), porte EPP, Florianópolis/SC.
+  CNAE principal 62.02-3-00; secundárias 58.11-5-00, 62.01-5-01, 62.04-0-00,
+  63.11-9-00. Razão social + CNPJ + cidade publicados no rodapé do site e nos
+  /termos e /privacidade (09/10). Endereço completo ainda NÃO publicado (é o
+  residencial — decidir com o dono; o Decreto 7.962 pede endereço físico).
+  Pix cadastrado no MP (09/10). E-mail no domínio criado (09/10).
   Próximos passos (nesta ordem; os 3 primeiros podem andar em paralelo):
   1. Inscrição municipal + certificado digital **e-CNPJ A1** (pré-req da NFS-e).
      ✅ Certificado A1 obtido (09/10). Inscrição municipal: confirmar com a

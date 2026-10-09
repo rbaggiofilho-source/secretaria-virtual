@@ -180,7 +180,7 @@ export function Landing() {
         <section className="final-cta"><span className="cta-detail" aria-hidden="true"></span><div><p className="sales-kicker sales-kicker--light">SUA OBRA PEDE A SUA ATENÇÃO</p><h2>Deixe a organização<br />com a <em>Rosana.</em></h2><p>Comece agora e descubra uma rotina com mais clareza, produtividade e tempo para construir.</p><a className="sales-button sales-button--accent" href="/cadastro">Quero ganhar meu tempo de volta <span>→</span></a></div></section>
       </main>
 
-      <footer className="sales-footer"><div><Logo /><p>Sua secretária de obras no WhatsApp.</p></div><div className="footer-links"><div><strong>Rosana</strong><a href="#como-funciona">Como funciona</a><a href="#recursos">Recursos</a><a href="#planos">Planos</a></div><div><strong>Legal</strong><a href="/privacidade">Privacidade</a><a href="/termos">Termos de uso</a></div></div><div className="footer-bottom"><span>© 2026 Rosana. Todos os direitos reservados.</span><span>Feito para quem constrói o Brasil.</span></div></footer>
+      <footer className="sales-footer"><div><Logo /><p>Sua secretária de obras no WhatsApp.</p></div><div className="footer-links"><div><strong>Rosana</strong><a href="#como-funciona">Como funciona</a><a href="#recursos">Recursos</a><a href="#planos">Planos</a></div><div><strong>Legal</strong><a href="/privacidade">Privacidade</a><a href="/termos">Termos de uso</a></div></div><div className="footer-bottom"><span>© 2026 Rosana. Todos os direitos reservados. WORLDCOM SERVICOS E PRODUTOS DIGITAIS LTDA · CNPJ 69.503.277/0001-33 · Florianópolis/SC</span><span>Feito para quem constrói o Brasil.</span></div></footer>
     </div>
   )
 }

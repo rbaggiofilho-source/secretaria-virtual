@@ -83,6 +83,7 @@ function page(): string {
 <p>Podemos atualizar estes Termos. A data de “última atualização” no topo indica a versão vigente; o uso continuado após mudanças significa concordância.</p>
 
 <h2>10. Contato</h2>
+<p>A Rosana é oferecida por <strong>WORLDCOM SERVICOS E PRODUTOS DIGITAIS LTDA</strong> (WORLDCOM DIGITAIS), CNPJ 69.503.277/0001-33, Florianópolis/SC.</p>
 <p>Dúvidas sobre estes Termos: <a href="mailto:${CONTATO_EMAIL}">${CONTATO_EMAIL}</a>.</p>
 
 <p class="foot">Rosana · secretária de obra por WhatsApp · Beta ENGETEC</p>

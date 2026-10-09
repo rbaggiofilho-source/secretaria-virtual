@@ -51,7 +51,7 @@ function page(): string {
 <p>A Rosana é uma assistente virtual (“secretária de obra”) que funciona pelo WhatsApp, voltada a profissionais da construção civil. Esta política explica quais dados coletamos, como usamos e como você pode controlá-los. Ao usar a Rosana, você concorda com o descrito aqui.</p>
 
 <h2>1. Quem é o responsável</h2>
-<p>O tratamento dos dados é feito pelo responsável pela Rosana (contato abaixo). Nesta fase de teste (beta), a ferramenta é distribuída a um número reduzido de usuários convidados.</p>
+<p>A Rosana é um serviço da <strong>WORLDCOM SERVICOS E PRODUTOS DIGITAIS LTDA</strong> (nome fantasia WORLDCOM DIGITAIS), CNPJ 69.503.277/0001-33, com sede em Florianópolis/SC, que é a controladora dos dados tratados (contato abaixo). Nesta fase de teste (beta), a ferramenta é distribuída a um número reduzido de usuários convidados.</p>
 
 <h2>2. Dados que coletamos</h2>
 <ul>
@@ -103,6 +103,7 @@ function page(): string {
 <p>Podemos atualizar esta política. A data de “última atualização” no topo indica a versão vigente.</p>
 
 <h2>11. Contato</h2>
+<p>WORLDCOM SERVICOS E PRODUTOS DIGITAIS LTDA · CNPJ 69.503.277/0001-33 · Florianópolis/SC.</p>
 <p>Dúvidas ou solicitações sobre privacidade: <a href="mailto:${CONTATO_EMAIL}">${CONTATO_EMAIL}</a>.</p>
 
 <p class="foot">Rosana · secretária de obra por WhatsApp · Beta ENGETEC</p>
