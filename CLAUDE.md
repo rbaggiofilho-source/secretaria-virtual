@@ -656,12 +656,22 @@ Abrir CNPJ pra lançar oficialmente e poder cobrar/emitir NF. Estrutura definida
 - ✅ **CNPJ aberto (07/10)** — PIS resolvido, abertura concluída na Contabilizei.
   Próximos passos (nesta ordem; os 3 primeiros podem andar em paralelo):
   1. Inscrição municipal + certificado digital **e-CNPJ A1** (pré-req da NFS-e).
+     ✅ Certificado A1 obtido (09/10). Inscrição municipal: confirmar com a
+     Contabilizei. O .pfx + senha vão no painel da NFE.io (não no código).
   2. **Verificação da empresa na Meta** (Business Manager → Central de segurança;
      razão social/endereço iguais ao cartão CNPJ; site userosana.com.br com
      razão social + CNPJ no rodapé ajuda a aprovar).
-  3. **Conta Mercado Pago PJ no CNPJ** → Access Token de produção na Vercel
-     (`MERCADOPAGO_ACCESS_TOKEN`). O código já manda `notification_url` em cada
-     cobrança; webhook no painel do MP é opcional.
+  3. ✅ (09/10) Conta MP criada (WORLDCOM SERVICOS E PRODUTOS; app "Rosana.worldcom",
+     nº 3199101868592303, integração Assinaturas) + `MERCADOPAGO_ACCESS_TOKEN` salvo
+     na Vercel. Falta: confirmar webhook em modo produção + teste PACOTE FOTOS.
+     **Conta Mercado Pago PJ no CNPJ** → Access Token de produção na Vercel
+     (`MERCADOPAGO_ACCESS_TOKEN`, ambiente Production + REDEPLOY — env nova só
+     vale após novo deploy). O código manda `notification_url` em cada cobrança,
+     mas CONFIGURAR TAMBÉM o Webhook no painel do MP (URL
+     `https://secretaria-virtual-seven.vercel.app/api/app/pay?acao=webhook`,
+     eventos Pagamentos + Planos e assinaturas) pra garantir os avisos de
+     MENSALIDADE (`subscription_authorized_payment`), que disparam a nota fiscal.
+     Teste ponta a ponta: comprar o PACOTE FOTOS (R$ 9,90) e estornar.
   4. Após a verificação: **número BR próprio** (chip novo, sem WhatsApp) na WABA →
      app em Production → templates (código de login, boas-vindas, lembretes >24h).
   5. ✅ Emissor decidido (07/10): **(A) Mercado Pago + NFE.io** — código pronto,
