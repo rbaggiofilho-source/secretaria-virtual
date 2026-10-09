@@ -147,7 +147,7 @@ export function Cadastro() {
           </div>}
         </section>
       </main>
-      <footer className="signup-footer">© 2026 Rosana <span>•</span> <a href="/privacidade">Privacidade</a> <span>•</span> <a href="/termos">Termos</a></footer>
+      <footer className="signup-footer">© 2026 Rosana · WORLDCOM SERVICOS E PRODUTOS DIGITAIS LTDA · CNPJ 69.503.277/0001-33 <span>•</span> <a href="/privacidade">Privacidade</a> <span>•</span> <a href="/termos">Termos</a></footer>
     </div>
   )
 }
