@@ -625,6 +625,7 @@ const STATUS_NOTA: Record<NotaFiscalAdmin['status'], { rotulo: string; classe: s
   emitida: { rotulo: 'emitida', classe: 'on' },
   dados_faltando: { rotulo: 'falta CPF/e-mail', classe: 'off' },
   erro: { rotulo: 'recusada', classe: 'off' },
+  cancelada: { rotulo: 'cancelada (estorno)', classe: 'off' },
 }
 
 function AbaNotas() {

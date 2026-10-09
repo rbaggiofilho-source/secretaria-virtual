@@ -663,7 +663,8 @@ Abrir CNPJ pra lançar oficialmente e poder cobrar/emitir NF. Estrutura definida
      razão social + CNPJ no rodapé ajuda a aprovar).
   3. ✅ (09/10) Conta MP criada (WORLDCOM SERVICOS E PRODUTOS; app "Rosana.worldcom",
      nº 3199101868592303, integração Assinaturas) + `MERCADOPAGO_ACCESS_TOKEN` salvo
-     na Vercel. Falta: confirmar webhook em modo produção + teste PACOTE FOTOS.
+     na Vercel. ✅ Teste ponta a ponta OK (09/10): PACOTE FOTOS pago → crédito +50
+     fotos + nota na fila (nota de teste marcada `cancelada` p/ o estorno).
      **Conta Mercado Pago PJ no CNPJ** → Access Token de produção na Vercel
      (`MERCADOPAGO_ACCESS_TOKEN`, ambiente Production + REDEPLOY — env nova só
      vale após novo deploy). O código manda `notification_url` em cada cobrança,
@@ -694,6 +695,10 @@ Abrir CNPJ pra lançar oficialmente e poder cobrar/emitir NF. Estrutura definida
     (`bomdia?acao=lembretes`, pg_cron) chama `processarNotasPendentes`: emite,
     consulta o `flowStatus` e, quando `Issued`, manda o e-mail (PUT sendemail).
     Recusa da prefeitura (`IssueFailed`) → status erro + aviso ao dono.
+    Antes de emitir, confere no MP se o pagamento AINDA está `approved`
+    (`consultarPagamento`): estornado/cancelado → status `cancelada` (não emite);
+    MP sem resposta → tenta no próximo tique. (Nota JÁ emitida + estorno depois =
+    cancelar a NFS-e à mão na NFE.io; não automatizado.)
   - **Cliente NFE.io:** `src/nf/nfeio.ts` (REST v1, header `X-NFE-APIKEY`,
     emissão assíncrona 202+Location; campos conferidos no SDK oficial `nfe-io`).
     Tomador = o usuário que pagou (nome_completo, cpf, email de

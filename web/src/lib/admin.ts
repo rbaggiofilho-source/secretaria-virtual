@@ -195,7 +195,7 @@ export interface NotaFiscalAdmin {
   origem: 'assinatura' | 'pacote'
   descricao: string
   valor: number
-  status: 'pendente' | 'aguardando_emissor' | 'dados_faltando' | 'processando' | 'emitida' | 'erro'
+  status: 'pendente' | 'aguardando_emissor' | 'dados_faltando' | 'processando' | 'emitida' | 'erro' | 'cancelada'
   numero: string | null
   email_enviado: boolean | null
   erro: string | null
