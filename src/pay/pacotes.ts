@@ -42,7 +42,7 @@ export async function iniciarCompraPacote(
   const base = getEnv().PUBLIC_BASE_URL.replace(/\/+$/, "");
   const checkout = await criarCheckout({
     itemId: pacote.id,
-    titulo: `Rosana — ${pacote.nome}`,
+    titulo: `Rosana - ${pacote.nome}`,
     valor: pacote.valor,
     // pct|<wa>|<pacote>|<mês> — o webhook credita a partir disto.
     externalReference: `pct|${usuario.user_wa}|${pacote.id}|${mes}`,
