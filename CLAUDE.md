@@ -661,7 +661,10 @@ Abrir CNPJ pra lançar oficialmente e poder cobrar/emitir NF. Estrutura definida
   2. **Verificação da empresa na Meta** (Business Manager → Central de segurança;
      razão social/endereço iguais ao cartão CNPJ; site userosana.com.br com
      razão social + CNPJ no rodapé ajuda a aprovar).
-  3. **Conta Mercado Pago PJ no CNPJ** → Access Token de produção na Vercel
+  3. ✅ (09/10) Conta MP criada (WORLDCOM SERVICOS E PRODUTOS; app "Rosana.worldcom",
+     nº 3199101868592303, integração Assinaturas) + `MERCADOPAGO_ACCESS_TOKEN` salvo
+     na Vercel. Falta: confirmar webhook em modo produção + teste PACOTE FOTOS.
+     **Conta Mercado Pago PJ no CNPJ** → Access Token de produção na Vercel
      (`MERCADOPAGO_ACCESS_TOKEN`, ambiente Production + REDEPLOY — env nova só
      vale após novo deploy). O código manda `notification_url` em cada cobrança,
      mas CONFIGURAR TAMBÉM o Webhook no painel do MP (URL
